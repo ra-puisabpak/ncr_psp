@@ -17,7 +17,7 @@ const QA = new Set(['QA_MANAGER', 'FSTL']);
 
 // Fields any writer may set while the NCR is still open.
 const NCR_BASE = [
-  'source_type', 'source_ref', 'nc_description', 'immediate_action', 'lot_no', 'product_lot_no',
+  'source_type', 'source_ref', 'nc_description', 'immediate_action', 'suggestion', 'lot_no', 'product_lot_no',
   'found_date', 'found_time', 'hold_location', 'reported_by', 'assignee', 'target_date',
   'defect_qty', 'defect_unit', 'photo_urls', 'process_ref', 'material_code', 'material_name',
   'supplier_id', 'supplier_name', 'parameter_id', 'parameter_name', 'critical_limit',
@@ -34,7 +34,7 @@ const SUPPLIER = {
   ncr: {
     table: 'ncr_records', pk: 'ncr_id',
     view: ['ncr_id', 'issue_date', 'found_date', 'source_type', 'severity', 'material_code', 'material_name',
-      'supplier_name', 'lot_no', 'product_lot_no', 'nc_description', 'immediate_action', 'defect_qty',
+      'supplier_name', 'lot_no', 'product_lot_no', 'nc_description', 'immediate_action', 'suggestion', 'defect_qty',
       'defect_unit', 'photo_urls', 'target_date', 'status', 'root_cause', 'corrective_action',
       'preventive_action', 'supplier_reply_by', 'supplier_reply_at'],
     write: ['root_cause', 'corrective_action', 'preventive_action', 'target_date'],

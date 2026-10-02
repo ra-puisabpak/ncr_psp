@@ -33,7 +33,7 @@ const EMPTY_FORM = {
   material_name: '', supplier_name: '', parameter_name: '', critical_limit: '', actual_result: '',
   visual_check: '', defect_qty: '', defect_unit: '', hold_location: '', severity: 'Major',
   allergen: '', shipped_status: 'NOT_SHIPPED', shipped_qty: '', shipped_customer: '',
-  nc_description: '', immediate_action: '', reported_by: '', assignee: '', target_date: '',
+  nc_description: '', immediate_action: '', suggestion: '', reported_by: '', assignee: '', target_date: '',
   root_cause: '', corrective_action: '', preventive_action: '',
   disposition: '', disposition_reason: '', recall_required: '',
   verification_result: 'Pending', verification_note: '', status: 'Open', status_reason: '',
@@ -299,6 +299,9 @@ export default function NCRDetailPage() {
                 </FieldRow>
                 <FieldRow label="การแก้ไขเบื้องต้น (Immediate Action)" full>
                   <textarea className={textareaCls} rows={2} value={form.immediate_action} onChange={set('immediate_action')} disabled={readOnly} />
+                </FieldRow>
+                <FieldRow label="ข้อเสนอแนะเพิ่มเติม (ผู้ส่งมอบจะเห็นข้อความนี้ในลิงก์ตอบกลับ)" full>
+                  <textarea className={textareaCls} rows={2} value={form.suggestion} onChange={set('suggestion')} disabled={readOnly} />
                 </FieldRow>
                 <FieldRow label="สารก่อภูมิแพ้ที่เกี่ยวข้อง" full>
                   <div className="flex flex-wrap gap-2">

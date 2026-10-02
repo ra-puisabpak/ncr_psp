@@ -77,7 +77,7 @@ r = await call('PATCH', `/api/ncr/${id}`, { token: qc, body: { status: 'Closed' 
 check('QC cannot close', r.status === 403, r);
 r = await call('PATCH', `/api/ncr/${id}`, { token: qa, body: { status: 'Closed' } });
 check('QA cannot close incomplete NCR', r.status === 422, r);
-r = await call('PATCH', `/api/ncr/${id}`, { token: qc, body: { immediate_action: 'กักทั้ง Lot', hold_location: 'HOLD-1' } });
+r = await call('PATCH', `/api/ncr/${id}`, { token: qc, body: { immediate_action: 'กักทั้ง Lot', hold_location: 'HOLD-1', suggestion: 'ขอให้ตรวจตะแกรงก่อนส่งรอบถัดไป' } });
 check('QC updates base fields', r.status === 200, r);
 
 // supplier link
@@ -89,7 +89,7 @@ const tok = r.j.token;
 r = await call('GET', `/api/supplier/${tok1}`);
 check('older link is revoked when a new one is made', r.status === 404, r);
 r = await call('GET', `/api/supplier/${tok}`);
-check('supplier sees limited fields only', r.status === 200 && r.j.ncr_id === id && r.j.type === 'ncr' && !('hold_location' in r.j) && !('disposition' in r.j) && !('created_by' in r.j) && !('assignee' in r.j), r);
+check('supplier sees limited fields only', r.status === 200 && r.j.ncr_id === id && r.j.suggestion === 'ขอให้ตรวจตะแกรงก่อนส่งรอบถัดไป' && r.j.type === 'ncr' && !('hold_location' in r.j) && !('disposition' in r.j) && !('created_by' in r.j) && !('assignee' in r.j), r);
 r = await call('GET', '/api/supplier/' + 'A'.repeat(43));
 check('unknown supplier token is refused', r.status === 404, r);
 r = await call('GET', '/api/ncr', { token: tok });

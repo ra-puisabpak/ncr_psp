@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS ncr_records (
   severity          TEXT CHECK(severity IN ('Critical','Major','Minor')) DEFAULT 'Major',
   allergen          TEXT,
   immediate_action  TEXT,
+  suggestion        TEXT,
   defect_qty        REAL,
   defect_unit       TEXT,
   hold_location     TEXT,

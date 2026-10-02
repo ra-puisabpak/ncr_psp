@@ -199,10 +199,18 @@ export default function NCRFormA4({ data, capa, photos = [] }) {
           </tr>
           <tr>
             <td className="label-cell" style={{ verticalAlign: 'top' }}>
-              สาเหตุเบื้องต้น<br />Immediate Cause
+              การแก้ไขเบื้องต้น<br />Immediate Action
             </td>
             <td colSpan={3} className="value-cell">
               <div className="text-block" style={{ minHeight: '30px' }}>{val(d.immediate_action)}</div>
+            </td>
+          </tr>
+          <tr>
+            <td className="label-cell" style={{ verticalAlign: 'top' }}>
+              ข้อเสนอแนะเพิ่มเติม<br />Additional Suggestion
+            </td>
+            <td colSpan={3} className="value-cell">
+              <div className="text-block" style={{ minHeight: '20px' }}>{val(d.suggestion)}</div>
             </td>
           </tr>
           <tr>

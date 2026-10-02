@@ -135,6 +135,7 @@ export default function SupplierReplyPage() {
                 <ReadField label="จำนวนของเสีย" value={ncr?.defect_qty != null ? `${ncr.defect_qty} ${ncr.defect_unit || ''}`.trim() : '-'} />
                 <ReadField label="รายละเอียดปัญหา" value={ncr?.nc_description} full />
                 <ReadField label="การแก้ไขเบื้องต้น (โดยผู้ผลิต)" value={ncr?.immediate_action} full />
+                {ncr?.suggestion && <ReadField label="ข้อเสนอแนะเพิ่มเติม" value={ncr.suggestion} full />}
                 {ncr?.photos?.some((p) => p.kind === 'problem') && (
                   <div className="sm:col-span-2 flex flex-col gap-1">
                     <span className="text-[11px] font-medium text-gray-500">ภาพถ่ายประกอบ (แตะเพื่อดูภาพเต็ม)</span>
