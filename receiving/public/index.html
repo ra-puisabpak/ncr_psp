@@ -1,0 +1,1813 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>FM-QC-001 ตรวจรับวัตถุดิบ — บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak)</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+
+// ════ เก็บข้อมูลในเครื่อง (ไม่เชื่อมต่อ Google Sheets) ════
+const LS_KEY='fmqc001_data_v1';
+function saveLocal(){
+  const pack=noPhoto=>JSON.stringify({records:records.map(r=>{const o={...r,mats:(r.mats||r.materials||[]).map(m=>noPhoto?{...m,photo1:null,photo2:null}:m)};delete o.materials;return o;}),ncLogs});
+  try{localStorage.setItem(LS_KEY,pack(false));return true;}
+  catch(e){
+    try{localStorage.setItem(LS_KEY,pack(true));showCloudStatus('⚠ พื้นที่เก็บเต็ม — บันทึกโดยไม่เก็บรูปถ่าย','warn');return true;}
+    catch(e2){showCloudStatus('⚠ บันทึกลงเครื่องไม่สำเร็จ — ดาวน์โหลด Excel สำรองไว้','warn');return false;}
+  }
+}
+function loadLocal(){
+  try{const d=JSON.parse(localStorage.getItem(LS_KEY)||'null');
+    if(d){records=(d.records||[]).map(r=>({...r,materials:r.mats}));ncLogs=d.ncLogs||[];}}catch(e){}
+}
+async function cloudSaveRecord(rec){const ok=saveLocal();if(ok)showCloudStatus('✅ บันทึกลงเครื่องแล้ว','ok');return ok;}
+async function cloudSaveNC(nc){return saveLocal();}
+async function cloudCloseNC(id,body){return saveLocal();}
+function syncFromCloud(){
+  loadLocal();
+  if(typeof renderHist==='function')renderHist();
+  if(typeof renderNC==='function')renderNC();
+  if(typeof renderHome==='function')renderHome();
+}
+function exportExcelCloud(){exportExcel();}
+function todayStr(){const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');}
+function escH(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function showCloudStatus(msg,type=''){
+  let el=document.getElementById('_cst');
+  if(!el){el=document.createElement('div');el.id='_cst';
+    el.style.cssText='position:fixed;bottom:75px;left:50%;transform:translateX(-50%);padding:7px 18px;'+
+      'border-radius:20px;font-size:12px;font-weight:600;z-index:9000;opacity:0;transition:.25s;'+
+      'pointer-events:none;white-space:nowrap;color:#fff;max-width:90vw;text-align:center;';
+    document.body.appendChild(el);}
+  el.textContent=msg;
+  el.style.background=type==='ok'?'#0d7a5f':type==='warn'?'#e8900a':'#0f2744';
+  el.style.opacity='1';clearTimeout(el._t);el._t=setTimeout(()=>{el.style.opacity='0';},3500);
+}
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --navy:#0f2744;--teal:#0d7a5f;--teal2:#1d9e75;--teal-lt:#e1f5ee;
+  --amber:#e8900a;--amber-lt:#fff3e0;
+  --red:#c0392b;--red-lt:#ffebee;
+  --green:#2e7d32;--green-lt:#e8f5e9;
+  --blue:#1565c0;--blue-lt:#e3f2fd;
+  --gray1:#f5f6f8;--gray2:#e8eaed;--gray3:#9aa0ab;--gray4:#5c6470;
+  --text:#1a2130;--border:#dde1e7;--white:#fff;
+  --nav-h:64px;--hdr-h:56px;
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+html,body{height:100%;overflow:hidden;background:var(--gray1);font-family:'Sarabun',sans-serif;font-size:15px;color:var(--text);display:flex;flex-direction:column}
+.app-header{height:var(--hdr-h);background:var(--navy);display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0;z-index:50}
+.app-header-back{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.1);color:#fff;font-size:20px;cursor:pointer;border:none;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.app-header-title{flex:1;color:#fff;font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-header-action{color:#5dca9e;font-size:14px;font-weight:600;cursor:pointer;border:none;background:none;padding:8px 0 8px 12px;white-space:nowrap}
+.scroll-area{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(var(--nav-h)+var(--safe-bot)+16px)}
+.bottom-nav{height:var(--nav-h);background:var(--white);border-top:1px solid var(--border);display:flex;align-items:stretch;flex-shrink:0;padding-bottom:var(--safe-bot)}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;border:none;background:none;padding:8px 0;position:relative}
+.nav-item .ni{font-size:22px;line-height:1}.nav-item .nl{font-size:10px;font-weight:500;color:var(--gray3)}
+.nav-item.active .nl{color:var(--teal)}
+.nav-dot{position:absolute;top:6px;right:calc(50% - 16px);width:8px;height:8px;background:var(--amber);border-radius:50%;border:1.5px solid #fff}
+.screen{display:none;height:100%;flex-direction:column}.screen.active{display:flex}
+/* HOME */
+.home-hero{background:linear-gradient(135deg,var(--navy) 0%,#1a3a5c 100%);padding:24px 20px 28px;color:#fff}
+.home-date{font-size:12px;color:rgba(255,255,255,.55);margin-bottom:4px}
+.home-title{font-size:22px;font-weight:700}
+.home-sub{font-size:12px;color:rgba(255,255,255,.55);margin-top:2px}
+.home-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:0 16px;margin:-20px 0 0;position:relative;z-index:2}
+.sc{background:var(--white);border-radius:12px;padding:12px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.sc-n{font-size:24px;font-weight:700;line-height:1}.sc-l{font-size:11px;color:var(--gray3);margin-top:2px}
+.sc-n.g{color:var(--green)}.sc-n.a{color:var(--amber)}
+.sec-h{padding:20px 16px 8px;display:flex;align-items:center;justify-content:space-between}
+.sec-t{font-size:13px;font-weight:600;color:var(--gray4);text-transform:uppercase;letter-spacing:.5px}
+.sec-lk{font-size:13px;color:var(--teal);font-weight:500;cursor:pointer}
+.qgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 16px}
+.qc{background:var(--white);border-radius:14px;padding:18px 16px;cursor:pointer;border:1px solid var(--border);transition:.12s}
+.qc:active{transform:scale(.97)}.qc.p{background:var(--teal);border-color:var(--teal)}
+.qc.p .ql,.qc.p .qs{color:#fff}.qc.p .qs{color:rgba(255,255,255,.7)}
+.qi{font-size:28px;margin-bottom:8px}.ql{font-size:14px;font-weight:600;color:var(--text)}.qs{font-size:12px;color:var(--gray3);margin-top:2px}
+.rl{padding:0 16px;display:flex;flex-direction:column;gap:8px}
+.ri{background:var(--white);border-radius:12px;padding:14px;border:1px solid var(--border)}
+.ri:active{background:var(--gray1)}
+.rdoc{font-family:monospace;font-size:11px;background:var(--gray2);padding:2px 7px;border-radius:4px;color:var(--gray4)}
+/* FORM */
+.fsteps{display:flex;align-items:center;padding:12px 16px;background:var(--white);border-bottom:1px solid var(--border);gap:0;overflow-x:auto;flex-shrink:0}
+.fstep{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.fsd{width:24px;height:24px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:#fff;color:var(--gray3)}
+.fstep.active .fsd{background:var(--teal);border-color:var(--teal);color:#fff}
+.fstep.done .fsd{background:var(--green);border-color:var(--green);color:#fff}
+.fsl{font-size:12px;font-weight:500;color:var(--gray3);white-space:nowrap}
+.fstep.active .fsl,.fstep.done .fsl{color:var(--text)}
+.fline{width:20px;height:1px;background:var(--border);flex-shrink:0;margin:0 2px}.fline.done{background:var(--green)}
+.fp{display:none;flex:1;overflow-y:auto;padding:16px;padding-bottom:90px}.fp.active{display:block}
+.fsec{background:var(--white);border-radius:14px;padding:16px;margin-bottom:12px;border:1px solid var(--border)}
+.fst{font-size:12px;font-weight:700;color:var(--gray4);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px}
+.fg{margin-bottom:14px}.fg:last-child{margin-bottom:0}
+label{display:block;font-size:13px;font-weight:600;color:var(--gray4);margin-bottom:5px}
+label .req{color:var(--red)}
+input,select,textarea{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;font-size:15px;font-family:'Sarabun',sans-serif;color:var(--text);background:#fff;-webkit-appearance:none;appearance:none}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--teal2);box-shadow:0 0 0 3px rgba(29,158,117,.12)}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath fill='%239aa0ab' d='M6 8L0 0h12z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
+input[readonly]{background:var(--gray1);color:var(--gray3)}
+textarea{resize:none;min-height:80px}
+.ig{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.tgrid input{text-align:center;padding:10px 4px;font-size:14px}
+.tst{text-align:center;margin-top:4px;font-size:11px;font-weight:600;padding:2px 6px;border-radius:8px}
+.tst.pass{background:var(--green-lt);color:var(--green)}.tst.fail{background:var(--red-lt);color:var(--red)}
+.trow{display:flex;gap:8px;flex-wrap:wrap}
+.tp{padding:9px 14px;border-radius:20px;font-size:13px;font-weight:600;border:1.5px solid var(--border);background:var(--white);color:var(--gray4);cursor:pointer;transition:.12s;flex:1;text-align:center;min-width:55px}
+.tp.pass.sel{background:var(--green-lt);border-color:#4caf50;color:var(--green)}
+.tp.fail.sel{background:var(--red-lt);border-color:var(--red);color:var(--red)}
+.tp.hold.sel{background:var(--amber-lt);border-color:var(--amber);color:var(--amber)}
+.tp.na.sel{background:var(--gray2);border-color:var(--gray3);color:var(--gray4)}
+.mc{background:var(--white);border-radius:14px;border:1px solid var(--border);margin-bottom:10px;overflow:hidden}
+.mch{display:flex;align-items:center;padding:14px;gap:10px;cursor:pointer}
+.mn{width:30px;height:30px;border-radius:50%;background:var(--navy);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.mi2{flex:1;min-width:0}.mname{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mmeta{font-size:12px;color:var(--gray3);margin-top:1px}
+.mbdg{font-size:10px;padding:2px 7px;border-radius:8px;font-weight:700;flex-shrink:0}
+.b-RM{background:#fce4ec;color:#c62828}.b-DM{background:#fff3e0;color:#e65100}
+.b-PM{background:#e8f5e9;color:#2e7d32}.b-CM{background:#e3f2fd;color:#1565c0}
+.mb{border-top:1px solid var(--border);padding:14px;display:none}.mb.open{display:block}
+.mdel{width:32px;height:32px;border-radius:50%;background:var(--red-lt);color:var(--red);border:none;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sbox{background:var(--teal-lt);border:1px solid #9fe1cb;border-radius:10px;padding:12px 14px;margin-top:10px;display:flex;align-items:center;gap:10px}
+.sn{font-size:28px;font-weight:700;color:var(--teal)}.sl{font-size:11px;color:var(--teal);font-weight:600}.sd{font-size:12px;color:#0a6b52}
+.add-mat{width:100%;padding:14px;border:2px dashed var(--teal);border-radius:14px;background:var(--teal-lt);color:var(--teal);font-size:15px;font-weight:600;font-family:'Sarabun',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.abar{position:fixed;bottom:0;left:0;right:0;background:var(--white);border-top:1px solid var(--border);padding:10px 16px;padding-bottom:calc(10px + var(--safe-bot));display:flex;gap:10px;z-index:40}
+.bm{flex:1;padding:14px;border-radius:12px;border:none;font-size:15px;font-weight:700;font-family:'Sarabun',sans-serif;cursor:pointer;transition:.12s}.bm:active{transform:scale(.97)}
+.bt{background:var(--teal);color:#fff}.bg{background:var(--gray2);color:var(--gray4)}
+.sw{border:2px dashed var(--border);border-radius:12px;overflow:hidden;background:#fafbfc;position:relative;touch-action:none}
+.sw.signed{border-color:var(--teal2);border-style:solid}
+.sc2{width:100%;height:160px;display:block;cursor:crosshair}
+.stb{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-top:1px solid var(--border);background:#fff}
+.sh{font-size:13px;color:var(--gray3);position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;text-align:center}.sh.h{display:none}
+.scl{font-size:12px;color:var(--red);font-weight:600;border:none;background:none;padding:4px 8px;cursor:pointer}
+.sst{font-size:12px;font-weight:600}.so{color:var(--teal)}.se{color:var(--gray3)}
+.photo-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.photo-slot{border:2px dashed var(--border);border-radius:12px;overflow:hidden;background:var(--gray1);position:relative;min-height:110px}
+.photo-slot.has-photo{border-color:var(--teal2);border-style:solid;background:transparent}
+.psl{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:16px 8px;cursor:pointer;min-height:110px}
+.psi{font-size:28px;opacity:.4}.pst{font-size:12px;font-weight:600;color:var(--gray4);text-align:center}.pss{font-size:10px;color:var(--gray3)}
+.photo-preview{width:100%;height:110px;object-fit:cover;display:block}
+.photo-clear{position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;background:rgba(192,57,43,.88);color:#fff;border:none;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.nc-item{background:var(--white);border-radius:12px;border:1px solid var(--border);margin:0 16px 10px;padding:14px}
+.nc-item.open{border-left:3px solid var(--blue)}.nc-item.closed{border-left:3px solid var(--gray3)}
+.hi{background:var(--white);border-radius:12px;margin:0 16px 10px;border:1px solid var(--border);padding:14px}
+.sbar{padding:10px 16px;background:var(--white);border-bottom:1px solid var(--border)}
+.sbar input{border-radius:20px;padding:9px 16px;font-size:14px;background:var(--gray1);border-color:transparent}
+.mo{position:fixed;inset:0;background:rgba(15,39,68,.6);z-index:200;display:flex;align-items:flex-end;opacity:0;pointer-events:none;transition:.2s}
+.mo.open{opacity:1;pointer-events:all}
+.ms{background:var(--white);border-radius:20px 20px 0 0;width:100%;max-height:90vh;overflow-y:auto;padding:20px 16px;padding-bottom:calc(20px + var(--safe-bot));transform:translateY(40px);transition:.2s}
+.mo.open .ms{transform:none}
+.mh{width:40px;height:4px;background:var(--gray2);border-radius:2px;margin:0 auto 16px}
+.mt{font-size:18px;font-weight:700;margin-bottom:16px}
+.msucc{text-align:center;padding:16px 0}
+.si{font-size:52px;margin-bottom:10px}.stl{font-size:20px;font-weight:700;margin-bottom:4px}.ssub{font-size:13px;color:var(--gray3);line-height:1.6;margin-bottom:20px}
+.srows{background:var(--gray1);border-radius:12px;padding:12px 14px;margin-bottom:20px}
+.srow{display:flex;align-items:center;gap:10px;padding:6px 0}
+.sric{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0}
+.pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.pill-pass{background:var(--green-lt);color:var(--green)}.pill-fail{background:var(--red-lt);color:var(--red)}
+.pill-hold{background:var(--amber-lt);color:var(--amber)}.pill-open{background:var(--blue-lt);color:var(--blue)}.pill-closed{background:var(--gray2);color:var(--gray4)}
+.cc{background:var(--white);border-radius:14px;border:1px solid var(--border);padding:16px;margin:0 16px 12px}
+.cc h3{font-size:15px;font-weight:700;margin-bottom:2px}.ccsub{font-size:12px;color:var(--gray3);margin-bottom:14px}
+.cr{background:var(--teal-lt);border-radius:10px;padding:14px;text-align:center;margin-top:12px}
+.crn{font-size:36px;font-weight:700;color:var(--teal);line-height:1}.cru{font-size:12px;color:var(--teal);margin-top:2px}.crd{font-size:11px;color:#0a6b52;margin-top:4px}
+.toast{position:fixed;top:calc(var(--hdr-h)+10px);left:50%;transform:translateX(-50%) translateY(-8px);background:var(--navy);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:300;opacity:0;transition:.2s;white-space:nowrap;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.aq{border:1.5px solid #9fe1cb;border-radius:12px;padding:12px;margin:4px 0 12px;background:#f6fcfa}
+.aq-h{font-size:13px;font-weight:700;color:var(--teal);margin-bottom:2px}
+.aq-s{font-size:11px;color:var(--gray3);margin-bottom:10px}
+.aq-plan{background:var(--teal-lt);border:1px solid #9fe1cb;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#0a6b52}
+.aq-plan b{font-size:20px;color:var(--teal)}
+.aq-plan.warn{background:var(--amber-lt);border-color:var(--amber);color:#8a5200}
+.aq-g{border-radius:10px;padding:10px;margin-bottom:10px;border:1px solid}
+.aq-g.cr{background:var(--red-lt);border-color:#ef9a9a}.aq-g.ma{background:var(--amber-lt);border-color:#ffcc80}.aq-g.mi{background:#fffde7;border-color:#fff176}
+.aq-gt{font-size:12px;font-weight:700;margin-bottom:8px}
+.aq-g.cr .aq-gt{color:var(--red)}.aq-g.ma .aq-gt{color:#b35c00}.aq-g.mi .aq-gt{color:#8d6e00}
+.aq-d{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.aq-d label{font-size:11px;font-weight:600;color:var(--gray4);display:block;margin-bottom:4px;min-height:30px}
+.aq-d input{text-align:center;padding:10px 4px}
+.aq-v{border-radius:10px;padding:10px 12px;font-size:13px;font-weight:700;border:2px solid;margin-top:2px}
+.aq-v.pass{background:var(--green-lt);border-color:#4caf50;color:var(--green)}
+.aq-v.hold{background:var(--amber-lt);border-color:var(--amber);color:#b35c00}
+.aq-v.fail{background:var(--red-lt);border-color:var(--red);color:var(--red)}
+.aq-v.na{background:var(--gray2);border-color:var(--gray3);color:var(--gray4)}
+.aq-v small{display:block;font-weight:500;font-size:12px;margin-top:3px}
+.aq-tg{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--gray4);margin-bottom:12px}
+.aq-tg input{width:20px;height:20px;flex:0 0 20px}
+.aq-tb{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+.aq-tb th{background:var(--navy);color:#fff;padding:6px;font-weight:600}
+.aq-tb td{padding:6px;text-align:center;border-bottom:1px solid var(--border)}
+.aq-tb tr.on td{background:var(--teal-lt);font-weight:700;color:var(--teal)}
+.toast.ok{background:var(--teal)}.toast.err{background:var(--red)}
+.empty{padding:60px 24px;text-align:center;color:var(--gray3)}
+.ei{font-size:44px;margin-bottom:10px;opacity:.35}.et{font-size:15px;font-weight:600;color:var(--gray4)}.esub{font-size:13px;margin-top:4px}
+@keyframes fade-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.anim{animation:fade-in .2s ease}
+</style>
+</head>
+<body>
+
+<!-- HOME -->
+<div class="screen active" id="sc-home">
+  <div class="app-header">
+    <div class="app-header-title">Puisabpak — QC Receiving</div>
+    <button class="app-header-action" onclick="goToForm()">+ รับสินค้า</button>
+  </div>
+  <div class="scroll-area">
+    <div class="home-hero">
+      <div class="home-date" id="home-date"></div>
+      <div style="display:flex;align-items:center;gap:12px"><img id="home-logo" style="width:52px;height:52px;border-radius:12px;background:#fff;padding:4px;object-fit:contain"><div><div class="home-title" style="font-size:19px">บริษัท พระจันทร์ ๕๐ จำกัด</div><div class="home-sub">Puisabpak</div></div></div>
+      <div class="home-sub" style="margin-top:10px">บันทึกการตรวจรับและตรวจสอบวัตถุดิบ | FM-QC-001 | SD-QC-001</div>
+    </div>
+    <div class="home-stats">
+      <div class="sc"><div class="sc-n" id="hs-t">0</div><div class="sc-l">รับทั้งหมด</div></div>
+      <div class="sc"><div class="sc-n g" id="hs-p">0</div><div class="sc-l">PASS</div></div>
+      <div class="sc"><div class="sc-n a" id="hs-n">0</div><div class="sc-l">NC Open</div></div>
+    </div>
+    <div class="sec-h" style="margin-top:12px"><div class="sec-t">เมนูหลัก</div></div>
+    <div class="qgrid">
+      <div class="qc p" onclick="goToForm()"><div class="qi">&#x2B;</div><div class="ql">รับวัตถุดิบ</div><div class="qs">บันทึกใหม่</div></div>
+      <div class="qc" onclick="goS('sc-hist')"><div class="qi">&#x1F4CB;</div><div class="ql">ประวัติ</div><div class="qs">รายการทั้งหมด</div></div>
+      <div class="qc" onclick="goS('sc-nc')"><div class="qi">&#x26A0;&#xFE0F;</div><div class="ql">NC Log</div><div class="qs" id="hqnc">0 รายการ</div></div>
+      <div class="qc" onclick="goS('sc-calc')"><div class="qi">&#x1F4D0;</div><div class="ql">ตารางสุ่ม</div><div class="qs">SD-QC-001</div></div>
+    </div>
+    <div style="padding:12px 16px 0"><button class="bm bt" style="width:100%" onclick="goRep()">&#x1F5A8; พิมพ์รายงาน A4 — รายวัน / ราย Supplier</button></div>
+    <div class="sec-h"><div class="sec-t">รับล่าสุด</div><div class="sec-lk" onclick="goS('sc-hist')">ดูทั้งหมด</div></div>
+    <div id="rl" class="rl"></div>
+    <div style="height:8px"></div>
+  </div>
+  <nav class="bottom-nav">
+    <button class="nav-item active" onclick="goHome()"><span class="ni">&#x1F3E0;</span><span class="nl">หน้าหลัก</span></button>
+    <button class="nav-item" onclick="goS('sc-hist')"><span class="ni">&#x1F4CB;</span><span class="nl">ประวัติ</span></button>
+    <button class="nav-item" onclick="goS('sc-nc')"><span class="ni">&#x26A0;&#xFE0F;</span><span class="nl">NC</span><span class="nav-dot" id="ncdot" style="display:none"></span></button>
+    <button class="nav-item" onclick="goS('sc-calc')"><span class="ni">&#x1F4D0;</span><span class="nl">ตารางสุ่ม</span></button>
+  </nav>
+</div>
+
+<!-- FORM -->
+<div class="screen" id="sc-form">
+  <div class="app-header">
+    <button class="app-header-back" onclick="goHome()">&#x2039;</button>
+    <div class="app-header-title">FM-QC-001 — รับวัตถุดิบ</div>
+    <button class="app-header-action" onclick="saveRecord()">บันทึก</button>
+  </div>
+  <div class="fsteps">
+    <div class="fstep active" id="fs1"><div class="fsd">1</div><span class="fsl">ข้อมูลรับ</span></div>
+    <div class="fline" id="fl1"></div>
+    <div class="fstep" id="fs2"><div class="fsd">2</div><span class="fsl">วัตถุดิบ</span></div>
+    <div class="fline" id="fl2"></div>
+    <div class="fstep" id="fs3"><div class="fsd">3</div><span class="fsl">ตรวจสอบ</span></div>
+  </div>
+  <div class="fp active" id="fp1">
+    <div class="fsec">
+      <div class="fst">&#x1F4C5; วันที่ & เวลา</div>
+      <div class="ig">
+        <div class="fg"><label>วันที่ <span class="req">*</span></label><input type="date" id="f-date"></div>
+        <div class="fg"><label>เวลา <span class="req">*</span></label><input type="time" id="f-time"></div>
+      </div>
+      <div class="fg"><label>เลขที่เอกสาร</label><input type="text" id="f-docno" readonly></div>
+      <div class="fg"><label>ผู้ตรวจรับ QC <span class="req">*</span></label><input type="text" id="f-inspector" placeholder="ชื่อ QC Inspector" autocomplete="name"></div>
+    </div>
+    <div class="fsec">
+      <div class="fst">&#x1F69A; Supplier & รถ</div>
+      <div class="fg"><label>Supplier <span class="req">*</span></label><input type="text" id="f-sup" list="sup-list" placeholder="พิมพ์ชื่อ Supplier" autocomplete="off"><datalist id="sup-list"></datalist></div>
+      <div class="ig">
+        <div class="fg"><label>ทะเบียนรถ</label><input type="text" id="f-car" placeholder="เช่น 4ฒฉ 8503"></div>
+        <div class="fg"><label>อุณหภูมิรถ (°C) <span style="font-weight:400;color:var(--gray3)">เฉพาะของสด</span></label>
+          <input type="number" id="f-ctemp" step="0.1" inputmode="decimal" placeholder="0.0" oninput="chkCT()">
+          <div id="ct-st" style="margin-top:4px;font-size:12px;font-weight:600"></div></div>
+      </div>
+      <div class="fg"><label>PO / DO No. (เลขที่ใบสั่งซื้อ / ใบส่งของ)</label><input type="text" id="f-po" placeholder="เช่น PO-2569-0123 / DO-4567" autocomplete="off"></div>
+      <div class="fg"><label>หมายเหตุ</label><textarea id="f-note" placeholder="หมายเหตุ..." rows="2"></textarea></div>
+    </div>
+    <div class="abar"><button class="bm bt" onclick="goFP(2)">ถัดไป — เพิ่มวัตถุดิบ &#x2192;</button></div>
+  </div>
+  <div class="fp" id="fp2">
+    <div id="mat-list"></div>
+    <button class="add-mat" onclick="addMat()">&#x2B; เพิ่มรายการวัตถุดิบ</button>
+    <div style="height:80px"></div>
+    <div class="abar">
+      <button class="bm bg" style="flex:0 0 52px;padding:0" onclick="goFP(1)">&#x2039;</button>
+      <button class="bm bt" onclick="goFP(3)">ถัดไป — ตรวจสอบ &#x2192;</button>
+    </div>
+  </div>
+  <div class="fp" id="fp3">
+    <div class="fsec"><div class="fst">&#x1F4CB; สรุปการรับ</div><div id="summ"></div></div>
+    <div class="fsec">
+      <div class="fst">&#x270D;&#xFE0F; ลายเซ็น QC Inspector</div>
+      <div class="fg"><label>ชื่อผู้เซ็น</label><input type="text" id="sig-name" placeholder="ชื่อ QC Inspector" autocomplete="name"></div>
+      <div class="fg"><label>ลายเซ็น <span class="req">*</span></label>
+        <div class="sw" id="sig-wrap">
+          <canvas class="sc2" id="sig-cv" width="700" height="200"></canvas>
+          <div class="sh" id="sig-hint">&#x270D; เซ็นชื่อที่นี่</div>
+          <div class="stb">
+            <span class="sst se" id="sig-st">ยังไม่ได้เซ็น</span>
+            <button class="scl" onclick="clearSig()">&#x21BA; ลบ</button>
+          </div>
+        </div>
+      </div>
+      <div class="fg"><label>วันที่ / เวลา</label><input type="text" id="sig-dt" readonly></div>
+    </div>
+    <div style="height:90px"></div>
+    <div class="abar">
+      <button class="bm bg" style="flex:0 0 52px;padding:0" onclick="goFP(2)">&#x2039;</button>
+      <button class="bm bt" onclick="saveRecord()">&#x1F4BE; บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- HISTORY -->
+<div class="screen" id="sc-hist">
+  <div class="app-header">
+    <button class="app-header-back" onclick="goHome()">&#x2039;</button>
+    <div class="app-header-title">ประวัติการรับ</div>
+    <button class="app-header-action" onclick="goRep()">&#x1F5A8; รายงาน</button>
+  </div>
+  <div style="display:flex;background:var(--white);border-bottom:1px solid var(--border)">
+    <div class="sbar" style="flex:1;border:none;padding-right:8px"><input type="text" id="h-search" placeholder="&#x1F50D; ค้นหา..." oninput="renderHist()"></div>
+    <button onclick="exportExcelCloud()" style="padding:10px 14px;background:none;border:none;border-left:1px solid var(--border);color:var(--teal);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">&#x1F4E5; Excel</button>
+  </div>
+  <div class="scroll-area" style="padding-bottom:20px"><div style="height:10px"></div><div id="hl"></div></div>
+</div>
+
+<!-- NC -->
+<div class="screen" id="sc-nc">
+  <div class="app-header">
+    <button class="app-header-back" onclick="goHome()">&#x2039;</button>
+    <div class="app-header-title">NC Log <span style="background:var(--amber);color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;margin-left:6px" id="nc-badge">0</span></div>
+    <button class="app-header-action" onclick="openNCModal()">+ เพิ่ม</button>
+  </div>
+  <div class="scroll-area" style="padding-bottom:20px"><div style="height:10px"></div><div id="ncl"></div></div>
+</div>
+
+<!-- SAMPLING -->
+<div class="screen" id="sc-calc">
+  <div class="app-header">
+    <button class="app-header-back" onclick="goHome()">&#x2039;</button>
+    <div class="app-header-title">ตารางสุ่ม SD-QC-001</div>
+  </div>
+  <div class="scroll-area" style="padding-bottom:20px">
+    <div style="height:10px"></div>
+    <div class="cc" style="border-color:#9fe1cb">
+      <h3>&#x1F9C5; หอม / พริก / กระเทียม (แปรรูปเบื้องต้น)</h3><div class="ccsub">OPL แผนการสุ่มตัวอย่าง — MIL-STD-105E | หน่วยเป็น "ถุง"</div>
+      <div class="fg"><label>จำนวนถุงที่รับเข้า (Lot Size)</label><input type="number" id="c-aq" step="1" min="1" inputmode="numeric" placeholder="เช่น 30" oninput="cAql()"></div>
+      <div class="cr" id="cr-a" style="display:none"><div class="crn" id="crn-a">—</div><div class="cru" id="cru-a">ถุงที่ต้องสุ่มตรวจ</div><div class="crd" id="crd-a"></div></div>
+      <table class="aq-tb" id="c-aqtb"></table>
+      <div style="font-size:12px;color:var(--gray4);margin-top:12px;line-height:1.7">
+        <b>เทคนิคการสุ่มจากถุง 10 kg:</b> ตักจาก 3 ตำแหน่ง บน / กลาง / ล่าง รวมให้ได้น้ำหนักตามแผน<br>
+        <span style="color:var(--red);font-weight:700">CRITICAL (0%)</span> ราดำ/เขียว, เศษแก้ว/โลหะ, หนอน/แมลง — พบ 1 ชิ้น ปฏิเสธทั้งลอต<br>
+        <span style="color:#b35c00;font-weight:700">MAJOR (AQL 2.5%)</span> เปลือกติดมาก, ขั้วติดอยู่, ช้ำ/เป็นรอยบุบ — ไม่เกิน 2.5%<br>
+        <span style="color:#8d6e00;font-weight:700">MINOR (AQL 5.0%)</span> ขนาดเล็กกว่าเกณฑ์, สีแดงปนเขียว, รอยถลอกเล็กน้อย — ไม่เกิน 5.0%
+      </div>
+    </div>
+    <div class="cc">
+      <h3>&#x1F969; หมูบด (IQC — Minced Pork)</h3><div class="ccsub">แช่เย็น ถุงละ 10 kg | สุ่มเปิดตรวจตามตารางจำนวนถุง + ตรวจพินิจภายนอก 100%</div>
+      <div class="fg"><label>น้ำหนักรวมที่รับ (kg)</label><input type="number" id="c-pk" step="0.1" inputmode="decimal" placeholder="เช่น 50" oninput="cPork()"></div>
+      <div class="cr" id="cr-p" style="display:none"><div class="crn" id="crn-p">—</div><div class="cru">ถุงที่ต้องสุ่มเปิดตรวจ</div><div class="crd" id="crd-p"></div></div>
+      <div style="font-size:12px;color:var(--gray4);margin-top:12px;line-height:1.7">
+        <b>1. บรรจุภัณฑ์:</b> ซีลปิดสนิท ไม่ฉีกขาด ไม่มีน้ำเลือดซึม ฉลากชัดเจน<br>
+        <b>2. น้ำหนัก:</b> น้ำหนักสุทธิครบตามหน้าถุง (หักน้ำหนักถุง)<br>
+        <b>3. อุณหภูมิใจกลาง</b> <span style="color:var(--red);font-weight:700">Critical Point</span>: แช่เย็น 0–4°C<br>
+        <b>4. pH</b> <span style="color:var(--red);font-weight:700">Critical Point</span>: ต่ำกว่า 5.4 Reject (PSE) | <span style="color:var(--green);font-weight:700">5.5–6.2 Accept</span> | 6.3–6.4 Reject (DFD) | 6.5 ขึ้นไป Reject<br>
+        <b>5. กายภาพ:</b> สีแดง/ชมพูธรรมชาติ ไม่มีกลิ่นเปรี้ยว/เน่า ไม่มีเศษกระดูก พลาสติก โลหะ<br>
+        &#x26A0; ทำความสะอาดหัววัด pH และเช็ดแอลกอฮอล์ (Food Grade) ทุกครั้งก่อนวัดถุงต่อไป
+      </div>
+    </div>
+    <div class="cc">
+      <h3>&#x1F333; กลุ่มไม้เสียบ</h3><div class="ccsub">สุ่ม 5%</div>
+      <div class="fg"><label>จำนวนห่อ</label><input type="number" id="c-wq" step="1" inputmode="numeric" placeholder="เช่น 30" oninput="cWood()"></div>
+      <div class="cr" id="cr-w" style="display:none"><div class="crn" id="crn-w">—</div><div class="cru">ห่อที่ต้องเปิดตรวจ</div><div class="crd">เปิดสุ่ม 3 จุด</div></div>
+    </div>
+    <div class="cc">
+      <h3>&#x1F330; กลุ่มของแห้ง</h3><div class="ccsub">สูตร √N+1</div>
+      <div class="fg"><label>จำนวนกระสอบ/ถุง (N)</label><input type="number" id="c-dq" step="1" inputmode="numeric" placeholder="เช่น 50" oninput="cDry()"></div>
+      <div class="cr" id="cr-d" style="display:none"><div class="crn" id="crn-d">—</div><div class="cru">กระสอบที่ต้องเปิดตรวจ</div><div class="crd" id="crd-d"></div></div>
+    </div>
+    <div class="cc" style="background:var(--blue-lt);border-color:#90caf9">
+      <h3 style="color:var(--blue)">&#x1F4E6; บรรจุภัณฑ์ & เคมี</h3>
+      <div class="ccsub" style="color:#1976d2">ตรวจสอบตามมาตรฐาน AQL</div>
+      <div style="font-size:13px;color:var(--blue)">ตรวจรูปทรง ขนาด การพิมพ์ ความสมบูรณ์<br>&#x26A0; พบสิ่งผิดปกติ → HOLD ทันที</div>
+    </div>
+  </div>
+</div>
+
+<!-- REPORT -->
+<div class="screen" id="sc-rep">
+  <div class="app-header">
+    <button class="app-header-back" onclick="goHome()">&#x2039;</button>
+    <div class="app-header-title">พิมพ์รายงาน A4</div>
+  </div>
+  <div class="scroll-area" style="padding-bottom:20px">
+    <div style="height:10px"></div>
+    <div class="cc">
+      <h3>&#x1F5A8; รายงานการตรวจรับวัตถุดิบ</h3><div class="ccsub">FM-QC-001 | เลือกแบบรายงาน แล้วกดพิมพ์ (A4 แนวนอน)</div>
+      <div class="trow" style="margin-bottom:14px">
+        <button type="button" class="tp pass" id="rp-m-day" onclick="setRep('day')">รายวัน</button>
+        <button type="button" class="tp pass" id="rp-m-sup" onclick="setRep('sup')">ราย Supplier</button>
+      </div>
+      <div id="rp-day"><div class="fg"><label>วันที่รับ</label><input type="date" id="rp-date" onchange="repCount()"></div></div>
+      <div id="rp-sup-box" style="display:none">
+        <div class="fg"><label>Supplier</label><select id="rp-sup" onchange="repCount()"></select></div>
+        <div class="ig">
+          <div class="fg"><label>ตั้งแต่วันที่</label><input type="date" id="rp-from" onchange="repCount()"></div>
+          <div class="fg"><label>ถึงวันที่</label><input type="date" id="rp-to" onchange="repCount()"></div>
+        </div>
+        <div style="font-size:12px;color:var(--gray3);margin-bottom:10px">เว้นวันที่ว่างไว้ = ทุกวันที่มีข้อมูล</div>
+      </div>
+      <div class="cr" id="rp-cnt" style="margin-bottom:12px"></div>
+      <button class="bm bt" style="width:100%" onclick="printReport()">&#x1F5A8; พิมพ์ / บันทึก PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- SAVE MODAL -->
+<div class="mo" id="save-modal">
+  <div class="ms">
+    <div class="mh"></div>
+    <div class="msucc">
+      <div class="si">&#x2705;</div>
+      <div class="stl">บันทึกเรียบร้อย!</div>
+      <div class="ssub" id="save-sub"></div>
+      <div class="srows">
+        <div style="font-size:11px;font-weight:700;color:var(--gray3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">ข้อมูลที่บันทึก</div>
+        <div class="srow"><div class="sric" style="background:#c8e6c9;color:#1b5e20">&#x1F4BE;</div><div style="font-size:13px"><strong>เก็บในเครื่องนี้</strong> — ใบรับ + NC Log + ลายเซ็น</div></div>
+      </div>
+      <img id="sig-prev-img" style="max-height:48px;border:1px solid var(--border);border-radius:8px;background:#fafbfc;padding:4px;margin-bottom:12px;display:none">
+      <button class="bm bt" style="width:100%;margin-bottom:10px" onclick="dlExcel()">&#x1F4E5; ดาวน์โหลด Excel</button>
+      <button class="bm" style="width:100%;margin-bottom:10px;background:#c0392b;color:#fff" onclick="dlPDF()">&#x1F5B6; พิมพ์ / PDF</button>
+      <button class="bm bg" style="width:100%" onclick="closeSaveModal()">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<!-- NC MODAL -->
+<div class="mo" id="nc-modal">
+  <div class="ms">
+    <div class="mh"></div>
+    <div class="mt">&#x26A0;&#xFE0F; เพิ่ม NC ใหม่</div>
+    <div class="fg"><label>Doc No <span class="req">*</span></label><select id="nm-doc" onchange="onNCDC()"><option value="">-- เลือก Doc No --</option></select></div>
+    <div class="fg"><label>Supplier</label><input type="text" id="nm-sup" readonly placeholder="Auto"></div>
+    <div class="fg"><label>ประเภทปัญหา <span class="req">*</span></label>
+      <select id="nm-ft"><option value="">-- เลือกประเภท --</option>
+        <option>Quantity Mismatch</option><option>Missing Document</option>
+        <option>Temperature Out of Spec</option><option>Visual Defect</option>
+        <option>Packaging Damage</option><option>Expired / Near Expiry</option>
+        <option>Label Error</option><option>Foreign Matter</option>
+        <option>Rejected Material</option><option>Other</option></select></div>
+    <div class="fg"><label>QC Supervisor</label><input type="text" id="nm-qa" placeholder="ชื่อ QC Supervisor"></div>
+    <div class="fg"><label>Corrective Action</label><textarea id="nm-ca" rows="2" placeholder="การดำเนินการแก้ไข..."></textarea></div>
+    <div class="fg"><label>หมายเหตุ</label><textarea id="nm-nt" rows="2" placeholder="หมายเหตุ..."></textarea></div>
+    <button class="bm bt" style="width:100%;margin-top:8px" onclick="saveNC()">&#x2B; บันทึก NC</button>
+    <button class="bm bg" style="width:100%;margin-top:8px" onclick="closeNCM()">ยกเลิก</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const LOGO_B64="data:image/jpeg;base64,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";
+const SUPPLIERS = [];   // Supplier กรอกเองในฟอร์ม — ชื่อที่เคยกรอกจะขึ้นเป็นตัวเลือกให้
+// รายการตามไฟล์ Stock: RM = วัตถุดิบ, PM = บรรจุภัณฑ์ (PKG), CM = วัสดุสิ้นเปลือง (SUP)
+// minTemp/maxTemp = เกณฑ์อุณหภูมิของ "ของสด" (แช่เย็น/แช่แข็ง) เท่านั้น — รายการที่เป็น null จะไม่มีช่องวัดอุณหภูมิในฟอร์ม
+const MATERIALS = [
+  {code:'RM-001',name:'หอมแขกจีนปอกเปลือก',type:'RM',unit:'กิโลกรัม',minTemp:1,maxTemp:4,cat:'OPL',store:'แช่เย็น 1-4°C ปิดฝาสนิท'},
+  {code:'RM-002',name:'หอมแขกปอก',type:'RM',unit:'กิโลกรัม',minTemp:1,maxTemp:4,cat:'OPL',store:'แช่เย็น 1-4°C ปิดฝาสนิท'},
+  {code:'RM-003',name:'หอมแขกพม่าปอกเปลือก',type:'RM',unit:'กิโลกรัม',minTemp:1,maxTemp:4,cat:'OPL',store:'แช่เย็น 1-4°C ปิดฝาสนิท'},
+  {code:'RM-004',name:'หอมแขกพม่า(กระเทย)',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'OPL',store:'ที่แห้งและเย็น อากาศถ่ายเทสะดวก หรือแช่เย็น 1-4°C'},
+  {code:'RM-005',name:'กระเทียมจีนปอกเปลือก',type:'RM',unit:'กิโลกรัม',minTemp:1,maxTemp:4,cat:'OPL',store:'แช่เย็น 1-4°C ปิดฝาสนิท'},
+  {code:'RM-006',name:'พริกจินดาแดง เด็ดก้าน',type:'RM',unit:'กิโลกรัม',minTemp:1,maxTemp:4,cat:'OPL',store:'แช่เย็น 1-4°C ปิดสนิท ป้องกันความชื้นสะสม'},
+  {code:'RM-007',name:'พริกแห้ง (เด็ดก้าน)',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'OPL',store:'อุณหภูมิห้อง ที่แห้งและเย็น หลีกเลี่ยงความชื้น'},
+  {code:'RM-008',name:'พริกแห้ง(ติดก้าน)',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'OPL',store:'อุณหภูมิห้อง ที่แห้งและเย็น หลีกเลี่ยงความชื้น'},
+  {code:'RM-009',name:'หมูบด',type:'RM',unit:'กิโลกรัม',minTemp:0,maxTemp:4,cat:'Pork',store:'แช่เย็น 0-4°C (ถุงละ 10 kg)'},
+  {code:'RM-010',name:'ปลากระดี่',type:'RM',unit:'กิโลกรัม',minTemp:-60,maxTemp:-18,tLabel:'≤ -18°C',cat:'Meat',store:'แช่แข็ง ≤ -18°C'},
+  {code:'RM-011',name:'ปลาฉลาด 100% ป่น',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Fish Powder',store:'อุณหภูมิห้อง ที่แห้งและเย็น ปิดสนิท หลีกเลี่ยงความชื้น'},
+  {code:'RM-012',name:'ปลาทูป่น',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Fish Powder',store:'อุณหภูมิห้อง ที่แห้งและเย็น ปิดสนิท หลีกเลี่ยงความชื้น'},
+  {code:'RM-013',name:'ปลาย่างป่น',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Fish Powder',store:'อุณหภูมิห้อง ที่แห้งและเย็น ปิดสนิท หลีกเลี่ยงความชื้น'},
+  {code:'RM-014',name:'ปลาร้าโหน่ง',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Fermented',store:'อุณหภูมิห้อง ที่แห้งและเย็น ปิดฝาสนิท'},
+  {code:'RM-015',name:'กะปิ (ถุง)',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Fermented',store:'แช่เย็น 1-4°C หรือที่แห้งและเย็น ปิดสนิท'},
+  {code:'RM-016',name:'กุ้งแห้ง',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Dried Shrimp',store:'แช่เย็น 1-4°C ปิดสนิท ป้องกันความชื้นและเชื้อรา'},
+  {code:'RM-017',name:'กุ้งแห้ง (ตัว)',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Dried Shrimp',store:'แช่เย็น 1-4°C ปิดสนิท ป้องกันความชื้นและเชื้อรา'},
+  {code:'RM-018',name:'กุ้งฝอย(สีชมพู)',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Dried Shrimp',store:'แช่เย็น 1-4°C ปิดสนิท ป้องกันความชื้นและเชื้อรา'},
+  {code:'RM-019',name:'กุ้งแห้งจิ๋ว (ตัว)',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Dried Shrimp',store:'แช่เย็น 1-4°C ปิดสนิท ป้องกันความชื้นและเชื้อรา'},
+  {code:'RM-020',name:'กุ้งฝอย (สีส้ม)',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Dried Shrimp',store:'แช่เย็น 1-4°C ปิดสนิท ป้องกันความชื้นและเชื้อรา'},
+  {code:'RM-021',name:'กุ้งติดเปลือก',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Dried Shrimp',store:'แช่เย็น 1-4°C ปิดสนิท ป้องกันความชื้นและเชื้อรา'},
+  {code:'RM-022',name:'เห็ดหอม B4',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Dried Mushroom',store:'อุณหภูมิห้อง ที่แห้งและเย็น ปิดสนิท หลีกเลี่ยงความชื้น'},
+  {code:'RM-023',name:'ซอสแม็กกี้ 5,000 ml',type:'RM',unit:'แกลลอน',minTemp:null,maxTemp:null,cat:'Sauce',store:'อุณหภูมิห้อง ปิดฝาสนิท พ้นแสงแดดและความร้อน'},
+  {code:'RM-024',name:'ซีอิ๊วขาวเห็ดหอม (ขวดแก้ว)',type:'RM',unit:'ขวด',minTemp:null,maxTemp:null,cat:'Sauce',store:'อุณหภูมิห้อง ปิดฝาสนิท พ้นแสงแดดและความร้อน'},
+  {code:'RM-025',name:'น้ำปลาทิพรส 4,500 ml',type:'RM',unit:'แกลลอน',minTemp:null,maxTemp:null,cat:'Sauce',store:'อุณหภูมิห้อง ปิดฝาสนิท พ้นแสงแดดและความร้อน'},
+  {code:'RM-026',name:'มะขามเปียก',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Tamarind',store:'แช่เย็น 1-4°C หรือที่แห้งและเย็น ปิดสนิท เพื่อรักษาคุณภาพ'},
+  {code:'RM-027',name:'น้ำปลาร้า',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Sauce',store:'อุณหภูมิห้อง ปิดฝาสนิท ที่แห้งและเย็น'},
+  {code:'RM-028',name:'พริกป่น (แพร่)',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Chili Powder',store:'อุณหภูมิห้อง ที่แห้งและเย็น ปิดสนิท หลีกเลี่ยงความชื้น'},
+  {code:'RM-029',name:'พริกป่น (งามตา พืชผล)',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Chili Powder',store:'อุณหภูมิห้อง ที่แห้งและเย็น ปิดสนิท หลีกเลี่ยงความชื้น'},
+  {code:'RM-030',name:'เกลือ',type:'RM',unit:'ถุง',minTemp:null,maxTemp:null,cat:'Seasoning',store:'อุณหภูมิห้อง ที่แห้ง ปิดสนิท หลีกเลี่ยงความชื้น'},
+  {code:'RM-031',name:'เกลือป่น',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Seasoning',store:'อุณหภูมิห้อง ที่แห้ง ปิดสนิท หลีกเลี่ยงความชื้น'},
+  {code:'RM-032',name:'ผงชูรส',type:'RM',unit:'ถุง',minTemp:null,maxTemp:null,cat:'Seasoning',store:'อุณหภูมิห้อง ที่แห้ง ปิดสนิท หลีกเลี่ยงความชื้น'},
+  {code:'RM-033',name:'Monosodium Glutamate',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Seasoning',store:'อุณหภูมิห้อง ที่แห้ง ปิดสนิท หลีกเลี่ยงความชื้น'},
+  {code:'RM-034',name:'โซเดี่ยมเบนโซเอต',type:'RM',unit:'ถุง',minTemp:null,maxTemp:null,cat:'Additive',store:'อุณหภูมิห้อง ที่แห้งและเย็น ปิดสนิท พ้นแสงแดด'},
+  {code:'RM-035',name:'โปรแตสเซียม ซอร์เบต 1 กก.',type:'RM',unit:'ถุง',minTemp:null,maxTemp:null,cat:'Additive',store:'อุณหภูมิห้อง ที่แห้งและเย็น ปิดสนิท พ้นแสงแดด'},
+  {code:'RM-036',name:'น้ำมันปาล์มโอลีน (ปี๊ป)',type:'RM',unit:'ปี๊บ',minTemp:null,maxTemp:null,cat:'Oil',store:'อุณหภูมิห้อง (20-30°C) ปิดฝาสนิท พ้นแสงแดดและความร้อน'},
+  {code:'RM-037',name:'น้ำมันปาล์มมรกต (ปี๊ป)',type:'RM',unit:'ปี๊บ',minTemp:null,maxTemp:null,cat:'Oil',store:'อุณหภูมิห้อง (20-30°C) ปิดฝาสนิท พ้นแสงแดดและความร้อน'},
+  {code:'RM-038',name:'น้ำมันปาล์มทับทิม',type:'RM',unit:'แกลลอน',minTemp:null,maxTemp:null,cat:'Oil',store:'อุณหภูมิห้อง (20-30°C) ปิดฝาสนิท พ้นแสงแดดและความร้อน'},
+  {code:'RM-039',name:'น้ำมันปาล์มธารทอง (ปี๊ป)',type:'RM',unit:'ปี๊บ',minTemp:null,maxTemp:null,cat:'Oil',store:'อุณหภูมิห้อง (20-30°C) ปิดฝาสนิท พ้นแสงแดดและความร้อน'},
+  {code:'RM-040',name:'น้ำมันปาล์มโบนัส',type:'RM',unit:'ปี๊บ',minTemp:null,maxTemp:null,cat:'Oil',store:'อุณหภูมิห้อง (20-30°C) ปิดฝาสนิท พ้นแสงแดดและความร้อน'},
+  {code:'RM-041',name:'น้ำมันรำข้าวคิง (ปี๊ป)',type:'RM',unit:'ปี๊บ',minTemp:null,maxTemp:null,cat:'Oil',store:'อุณหภูมิห้อง (20-30°C) ปิดฝาสนิท พ้นแสงแดดและความร้อน'},
+  {code:'RM-042',name:'น้ำมันมะกอก',type:'RM',unit:'แกลลอน',minTemp:null,maxTemp:null,cat:'Oil',store:'อุณหภูมิห้อง ที่แห้งและเย็น พ้นแสงแดดและความร้อน ปิดฝาสนิท'},
+  {code:'RM-043',name:'Promace Olive oil Alianza 5Ltr PET',type:'RM',unit:'แกลลอน',minTemp:null,maxTemp:null,cat:'Oil',store:'อุณหภูมิห้อง ที่แห้งและเย็น พ้นแสงแดดและความร้อน ปิดฝาสนิท'},
+  {code:'RM-044',name:'โอลีฟ โพเมซ ออยล์ 5L',type:'RM',unit:'แกลลอน',minTemp:null,maxTemp:null,cat:'Oil',store:'อุณหภูมิห้อง ที่แห้งและเย็น พ้นแสงแดดและความร้อน ปิดฝาสนิท'},
+  {code:'RM-045',name:'น้ำตาลมะพร้าว (ตรากังหัน)',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Sugar',store:'แช่เย็น 1-4°C หรือที่แห้งและเย็น ปิดสนิท ป้องกันการเยิ้มละลาย'},
+  {code:'RM-046',name:'น้ำตาลมะพร้าว (ไก่เขียว)',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Sugar',store:'แช่เย็น 1-4°C หรือที่แห้งและเย็น ปิดสนิท ป้องกันการเยิ้มละลาย'},
+  {code:'RM-047',name:'น้ําตาลทรายแดง (วังขนาย)',type:'RM',unit:'ถุง',minTemp:null,maxTemp:null,cat:'Sugar',store:'อุณหภูมิห้อง ที่แห้ง ปิดสนิท หลีกเลี่ยงความชื้น'},
+  {code:'RM-048',name:'น้ำตาลทรายขาว',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Sugar',store:'อุณหภูมิห้อง ที่แห้ง ปิดสนิท หลีกเลี่ยงความชื้น'},
+  {code:'RM-049',name:'น้ำตาลหล่อฮังก๊วย',type:'RM',unit:'ถุง',minTemp:null,maxTemp:null,cat:'Sugar',store:'อุณหภูมิห้อง ที่แห้ง ปิดสนิท หลีกเลี่ยงความชื้น'},
+  {code:'RM-050',name:'งาขาว',type:'RM',unit:'กิโลกรัม',minTemp:null,maxTemp:null,cat:'Sesame',store:'ที่แห้งและเย็น ปิดสนิท พ้นแสงแดด (หรือแช่เย็น 1-4°C เพื่อป้องกันกลิ่นหืน)'},
+  {code:'RM-051',name:'น้ำมันงาคั่ว 2.50 ลิตร',type:'RM',unit:'แกลลอน',minTemp:null,maxTemp:null,cat:'Oil',store:'อุณหภูมิห้อง ที่แห้งและเย็น พ้นแสงแดดและความร้อน ปิดฝาสนิท'},
+  {code:'RM-052',name:'น้ำมันงา ตรามังกรคู่ 3 ล.',type:'RM',unit:'แกลลอน',minTemp:null,maxTemp:null,cat:'Oil',store:'อุณหภูมิห้อง ที่แห้งและเย็น พ้นแสงแดดและความร้อน ปิดฝาสนิท'},
+  {code:'PKG-001',name:'กระปุก PET Can TCK230R307 (กระปุกกลม)',type:'PM',unit:'ลัง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-002',name:'EOE 07 V2 (ฝาอลูมิเนียม 210ml)',type:'PM',unit:'ชิ้น',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-003',name:'PE Cover 307 Clear & Spoon',type:'PM',unit:'ชิ้น',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-004',name:'กระปุก Clear PET Can LAZ60R202 (504 pcs/carton)',type:'PM',unit:'ลัง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-005',name:'POE 202 SILVER (150 pcs/pack)',type:'PM',unit:'ชิ้น',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-006',name:'PE Cover 202 Black P02 (100 pcs/pack)',type:'PM',unit:'ชิ้น',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-007',name:'PE Cover 202 Clear P02 (100 pcs/pack)',type:'PM',unit:'ชิ้น',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-010',name:'สติกเกอร์ ตาแดงมันกุ้ง 210g (โรล)',type:'PM',unit:'โรล',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-011',name:'สติกเกอร์ ปลาย่าง 210g (โรล)',type:'PM',unit:'โรล',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-012',name:'สติกเกอร์ ปลาร้า (โรล)',type:'PM',unit:'โรล',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-013',name:'สติกเกอร์ พริกคั่วป่น (โรล)',type:'PM',unit:'โรล',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-014',name:'สติกเกอร์ หมูเสวย (โรล)',type:'PM',unit:'โรล',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-015',name:'สติกเกอร์ เห็ดหอม (โรล)',type:'PM',unit:'โรล',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-016',name:'สติกเกอร์ แมคเคอเรล (โรล)',type:'PM',unit:'โรล',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-017',name:'สติกเกอร์ มะกอก สูตรออริจินอล (โรล)',type:'PM',unit:'โรล',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-018',name:'สติกเกอร์ มะกอก สูตรเผ็ด (โรล)',type:'PM',unit:'โรล',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-019',name:'สติกเกอร์ น้ำปลาหวาน (โรล)',type:'PM',unit:'โรล',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-020',name:'สติกเกอร์ น้ำมันงา (โรล)',type:'PM',unit:'โรล',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-021',name:'สติกเกอร์ มะกอก (แผ่น)',type:'PM',unit:'ดวง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-022',name:'สติกเกอร์ น้ำมันงา (แผ่น)',type:'PM',unit:'ดวง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-023',name:'สติกเกอร์ น้ำปลาหวาน (แผ่น)',type:'PM',unit:'ดวง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-024',name:'สติกเกอร์ แมคเคอเรล (แผ่น)',type:'PM',unit:'ดวง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-025',name:'สติกเกอร์ มะกอก สูตรออริจินอล 60 G',type:'PM',unit:'ดวง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-026',name:'สติกเกอร์ มะกอก สูตรเผ็ด 60 G',type:'PM',unit:'ดวง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-027',name:'สติกเกอร์ ปลาย่าง 60 G',type:'PM',unit:'ดวง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-028',name:'สติกเกอร์ เห็ดหอม 60 G',type:'PM',unit:'ดวง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-029',name:'สติกเกอร์ น้ำมันงา 60 G',type:'PM',unit:'ดวง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-030',name:'สติกเกอร์ หมูเสวย 60 G',type:'PM',unit:'ดวง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-031',name:'สติกเกอร์ ปลาร้า 60 G',type:'PM',unit:'ดวง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-032',name:'สติกเกอร์ ตาแดงมันกุ้ง 60 G',type:'PM',unit:'ดวง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-033',name:'สติกเกอร์ แมคเคอเรล 60 G',type:'PM',unit:'ดวง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-034',name:'สติกเกอร์ พริกคั่วป่น 60 G',type:'PM',unit:'ดวง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-035',name:'กล่องพัสดุ 1 กระปุก (เจริญชัย)',type:'PM',unit:'ใบ',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-036',name:'กล่องพัสดุ 2 กระปุก (เจริญชัย)',type:'PM',unit:'ใบ',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-037',name:'กล่องพัสดุ 4 กระปุก (เจริญชัย)',type:'PM',unit:'ใบ',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-038',name:'แผ่น Lock กระปุก1 (เจริญชัย)',type:'PM',unit:'ใบ',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-039',name:'แผ่น Lock กระปุก2 (เจริญชัย)',type:'PM',unit:'ใบ',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-040',name:'แผ่น Lock กระปุก4 (เจริญชัย)',type:'PM',unit:'ใบ',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-041',name:'กล่องพัสดุ 2D (ใบ)',type:'PM',unit:'ใบ',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-042',name:'กล่องพัสดุ D (ใบ)',type:'PM',unit:'ใบ',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-043',name:'กล่อง C+8 (ใบ)',type:'PM',unit:'ใบ',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-044',name:'กล่อง C (ใบ)',type:'PM',unit:'ใบ',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-045',name:'กล่องพัสดุ G (ใบ)',type:'PM',unit:'ใบ',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'PKG-046',name:'ซองแมคคาเรล 50g',type:'PM',unit:'ซอง',minTemp:null,maxTemp:null,cat:'Packaging',store:''},
+  {code:'SUP-001',name:'ปตท 48 กก.',type:'CM',unit:'ถัง',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-002',name:'ถุงมือ (ยาง)',type:'CM',unit:'กล่อง',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-003',name:'แมส',type:'CM',unit:'กล่อง',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-004',name:'หมวกตัวหนอน',type:'CM',unit:'แพ็ค',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-005',name:'กระดาษเช็ดปาก (24ห่อ/เเพ็ค)',type:'CM',unit:'ห่อ',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-006',name:'กระดาษอเนกประสงค์ (6ห่อ/เเพ็ค)',type:'CM',unit:'ห่อ',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-007',name:'กระดาษชำระ',type:'CM',unit:'ห่อ',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-008',name:'ถ้วยกระดาษ 4 ออนซ์ *80',type:'CM',unit:'แพ็ค',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-009',name:'ผงฟู 1 กก.',type:'CM',unit:'ถุง',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-010',name:'โปร ผงซักฝอก 2.4 กก',type:'CM',unit:'ถุง',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-011',name:'สบู่เหลว ล้างมือ',type:'CM',unit:'แกลลอน',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-012',name:'น้ำยาล้างจาน',type:'CM',unit:'ถุง',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-013',name:'สก็อตไบร์ท',type:'CM',unit:'ชิ้น',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-014',name:'ถุงร้อน 20x30 นิ้ว 1 กก.',type:'CM',unit:'ห่อ',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-015',name:'ถุงเย็น 16x24 นิ้ว 1 กก.',type:'CM',unit:'ห่อ',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-016',name:'ถุงร้อน 24x36 นิ้ว',type:'CM',unit:'แพ็ค',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-017',name:'ถุงซิปใส 7x10 นิ้ว 0.5 กก',type:'CM',unit:'แพ็ค',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-018',name:'ถุงขยะเเบบม้วน 18*20 (3ม้วน/เเพ็ค)',type:'CM',unit:'ม้วน',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-019',name:'ถุงขยะดำหนา 28x36 นิ้ว',type:'CM',unit:'แพ็ค',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-020',name:'หมวกคลุมผม-บ่า',type:'CM',unit:'ใบ',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-021',name:'กระดาษถ่ายเอกสาร A4',type:'CM',unit:'รีม',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-022',name:'ลังโปร่ง (น้ำเงิน)',type:'CM',unit:'ใบ',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-023',name:'เอโร่ ฆ่าเชื้อโรคอเนกประสงค์ 1.2 ล',type:'CM',unit:'แกลลอน',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-024',name:'เทปใสใหญ่ (72ม้วน/ลัง)',type:'CM',unit:'ม้วน',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-025',name:'ลาเบล 100x150x350',type:'CM',unit:'ม้วน',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+  {code:'SUP-026',name:'บับเบิ้ล ไซส์ XL',type:'CM',unit:'ม้วน',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
+];
+
+// ═══════════════════════════════════════════════════════════════
+//  OPL — แผนการสุ่มตัวอย่างวัตถุดิบแปรรูปเบื้องต้น (หอม, พริก, กระเทียม)
+//  อ้างอิง MIL-STD-105E | หน่วย Lot = "ถุง"
+//  แก้ไขค่าในส่วนนี้เมื่อ OPL มีการ Revise
+// ═══════════════════════════════════════════════════════════════
+const AQL_PLAN=[            // min–max = จำนวนถุงที่รับเข้า, n = ถุงที่สุ่ม, g = กรัมที่ตรวจต่อถุง
+  {min:2,max:8,n:2,g:1000},{min:9,max:15,n:3,g:1000},{min:16,max:25,n:3,g:1000},
+  {min:26,max:50,n:5,g:1000},{min:51,max:90,n:5,g:500},{min:91,max:150,n:5,g:500}];
+const AQL_LIMIT={major:2.5,minor:5.0};          // % สูงสุดที่ยอมรับ (Critical = 0)
+const AQL_BAG_KG=10;                            // น้ำหนักมาตรฐานต่อถุง
+const AQL_CROPS={shallot:'หอม',chili:'พริก',garlic:'กระเทียม'};
+const AQL_CODES={'RM-001':'shallot','RM-002':'shallot','RM-003':'shallot','RM-004':'shallot','RM-005':'garlic',
+  'RM-006':'chili','RM-007':'chili','RM-008':'chili'};   // รหัสวัตถุดิบที่เปิดแผน OPL อัตโนมัติ (ปิดเองได้ในฟอร์ม)
+const AQL_DEF={
+  cr:[['cr1','ราดำ / ราเขียว'],['cr2','เศษแก้ว / โลหะ'],['cr3','หนอน / แมลง']],
+  ma:[['ma1','เปลือกติดมาก'],['ma2','ขั้วติดอยู่'],['ma3','ช้ำ / เป็นรอยบุบ']],
+  mi:[['mi1','ขนาดเล็กกว่าเกณฑ์'],['mi2','สีแดงปนเขียว'],['mi3','รอยถลอกเล็กน้อย']]};
+const AQL_KEYS=['crop','bags','sBags','sG','bagKg','pos','cr1','cr2','cr3','ma1','ma2','ma3','mi1','mi2','mi3'];
+const RES_RANK={PASS:0,HOLD:1,REJECT:2};
+
+function aqlN(v){const n=parseFloat(v);return isNaN(n)||n<0?0:n;}
+function aqlPlan(bags){const b=Math.floor(aqlN(bags));return AQL_PLAN.find(p=>b>=p.min&&b<=p.max)||null;}
+function aqlCalc(m){
+  const bags=Math.floor(aqlN(m.bags));const plan=aqlPlan(bags);
+  const reqG=plan?plan.n*plan.g:0;
+  const sBags=aqlN(m.sBags);const totG=aqlN(m.sG);
+  const cr=aqlN(m.cr1)+aqlN(m.cr2)+aqlN(m.cr3);
+  const maG=aqlN(m.ma1)+aqlN(m.ma2)+aqlN(m.ma3);
+  const miG=aqlN(m.mi1)+aqlN(m.mi2)+aqlN(m.mi3);
+  const maPct=totG>0?maG/totG*100:null;const miPct=totG>0?miG/totG*100:null;
+  const warn=[];let verdict=null;const why=[];
+  if(bags>0&&!plan)warn.push('จำนวน '+bags+' ถุง อยู่นอกตาราง OPL (2–150 ถุง) — ให้ QC Supervisor กำหนดจำนวนสุ่ม แล้วกรอกเอง');
+  if(plan&&sBags>0&&sBags<plan.n)warn.push('สุ่มได้ '+sBags+' ถุง น้อยกว่าแผน '+plan.n+' ถุง');
+  if(plan&&totG>0&&totG<reqG)warn.push('น้ำหนักตัวอย่าง '+totG+' g น้อยกว่าแผน '+reqG+' g');
+  if(totG>0&&maG+miG>totG)warn.push('น้ำหนักข้อบกพร่องรวมมากกว่าน้ำหนักตัวอย่าง — ตรวจสอบตัวเลข');
+  if(cr>0){verdict='REJECT';why.push('พบ Critical '+cr+' ชิ้น — ปฏิเสธทั้งลอต');}
+  else if(bags>0&&totG>0){
+    if(maPct>AQL_LIMIT.major)why.push('Major '+maPct.toFixed(2)+'% เกิน '+AQL_LIMIT.major+'%');
+    if(miPct>AQL_LIMIT.minor)why.push('Minor '+miPct.toFixed(2)+'% เกิน '+AQL_LIMIT.minor+'%');
+    verdict=why.length?'HOLD':'PASS';
+  }
+  return{bags,plan,reqG,sBags,totG,cr,maG,miG,maPct,miPct,warn,verdict,why};
+}
+function aqlFmtG(g){return g>=1000?(g/1000)+' kg':g+' g';}
+function aqlPct(p){return p==null?'—':p.toFixed(2)+'%';}
+function aqlVerdictTxt(v){return v==='PASS'?'ACCEPT':v==='HOLD'?'CAR / HOLD':v==='REJECT'?'REJECT':'—';}
+function aqlSummary(m){
+  if(!m||!m.aql)return'';const c=aqlCalc(m);
+  return 'OPL-AQL['+(AQL_CROPS[m.crop]||'-')+'] Lot '+c.bags+' ถุง | สุ่ม '+c.sBags+' ถุง '+c.totG+' g | CR '+c.cr+' ชิ้น | MA '+aqlPct(c.maPct)+' | MI '+aqlPct(c.miPct)+' | '+aqlVerdictTxt(c.verdict);
+}
+function aqlCloud(m){            // ฟิลด์ที่ส่งเข้า Google Sheets (ต้องเพิ่มคอลัมน์ใน Code.gs จึงจะถูกเก็บแยกคอลัมน์)
+  if(!m.aql)return{};const c=aqlCalc(m);const o={aql_plan:'OPL MIL-STD-105E',aql_crop:AQL_CROPS[m.crop]||'',
+    aql_lot_bags:c.bags,aql_sample_bags_plan:c.plan?c.plan.n:'',aql_sample_g_per_bag:c.plan?c.plan.g:'',
+    aql_sample_bags:c.sBags,aql_sample_g:c.totG,aql_bag_kg:m.bagKg!==''&&m.bagKg!=null?aqlN(m.bagKg):'',
+    aql_3point:m.pos||'',aql_critical_pcs:c.cr,aql_major_g:c.maG,aql_minor_g:c.miG,
+    aql_major_pct:c.maPct==null?'':+c.maPct.toFixed(2),aql_minor_pct:c.miPct==null?'':+c.miPct.toFixed(2),
+    aql_verdict:aqlVerdictTxt(c.verdict)};
+  [].concat(AQL_DEF.cr,AQL_DEF.ma,AQL_DEF.mi).forEach(d=>{o['aql_'+d[0]]=aqlN(m[d[0]]);});
+  return o;
+}
+function aqlFromCloud(d){        // อ่านกลับจาก Sheets (ถ้า Code.gs ส่งฟิลด์ aql_* กลับมา)
+  if(!d||d.aql_lot_bags===undefined||d.aql_lot_bags===''||d.aql_lot_bags===null)return{};
+  const crop=Object.keys(AQL_CROPS).find(k=>AQL_CROPS[k]===d.aql_crop)||'';
+  const o={aql:true,crop,bags:d.aql_lot_bags,sBags:d.aql_sample_bags,sG:d.aql_sample_g,bagKg:d.aql_bag_kg??'',pos:d.aql_3point||''};
+  [].concat(AQL_DEF.cr,AQL_DEF.ma,AQL_DEF.mi).forEach(x=>{o[x[0]]=d['aql_'+x[0]]??0;});
+  return o;
+}
+function aqlInit(m,code){
+  const crop=AQL_CODES[code]||'';
+  m.aql=!!crop;m.crop=crop;
+  if(m.aql)aqlDefaults(m);
+}
+function aqlDefaults(m){
+  ['bags','sBags','sG','bagKg','pos'].forEach(k=>{if(m[k]===undefined)m[k]='';});
+  ['cr1','cr2','cr3','ma1','ma2','ma3','mi1','mi2','mi3'].forEach(k=>{if(m[k]===undefined)m[k]=0;});
+}
+function aqlApply(m){            // ผลการตรวจรับต้องไม่ดีกว่าผล AQL
+  const c=aqlCalc(m);const prev=m.aqlV;m.aqlV=c.verdict||'';
+  if(c.verdict&&(m.result===prev||RES_RANK[m.result]<RES_RANK[c.verdict]))m.result=c.verdict;
+  enforceMin(m);return c;
+}
+function togAql(idx,on){const m=curMats.find(x=>x.idx===idx);if(!m)return;m.aql=on;m.wt=[];m.wtLab=undefined;if(on){aqlDefaults(m);aqlApply(m);}wtApply(m);renderMats();}
+function setAql(idx,f,v){
+  const m=curMats.find(x=>x.idx===idx);if(!m)return;m[f]=v;
+  if(f==='bags'){const p=aqlPlan(v);
+    if(p){m.sBags=p.n;m.sG=p.n*p.g;}
+    ['sBags','sG'].forEach(k=>{const el=document.getElementById('aqi-'+idx+'-'+k);if(el)el.value=m[k]??'';});}
+  const c=aqlApply(m);
+  const pe=document.getElementById('aqp-'+idx);if(pe){pe.className='aq-plan'+(c.bags>0&&!c.plan?' warn':'');pe.innerHTML=aqlPlanHtml(c);}
+  const ve=document.getElementById('aqv-'+idx);if(ve)ve.outerHTML=aqlVerdictHtml(idx,c);
+  wtRefresh(idx,f==='bags'||f==='sBags');
+  const re=document.getElementById('rs-'+idx);if(re)re.innerHTML=resPills(idx);
+}
+function setAqlPill(idx,f,v){const m=curMats.find(x=>x.idx===idx);if(m)m[f]=v;renderMats();}
+function resPills(idx){return pill(idx,'result',[{v:'PASS',c:'pass',l:'✓ PASS'},{v:'HOLD',c:'hold',l:'⏸ HOLD'},{v:'REJECT',c:'fail',l:'✗ REJECT'}]);}
+function aqlPlanHtml(c){
+  if(!c.bags)return'กรอกจำนวนถุงที่รับเข้า เพื่อคำนวณจำนวนถุงที่ต้องสุ่ม';
+  if(!c.plan)return'&#x26A0; จำนวน '+c.bags+' ถุง อยู่นอกตาราง OPL (2–150 ถุง)<br>ให้ QC Supervisor กำหนดจำนวนสุ่ม แล้วกรอกจำนวนถุงและน้ำหนักตัวอย่างเอง';
+  return'รับเข้า '+c.bags+' ถุง (ช่วง '+c.plan.min+'–'+c.plan.max+') → สุ่ม <b>'+c.plan.n+'</b> ถุง &times; <b>'+aqlFmtG(c.plan.g)+'</b>/ถุง = ตัวอย่างรวม '+aqlFmtG(c.reqG);
+}
+function aqlVerdictHtml(idx,c){
+  const cls=c.verdict==='PASS'?'pass':c.verdict==='HOLD'?'hold':c.verdict==='REJECT'?'fail':'na';
+  const head=c.verdict==='PASS'?'&#x2714; ACCEPT — ผ่านเกณฑ์ AQL':c.verdict==='HOLD'?'&#x26A0; CAR / HOLD — เกินเกณฑ์ AQL (ออก NC ให้ QC Supervisor ตัดสิน)':c.verdict==='REJECT'?'&#x2716; REJECT ทั้งลอต':'รอข้อมูลการสุ่ม';
+  const line=c.totG>0?'Critical '+c.cr+' ชิ้น | Major '+c.maG+' g = '+aqlPct(c.maPct)+' (≤'+AQL_LIMIT.major+'%) | Minor '+c.miG+' g = '+aqlPct(c.miPct)+' (≤'+AQL_LIMIT.minor+'%)':'';
+  return'<div class="aq-v '+cls+'" id="aqv-'+idx+'">'+head+(c.why.length?'<small>'+c.why.join(' , ')+'</small>':'')+(line?'<small>'+line+'</small>':'')+c.warn.map(w=>'<small>&#x26A0; '+w+'</small>').join('')+'</div>';
+}
+function aqlHtml(m){
+  const c=aqlCalc(m);const i=m.idx;
+  const inp=(f,step,ph)=>'<input type="number" min="0" step="'+step+'" inputmode="decimal" id="aqi-'+i+'-'+f+'" value="'+(m[f]??'')+'" placeholder="'+ph+'" oninput="setAql('+i+',\''+f+'\',this.value)">';
+  const grp=(k,cls,title,unit,step)=>'<div class="aq-g '+cls+'"><div class="aq-gt">'+title+'</div><div class="aq-d">'+
+    AQL_DEF[k].map(d=>'<div><label>'+d[1]+' ('+unit+')</label>'+inp(d[0],step,'0')+'</div>').join('')+'</div></div>';
+  return'<div class="aq"><div class="aq-h">&#x1F4D0; แผนสุ่มตัวอย่าง OPL — หอม / พริก / กระเทียม</div><div class="aq-s">MIL-STD-105E | หน่วย Lot เป็น "ถุง" | %ข้อบกพร่อง = น้ำหนักข้อบกพร่อง ÷ น้ำหนักตัวอย่างรวม × 100</div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--gray4);margin-bottom:6px;display:block">ชนิดวัตถุดิบ <span class="req">*</span></label><div class="trow">'+
+      Object.keys(AQL_CROPS).map(k=>'<button type="button" class="tp pass'+(m.crop===k?' sel':'')+'" onclick="setAqlPill('+i+',\'crop\',\''+k+'\')">'+AQL_CROPS[k]+'</button>').join('')+'</div></div>'+
+    '<div class="ig"><div class="fg"><label>จำนวนถุงที่รับเข้า <span class="req">*</span></label>'+inp('bags',1,'ถุง')+'</div>'+
+      '<div class="fg"><label>น้ำหนักมาตรฐานต่อถุง</label><input type="text" value="'+AQL_BAG_KG+' kg" readonly></div></div>'+
+    '<div class="aq-plan'+(c.bags>0&&!c.plan?' warn':'')+'" id="aqp-'+i+'">'+aqlPlanHtml(c)+'</div>'+
+    '<div class="ig"><div class="fg"><label>ถุงที่สุ่มจริง <span class="req">*</span></label>'+inp('sBags',1,'ถุง')+'</div>'+
+      '<div class="fg"><label>น้ำหนักตัวอย่างรวม (g) <span class="req">*</span></label>'+inp('sG',1,'g')+'</div></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--gray4);margin-bottom:6px;display:block">ตักตัวอย่างครบ 3 ตำแหน่ง (บน / กลาง / ล่าง) <span class="req">*</span></label><div class="trow">'+
+      '<button type="button" class="tp pass'+(m.pos==='Y'?' sel':'')+'" onclick="setAqlPill('+i+',\'pos\',\'Y\')">✓ ครบ 3 ตำแหน่ง</button>'+
+      '<button type="button" class="tp fail'+(m.pos==='N'?' sel':'')+'" onclick="setAqlPill('+i+',\'pos\',\'N\')">✗ ไม่ครบ</button></div></div>'+
+    grp('cr','cr','CRITICAL — AQL 0% | พบเพียง 1 ชิ้น ปฏิเสธทั้งลอต','ชิ้น',1)+
+    grp('ma','ma','MAJOR — AQL 2.5% | ไม่เกิน 2.5%','g',0.1)+
+    grp('mi','mi','MINOR — AQL 5.0% | ไม่เกิน 5.0%','g',0.1)+
+    aqlVerdictHtml(i,c)+'</div>';
+}
+function aqlCheck(m,no){          // ตรวจความครบถ้วนก่อนบันทึก — คืนข้อความ error หรือ ''
+  if(!m.aql)return'';const c=aqlCalc(m);const p='รายการที่ '+no+': ';
+  if(!m.crop)return p+'เลือกชนิด หอม/พริก/กระเทียม';
+  if(!c.bags)return p+'กรอกจำนวนถุงที่รับเข้า';
+  if(!c.sBags||!c.totG)return p+'กรอกจำนวนถุงที่สุ่มและน้ำหนักตัวอย่าง';
+  if(c.plan&&c.sBags<c.plan.n)return p+'ต้องสุ่มอย่างน้อย '+c.plan.n+' ถุง ตามแผน OPL';
+  if(c.maG+c.miG>c.totG)return p+'น้ำหนักข้อบกพร่องมากกว่าน้ำหนักตัวอย่าง';
+  if(m.pos!=='Y'&&RES_RANK[m.result]===0)return p+'ยังตักตัวอย่างไม่ครบ 3 ตำแหน่ง — ให้ผล PASS ไม่ได้';
+  if(c.verdict&&RES_RANK[m.result]<RES_RANK[c.verdict])return p+'ผล AQL คือ '+aqlVerdictTxt(c.verdict)+' — ให้ผลดีกว่านี้ไม่ได้';
+  return'';
+}
+function cAql(){
+  const tb=document.getElementById('c-aqtb');const b=parseInt(document.getElementById('c-aq').value);const p=aqlPlan(b);
+  if(tb)tb.innerHTML='<tr><th>ถุงที่รับเข้า</th><th>ถุงที่สุ่มตรวจ</th><th>น้ำหนักตรวจ/ถุง</th></tr>'+
+    AQL_PLAN.map(x=>'<tr'+(x===p?' class="on"':'')+'><td>'+x.min+'–'+x.max+'</td><td>'+x.n+'</td><td>'+aqlFmtG(x.g)+'</td></tr>').join('');
+  const res=document.getElementById('cr-a');if(!res)return;
+  if(isNaN(b)||b<=0){res.style.display='none';return;}
+  res.style.display='block';
+  document.getElementById('crn-a').textContent=p?p.n:'—';
+  document.getElementById('cru-a').textContent=p?'ถุงที่ต้องสุ่มตรวจ':'นอกตาราง OPL (2–150 ถุง)';
+  document.getElementById('crd-a').textContent=p?'ตักถุงละ '+aqlFmtG(p.g)+' (บน/กลาง/ล่าง) = ตัวอย่างรวม '+aqlFmtG(p.n*p.g):'ให้ QC Supervisor กำหนดจำนวนสุ่ม';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  IQC หมูบด (Minced Pork) — แผนผังการสุ่มตรวจรับ SD-QC-001
+//  แก้ไขค่าในส่วนนี้เมื่อเกณฑ์มีการ Revise
+// ═══════════════════════════════════════════════════════════════
+const PORK={codes:['RM-009'],bagKg:10,tMin:0,tMax:4,phMin:5.5,phMax:6.2};
+const PORK_CHK=[['pkSeal','ถุงซีลปิดสนิท / ไม่ฉีกขาด / ไม่มีน้ำเลือดซึม'],['pkLabel','ป้ายฉลากชัดเจน (วันผลิต / วันหมดอายุ / น้ำหนัก)'],
+  ['pkColor','สี: แดงหรือชมพูธรรมชาติ (ไม่คล้ำเขียว)'],['pkOdor','กลิ่น: ไม่มีกลิ่นเหม็นเปรี้ยวหรือกลิ่นเน่า'],['pkFm','สิ่งเจือปน: ไม่มีเศษกระดูก พลาสติก หรือโลหะ']];
+function isPork(m){return !!m&&PORK.codes.includes(m.code);}
+function pkNum(v){if(v===''||v===null||v===undefined)return null;const n=parseFloat(v);return isNaN(n)?null:n;}
+function phClass(v){
+  if(v<5.4)return{r:'REJECT',t:'ต่ำกว่า 5.4 — เนื้อซีด นิ่ม แฉะ (PSE)'};
+  if(v<PORK.phMin)return{r:'HOLD',t:'อยู่ระหว่าง 5.4–5.5 เกณฑ์ไม่ได้กำหนด — ให้ QC Supervisor ตัดสิน'};
+  if(v<=PORK.phMax)return{r:'PASS',t:'5.5–6.2 เนื้อคุณภาพดี สดปกติ'};
+  if(v<6.3)return{r:'HOLD',t:'อยู่ระหว่าง 6.2–6.3 เกณฑ์ไม่ได้กำหนด — ให้ QC Supervisor ตัดสิน'};
+  if(v<6.5)return{r:'REJECT',t:'6.3–6.4 เนื้อคล้ำ แห้ง (DFD)'};
+  return{r:'REJECT',t:'6.5 ขึ้นไป — เนื้อเริ่มเน่าเสีย'};
+}
+function porkDefaults(m){
+  if(m.pkBags===undefined)m.pkBags='';if(m.pkLabelKg===undefined)m.pkLabelKg=PORK.bagKg;
+  if(!Array.isArray(m.pk))m.pk=[];if(m.pkProbe===undefined)m.pkProbe='';
+  PORK_CHK.forEach(c=>{if(m[c[0]]===undefined)m[c[0]]='';});
+}
+function porkCalc(m){
+  porkDefaults(m);
+  const qty=pkNum(m.qty);const lab=pkNum(m.pkLabelKg)||PORK.bagKg;
+  const bags=pkNum(m.pkBags)!==null?Math.floor(pkNum(m.pkBags)):(qty?Math.ceil(qty/lab):0);
+  const plan=aqlPlan(bags);const n=plan?plan.n:bags===1?1:bags>150?5:0;
+  while(m.pk.length<n)m.pk.push({w:'',t:'',ph:''});
+  const rows=m.pk.slice(0,n);const rej=[],hold=[],miss=[],warn=[];
+  if(bags>150)warn.push('จำนวน '+bags+' ถุง อยู่นอกตารางสุ่ม (2–150 ถุง) — ให้ QC Supervisor ยืนยันจำนวนสุ่ม');
+  if(!bags)miss.push('จำนวนถุงที่รับเข้า');
+  rows.forEach((r,i)=>{
+    const w=pkNum(r.w),t=pkNum(r.t),ph=pkNum(r.ph),b='ถุงที่ '+(i+1)+': ';
+    if(w===null||t===null||ph===null){miss.push('ค่าตรวจถุงที่ '+(i+1));}
+    if(w!==null&&w<lab)hold.push(b+'น้ำหนักสุทธิ '+w+' kg ไม่ครบ '+lab+' kg');
+    if(t!==null&&(t<PORK.tMin||t>PORK.tMax))hold.push(b+'อุณหภูมิใจกลาง '+t+'°C นอกช่วง '+PORK.tMin+'–'+PORK.tMax+'°C');
+    if(ph!==null){const c=phClass(ph);if(c.r==='REJECT')rej.push(b+'pH '+ph+' — '+c.t);else if(c.r==='HOLD')hold.push(b+'pH '+ph+' '+c.t);}
+  });
+  PORK_CHK.forEach(c=>{if(!m[c[0]])miss.push(c[1].split(/[:(/]/)[0].trim());else if(m[c[0]]==='FAIL')hold.push('ไม่ผ่าน: '+c[1]);});
+  if(m.pkProbe!=='Y')miss.push('ยืนยันทำความสะอาดหัววัด pH');
+  const verdict=miss.length?null:rej.length?'REJECT':hold.length?'HOLD':'PASS';
+  const early=rej.length?'REJECT':null;        // pH ตกเกณฑ์ → REJECT ทันทีแม้ข้อมูลยังไม่ครบ
+  return{bags,plan,n,rows,lab,rej,hold,miss,warn,verdict:verdict||early};
+}
+function porkSummary(m){
+  if(!isPork(m))return'';const c=porkCalc(m);const j=f=>c.rows.map(r=>r[f]===''?'-':r[f]).join('/');
+  const s=k=>m[k]==='PASS'?'ผ่าน':m[k]==='FAIL'?'ไม่ผ่าน':'-';
+  return 'IQC-หมูบด Lot '+c.bags+' ถุง | สุ่ม '+c.n+' ถุง | pH '+j('ph')+' | ใจกลาง '+j('t')+' °C | สุทธิ '+j('w')+' kg | บรรจุภัณฑ์ '+s('pkSeal')+' ฉลาก '+s('pkLabel')+' สี '+s('pkColor')+' กลิ่น '+s('pkOdor')+' สิ่งเจือปน '+s('pkFm')+' | '+aqlVerdictTxt(c.verdict);
+}
+function inspSummary(m){return aqlSummary(m)||porkSummary(m);}
+function porkCloud(m){
+  if(!isPork(m))return{};const c=porkCalc(m);const v=f=>c.rows.map(r=>pkNum(r[f])).filter(x=>x!==null);
+  const ph=v('ph');
+  return{iqc_plan:'IQC Minced Pork',iqc_lot_bags:c.bags,iqc_sample_bags:c.n,iqc_label_kg:c.lab,
+    iqc_net_kg:v('w').join('/'),iqc_core_temp:v('t').join('/'),iqc_ph:ph.join('/'),
+    iqc_ph_min:ph.length?Math.min(...ph):'',iqc_ph_max:ph.length?Math.max(...ph):'',
+    iqc_packaging:m.pkSeal||'',iqc_label:m.pkLabel||'',iqc_color:m.pkColor||'',iqc_odor:m.pkOdor||'',iqc_foreign_matter:m.pkFm||'',
+    iqc_probe_clean:m.pkProbe||'',iqc_verdict:aqlVerdictTxt(c.verdict)};
+}
+function porkFromCloud(d){
+  if(!d||d.iqc_lot_bags===undefined||d.iqc_lot_bags===''||d.iqc_lot_bags===null)return{};
+  const sp=s=>String(s??'').split('/');const w=sp(d.iqc_net_kg),t=sp(d.iqc_core_temp),ph=sp(d.iqc_ph);
+  const n=parseInt(d.iqc_sample_bags)||ph.length;const pk=[];for(let i=0;i<n;i++)pk.push({w:w[i]??'',t:t[i]??'',ph:ph[i]??''});
+  return{pkBags:d.iqc_lot_bags,pkLabelKg:d.iqc_label_kg||PORK.bagKg,pk,pkSeal:d.iqc_packaging||'',pkLabel:d.iqc_label||'',
+    pkColor:d.iqc_color||'',pkOdor:d.iqc_odor||'',pkFm:d.iqc_foreign_matter||'',pkProbe:d.iqc_probe_clean||''};
+}
+function porkApply(m){
+  const c=porkCalc(m);const prev=m.pkV;m.pkV=c.verdict||'';
+  if(c.verdict&&(m.result===prev||RES_RANK[m.result]<RES_RANK[c.verdict]))m.result=c.verdict;
+  [1,2,3].forEach(k=>{m['t'+k]=c.rows[k-1]?c.rows[k-1].t:'';});          // คงคอลัมน์ Temp1–3 เดิมใน Sheets
+  const ok=k=>m[k]==='PASS';
+  if(m.pkSeal)m.leak=m.pkSeal;
+  if(m.pkColor&&m.pkOdor&&m.pkFm)m.visual=ok('pkColor')&&ok('pkOdor')&&ok('pkFm')?'PASS':'FAIL';
+  enforceMin(m);return c;
+}
+function porkPlanHtml(c){
+  if(!c.bags)return'กรอกจำนวน (kg) หรือจำนวนถุงที่รับเข้า เพื่อคำนวณจำนวนถุงที่ต้องสุ่ม';
+  return'รับเข้า '+c.bags+' ถุง (ถุงละ '+c.lab+' kg) → สุ่มเปิดตรวจ <b>'+c.n+'</b> ถุง | ตรวจพินิจภายนอก 100% ทุกถุง'+c.warn.map(w=>'<br>&#x26A0; '+w).join('');
+}
+function porkRowsHtml(m,c){
+  const i=m.idx;
+  const cell=(k,f,ph,step,st)=>'<div><input type="number" step="'+step+'" inputmode="decimal" value="'+(c.rows[k][f]??'')+'" placeholder="'+ph+'" oninput="setPorkRow('+i+','+k+',\''+f+'\',this.value)" style="text-align:center;padding:10px 4px">'+
+    '<div class="tst '+(st||'')+'" id="pks-'+i+'-'+k+'-'+f+'">'+(st==='pass'?'✓ Pass':st==='fail'?'✗ Fail':st==='hold'?'⏸ Hold':'')+'</div></div>';
+  return c.rows.map((r,k)=>{const s=porkCellSt(r,c.lab);
+    return'<div style="font-size:11px;font-weight:700;color:var(--gray4);margin:8px 0 4px">ถุงสุ่มที่ '+(k+1)+'</div><div class="aq-d">'+cell(k,'w','kg',0.01,s.w)+cell(k,'t','°C',0.1,s.t)+cell(k,'ph','pH',0.01,s.ph)+'</div>';}).join('');
+}
+function porkCellSt(r,lab){
+  const w=pkNum(r.w),t=pkNum(r.t),ph=pkNum(r.ph);const pc=ph===null?null:phClass(ph).r;
+  return{w:w===null?'':w>=lab?'pass':'fail',t:t===null?'':t>=PORK.tMin&&t<=PORK.tMax?'pass':'fail',ph:pc===null?'':pc==='PASS'?'pass':pc==='HOLD'?'hold':'fail'};
+}
+function porkVerdictHtml(idx,c){
+  const cls=c.verdict==='PASS'?'pass':c.verdict==='HOLD'?'hold':c.verdict==='REJECT'?'fail':'na';
+  const head=c.verdict==='PASS'?'&#x2714; ACCEPT — ผ่านเกณฑ์ IQC หมูบด':c.verdict==='HOLD'?'&#x26A0; HOLD — ออก NC ให้ QC Supervisor ตัดสิน':c.verdict==='REJECT'?'&#x2716; REJECT':'รอข้อมูลการตรวจ';
+  return'<div class="aq-v '+cls+'" id="pkv-'+idx+'">'+head+c.rej.concat(c.hold).map(x=>'<small>'+x+'</small>').join('')+(c.miss.length?'<small>ยังไม่ครบ: '+c.miss.join(', ')+'</small>':'')+'</div>';
+}
+function porkHtml(m){
+  const c=porkCalc(m);const i=m.idx;
+  const pills=(f)=>'<div class="trow"><button type="button" class="tp pass'+(m[f]==='PASS'?' sel':'')+'" onclick="setPorkPill('+i+',\''+f+'\',\'PASS\')">✓ ผ่าน</button><button type="button" class="tp fail'+(m[f]==='FAIL'?' sel':'')+'" onclick="setPorkPill('+i+',\''+f+'\',\'FAIL\')">✗ ไม่ผ่าน</button></div>';
+  const chk=(a,b)=>PORK_CHK.slice(a,b).map(x=>'<div style="margin-bottom:10px"><label style="font-size:12px;font-weight:600;color:var(--gray4);margin-bottom:6px;display:block">'+x[1]+' <span class="req">*</span></label>'+pills(x[0])+'</div>').join('');
+  const sec=t=>'<div class="aq-gt" style="color:var(--navy);margin:12px 0 8px;border-top:1px solid var(--border);padding-top:10px">'+t+'</div>';
+  return'<div class="aq"><div class="aq-h">&#x1F969; IQC หมูบด — แผนผังการสุ่มตรวจรับ (SD-QC-001)</div><div class="aq-s">หมูแช่เย็น ถุงละ '+PORK.bagKg+' kg | อุณหภูมิใจกลาง '+PORK.tMin+'–'+PORK.tMax+'°C | pH '+PORK.phMin+'–'+PORK.phMax+'</div>'+
+    '<div class="ig"><div class="fg"><label>จำนวนถุงที่รับเข้า <span class="req">*</span></label><input type="number" min="1" step="1" inputmode="numeric" value="'+(m.pkBags??'')+'" placeholder="'+(c.bags?'อัตโนมัติ '+c.bags:'ถุง')+'" id="pkb-'+i+'" oninput="setPork('+i+',\'pkBags\',this.value)"></div>'+
+      '<div class="fg"><label>น้ำหนักหน้าถุง (kg)</label><input type="number" min="0" step="0.01" inputmode="decimal" value="'+(m.pkLabelKg??'')+'" oninput="setPork('+i+',\'pkLabelKg\',this.value)"></div></div>'+
+    '<div class="aq-plan" id="pkp-'+i+'">'+porkPlanHtml(c)+'</div>'+
+    sec('1. สภาพบรรจุภัณฑ์ (ตรวจภายนอก 100%)')+chk(0,2)+
+    sec('2–4. น้ำหนักสุทธิ / อุณหภูมิใจกลาง / pH — รายถุงที่สุ่ม')+
+    '<div class="aq-d" style="margin-bottom:2px"><label>น้ำหนักสุทธิ (kg)<br>หักน้ำหนักถุงแล้ว</label><label>อุณหภูมิใจกลาง (°C) &#x2757;</label><label>pH กึ่งกลางถุง &#x2757;</label></div>'+
+    '<div id="pkr-'+i+'">'+porkRowsHtml(m,c)+'</div>'+
+    '<div style="font-size:11px;color:var(--gray4);background:var(--gray1);border-radius:8px;padding:8px 10px;margin:10px 0">pH: ต่ำกว่า 5.4 Reject (PSE) | 5.5–6.2 Accept | 6.3–6.4 Reject (DFD) | 6.5 ขึ้นไป Reject (เริ่มเน่าเสีย)</div>'+
+    '<div style="margin-bottom:10px"><label style="font-size:12px;font-weight:600;color:var(--gray4);margin-bottom:6px;display:block">ทำความสะอาดหัววัด pH และเช็ดแอลกอฮอล์ (Food Grade) ทุกครั้งก่อนวัดถุงต่อไป <span class="req">*</span></label><div class="trow"><button type="button" class="tp pass'+(m.pkProbe==='Y'?' sel':'')+'" onclick="setPorkPill('+i+',\'pkProbe\',\'Y\')">✓ ทำแล้วทุกครั้ง</button></div></div>'+
+    sec('5. กายภาพและสิ่งปลอมปน')+chk(2,5)+
+    porkVerdictHtml(i,c)+'</div>';
+}
+function porkRefresh(idx,rows){
+  const m=curMats.find(x=>x.idx===idx);if(!m||!isPork(m))return;const c=porkApply(m);
+  const pe=document.getElementById('pkp-'+idx);if(pe)pe.innerHTML=porkPlanHtml(c);
+  const b=document.getElementById('pkb-'+idx);if(b)b.placeholder=c.bags&&m.pkBags===''?'อัตโนมัติ '+c.bags:'ถุง';
+  const re=document.getElementById('pkr-'+idx);
+  if(re&&(rows||re.querySelectorAll('input').length!==c.rows.length*3))re.innerHTML=porkRowsHtml(m,c);
+  const ve=document.getElementById('pkv-'+idx);if(ve)ve.outerHTML=porkVerdictHtml(idx,c);
+  const rs=document.getElementById('rs-'+idx);if(rs)rs.innerHTML=resPills(idx);
+}
+function setPork(idx,f,v){const m=curMats.find(x=>x.idx===idx);if(!m)return;m[f]=v;porkRefresh(idx,f==='pkLabelKg');}
+function setPorkRow(idx,k,f,v){
+  const m=curMats.find(x=>x.idx===idx);if(!m||!m.pk[k])return;m.pk[k][f]=v;
+  const c=porkCalc(m);const st=porkCellSt(m.pk[k],c.lab)[f];
+  const el=document.getElementById('pks-'+idx+'-'+k+'-'+f);
+  if(el){el.className='tst '+st;el.textContent=st==='pass'?'✓ Pass':st==='fail'?'✗ Fail':st==='hold'?'⏸ Hold':'';}
+  porkRefresh(idx);
+}
+function setPorkPill(idx,f,v){const m=curMats.find(x=>x.idx===idx);if(m){m[f]=v;porkApply(m);}renderMats();}
+function porkCheck(m,no){
+  if(!isPork(m))return'';const c=porkCalc(m);const p='รายการที่ '+no+' (หมูบด): ';
+  if(c.miss.length)return p+'ยังไม่ครบ — '+c.miss[0];
+  if(c.verdict&&RES_RANK[m.result]<RES_RANK[c.verdict])return p+'ผล IQC คือ '+aqlVerdictTxt(c.verdict)+' — ให้ผลดีกว่านี้ไม่ได้';
+  return'';
+}
+function cPork(){
+  const kg=parseFloat(document.getElementById('c-pk').value);const res=document.getElementById('cr-p');if(!res)return;
+  if(isNaN(kg)||kg<=0){res.style.display='none';return;}
+  const c=porkCalc({code:PORK.codes[0],qty:kg});res.style.display='block';
+  document.getElementById('crn-p').textContent=c.n||'—';
+  document.getElementById('crd-p').textContent='= '+c.bags+' ถุง (ถุงละ '+PORK.bagKg+' kg) | ตรวจพินิจภายนอก 100% ทุกถุง';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PDF Generation — Browser Print (รองรับภาษาไทย 100%)
+//  ใช้ window.print() แทน jsPDF — ไม่มีปัญหาตัวอักษรเพี้ยน
+// ═══════════════════════════════════════════════════════════════
+
+function generatePDF(rec){
+  const sp=(typeof SUPPLIERS!=='undefined')?SUPPLIERS.find(s=>s.id===rec.supplier)||{name:rec.supplier}:{name:rec.supplier};
+  const mats=rec.mats||rec.materials||[];
+  const sig=rec.sig||{};
+  const now=new Date();
+  const stampTH=`${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()+543} ${now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}`;
+  const allPass=mats.every(m=>m.result==='PASS');
+  const hasRej=mats.some(m=>m.result==='REJECT');
+  const overall=allPass?'PASS — ผ่านการตรวจรับ':hasRej?'REJECT — ไม่ผ่านการตรวจรับ':'HOLD — รอการตรวจสอบเพิ่มเติม';
+  const overallColor=allPass?'#2e7d32':hasRej?'#c0392b':'#e8900a';
+  const overallBg=allPass?'#e8f5e9':hasRej?'#ffebee':'#fff3e0';
+
+  const matRows=mats.map((m,i)=>{
+    const mi=(typeof MATERIALS!=='undefined')?MATERIALS.find(x=>x.code===m.code)||{}:{};
+    const ts=[m.t1,m.t2,m.t3].filter(t=>t!==''&&t!==null&&t!==undefined).map(Number).filter(t=>!isNaN(t));
+    const avgT=ts.length?parseFloat((ts.reduce((a,b)=>a+b,0)/ts.length).toFixed(1))+'°C':'—';
+    const mn=mi.minTemp??mi.minT; const mx=mi.maxTemp??mi.maxT;
+    let tColor='#333',tBg='transparent';
+    if(ts.length&&mn!=null){if(ts.every(t=>t>=mn&&t<=mx)){tColor='#2e7d32';tBg='#e8f5e9';}else{tColor='#c0392b';tBg='#ffebee';}}
+    const resColor=m.result==='PASS'?'#2e7d32':m.result==='REJECT'?'#c0392b':'#e8900a';
+    const resBg=m.result==='PASS'?'#e8f5e9':m.result==='REJECT'?'#ffebee':'#fff3e0';
+    const tempDisp=[m.t1,m.t2,m.t3].filter(t=>t!==''&&t!==null&&t!==undefined).join(' / ')||'—';
+    const bg=i%2===0?'#ffffff':'#f8fafc';
+    return `<tr style="background:${bg}">
+      <td style="text-align:center">${i+1}</td>
+      <td style="font-family:monospace;font-size:11px">${m.code||'—'}</td>
+      <td>${m.name||mi.name||'—'}</td>
+      <td style="text-align:center">${m.type||mi.type||'—'}</td>
+      <td>${m.lot||'—'}</td>
+      <td style="text-align:center">${m.qty?m.qty+' '+(m.unit||''):'—'}</td>
+      <td style="text-align:center;background:${tBg};color:${tColor};font-weight:600">${avgT}</td>
+      <td style="text-align:center">${m.visual||'—'}</td>
+      <td style="font-size:10px;${m.doc==='FAIL'?'color:#c0392b;font-weight:700':''}">${escH(docSummary(m))||m.doc||'—'}</td>
+      <td style="text-align:center;background:${resBg};color:${resColor};font-weight:700">${m.result||'—'}</td>
+      <td style="font-size:11px">${m.note||''}</td>
+    </tr>`;
+  }).join('');
+
+  const aqlMats=mats.filter(m=>m.aql);
+  const aqlHTML=aqlMats.length?`<div style="font-size:12px;font-weight:700;color:#0f2744;margin:8px 0 4px;padding:5px 10px;background:#e1f5ee;border-radius:6px;border-left:3px solid #0d7a5f">ผลการสุ่มตรวจตาม OPL — หอม / พริก / กระเทียม (MIL-STD-105E) | Critical 0% · Major ≤ ${AQL_LIMIT.major}% · Minor ≤ ${AQL_LIMIT.minor}%</div>
+<table><thead><tr><th>#</th><th>วัตถุดิบ</th><th>Lot (ถุง)</th><th>แผนสุ่ม</th><th>สุ่มจริง</th><th>3 ตำแหน่ง</th><th>Critical (ชิ้น)</th><th>Major</th><th>Minor</th><th>ผล AQL</th></tr></thead><tbody>${aqlMats.map(m=>{
+    const c=aqlCalc(m);const mi=MATERIALS.find(x=>x.code===m.code)||{};
+    const det=k=>AQL_DEF[k].filter(d=>aqlN(m[d[0]])>0).map(d=>d[1]+' '+aqlN(m[d[0]])).join(', ');
+    const col=c.verdict==='PASS'?'#2e7d32':c.verdict==='REJECT'?'#c0392b':'#e8900a';
+    const bgc=c.verdict==='PASS'?'#e8f5e9':c.verdict==='REJECT'?'#ffebee':'#fff3e0';
+    const bad=(v,lim)=>v!=null&&v>lim?'color:#c0392b;font-weight:700':'';
+    return `<tr><td style="text-align:center">${mats.indexOf(m)+1}</td>
+      <td>${AQL_CROPS[m.crop]||'—'} — ${m.name||mi.name||m.code||''}${m.bagKg!==''&&m.bagKg!=null?'<br><span style="font-size:10px;color:#5c6470">นน.ถุงที่ชั่งได้ '+m.bagKg+' kg</span>':''}</td>
+      <td style="text-align:center">${c.bags||'—'}</td>
+      <td style="text-align:center">${c.plan?c.plan.n+' ถุง × '+aqlFmtG(c.plan.g):'นอกตาราง'}</td>
+      <td style="text-align:center">${c.sBags} ถุง / ${c.totG} g</td>
+      <td style="text-align:center">${m.pos==='Y'?'ครบ':m.pos==='N'?'ไม่ครบ':'—'}</td>
+      <td style="text-align:center;${c.cr>0?'color:#c0392b;font-weight:700':''}">${c.cr}${det('cr')?'<br><span style="font-size:10px">'+det('cr')+'</span>':''}</td>
+      <td style="text-align:center;${bad(c.maPct,AQL_LIMIT.major)}">${c.maG} g = ${aqlPct(c.maPct)}${det('ma')?'<br><span style="font-size:10px">'+det('ma')+'</span>':''}</td>
+      <td style="text-align:center;${bad(c.miPct,AQL_LIMIT.minor)}">${c.miG} g = ${aqlPct(c.miPct)}${det('mi')?'<br><span style="font-size:10px">'+det('mi')+'</span>':''}</td>
+      <td style="text-align:center;background:${bgc};color:${col};font-weight:700">${aqlVerdictTxt(c.verdict)}</td></tr>`;}).join('')}</tbody></table>`:'';
+
+  const porkMats=mats.filter(m=>isPork(m)&&Array.isArray(m.pk));
+  const porkHTML=porkMats.length?`<div style="font-size:12px;font-weight:700;color:#0f2744;margin:8px 0 4px;padding:5px 10px;background:#e1f5ee;border-radius:6px;border-left:3px solid #0d7a5f">ผลการสุ่มตรวจรับหมูบด (IQC) — อุณหภูมิใจกลาง ${PORK.tMin}–${PORK.tMax}°C · pH ${PORK.phMin}–${PORK.phMax} · น้ำหนักสุทธิครบตามหน้าถุง</div>
+<table><thead><tr><th>#</th><th>Lot (ถุง)</th><th>สุ่ม (ถุง)</th><th>น้ำหนักสุทธิ (kg)</th><th>อุณหภูมิใจกลาง (°C)</th><th>pH</th><th>บรรจุภัณฑ์</th><th>ฉลาก</th><th>สี</th><th>กลิ่น</th><th>สิ่งเจือปน</th><th>หัววัด pH</th><th>ผล IQC</th></tr></thead><tbody>${porkMats.map(m=>{
+    const c=porkCalc(m);const col=c.verdict==='PASS'?'#2e7d32':c.verdict==='REJECT'?'#c0392b':'#e8900a';
+    const bgc=c.verdict==='PASS'?'#e8f5e9':c.verdict==='REJECT'?'#ffebee':'#fff3e0';
+    const j=f=>c.rows.map(r=>{const s=porkCellSt(r,c.lab)[f];return '<span style="'+(s==='pass'||!s?'':'color:#c0392b;font-weight:700')+'">'+(r[f]===''?'—':r[f])+'</span>';}).join(' / ');
+    const s=k=>m[k]==='PASS'?'ผ่าน':m[k]==='FAIL'?'<span style="color:#c0392b;font-weight:700">ไม่ผ่าน</span>':'—';
+    return `<tr><td style="text-align:center">${mats.indexOf(m)+1}</td><td style="text-align:center">${c.bags}</td><td style="text-align:center">${c.n}</td>
+      <td style="text-align:center">${j('w')}<br><span style="font-size:10px;color:#5c6470">หน้าถุง ${c.lab} kg</span></td><td style="text-align:center">${j('t')}</td><td style="text-align:center">${j('ph')}</td>
+      <td style="text-align:center">${s('pkSeal')}</td><td style="text-align:center">${s('pkLabel')}</td><td style="text-align:center">${s('pkColor')}</td><td style="text-align:center">${s('pkOdor')}</td><td style="text-align:center">${s('pkFm')}</td>
+      <td style="text-align:center">${m.pkProbe==='Y'?'ทำความสะอาดแล้ว':'—'}</td>
+      <td style="text-align:center;background:${bgc};color:${col};font-weight:700">${aqlVerdictTxt(c.verdict)}</td></tr>${c.rej.concat(c.hold).length?`<tr><td colspan="13" style="font-size:11px;color:#c0392b">${c.rej.concat(c.hold).join(' ; ')}</td></tr>`:''}`;}).join('')}</tbody></table>`:'';
+
+  const photoHTML=mats.filter(m=>m.photo1||m.photo2).map((m,i)=>{
+    const mi=(typeof MATERIALS!=='undefined')?MATERIALS.find(x=>x.code===m.code)||{}:{};
+    const photos=[m.photo1,m.photo2].filter(Boolean).map((p,pi)=>`
+      <div style="display:inline-block;margin:4px 8px 4px 0;vertical-align:top">
+        <img src="${p}" style="width:180px;height:130px;object-fit:cover;border-radius:6px;border:1px solid #dde1e7;display:block">
+        <div style="font-size:10px;color:#9aa0ab;text-align:center;margin-top:3px">รูปที่ ${pi+1}</div>
+      </div>`).join('');
+    return `<div style="margin-bottom:12px;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e8eaed">
+      <div style="font-size:12px;font-weight:700;color:#0f2744;margin-bottom:6px">${mats.indexOf(m)+1}. ${m.code} — ${mi.name||m.name||'—'} | Lot: ${m.lot||'—'}</div>
+      ${photos}
+    </div>`;
+  }).join('');
+
+  const sigImg=sig.sigBase64?`<img src="${sig.sigBase64}" style="max-height:50px;max-width:160px;display:block;margin:6px auto">`:
+    `<div style="height:50px;border-bottom:1px solid #ccc;margin:0 16px"></div>`;
+
+  const html=`<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FM-QC-001 — ${rec.docNo}</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Sarabun',sans-serif;font-size:13px;color:#1a2130;background:#fff;padding:0}
+@page{size:A4;margin:10mm 12mm}
+@media print{
+  body{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .no-print{display:none!important}
+  .page-break{page-break-before:always}
+}
+.header{background:#0f2744;color:#fff;padding:10px 14px;display:flex;align-items:center;gap:12px}
+.logo{width:42px;height:42px;border-radius:8px;object-fit:contain;background:#fff;padding:3px}
+.brand-name{font-size:16px;font-weight:700}
+.brand-sub{font-size:10px;color:rgba(255,255,255,.7);margin-top:1px}
+.doc-ref{margin-left:auto;text-align:right;font-size:10px;color:rgba(255,255,255,.8);line-height:1.8}
+.title-bar{background:#1d9e75;padding:7px 14px;text-align:center}
+.title-bar h1{font-size:14px;font-weight:700;color:#fff}
+.title-bar p{font-size:10px;color:rgba(255,255,255,.9);margin-top:2px}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #dde1e7;margin:8px 0;border-radius:6px;overflow:hidden}
+.info-row{display:flex;padding:5px 10px;border-bottom:1px solid #f0f2f5;font-size:12px}
+.info-row:last-child{border-bottom:none}
+.info-label{color:#5c6470;font-weight:600;min-width:100px;flex-shrink:0}
+.info-value{color:#1a2130;flex:1}
+.sampling-bar{background:#e1f5ee;border:1px solid #9fe1cb;border-radius:6px;padding:5px 12px;margin:0 0 8px;font-size:11px;font-weight:600;color:#0d7a5f;text-align:center}
+table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px}
+th{background:#0f2744;color:#fff;padding:6px 8px;font-weight:600;text-align:center;font-size:11px;white-space:nowrap}
+td{padding:5px 8px;border-bottom:1px solid #f0f2f5;vertical-align:middle}
+.result-box{display:flex;align-items:center;justify-content:center;padding:8px 14px;border-radius:8px;font-size:14px;font-weight:700;margin:8px 0;border:2px solid}
+.sig-section{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+.sig-box{border:1px solid #dde1e7;border-radius:8px;padding:10px;text-align:center;background:#f8fafc}
+.sig-title{font-size:11px;font-weight:700;color:#5c6470;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.sig-name{font-size:12px;color:#1a2130;margin-top:6px;border-top:1px solid #dde1e7;padding-top:5px}
+.sig-role{font-size:10px;color:#9aa0ab}
+.sig-stamp{font-size:10px;color:#0d7a5f;margin-top:4px}
+.footer{background:#0f2744;color:rgba(255,255,255,.7);padding:5px 14px;font-size:10px;display:flex;justify-content:space-between;margin-top:8px}
+.print-btn{position:fixed;top:12px;right:12px;padding:10px 22px;background:#0d7a5f;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:Sarabun,sans-serif;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.print-btn:hover{background:#0a6b52}
+</style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()">🖨 พิมพ์ / บันทึก PDF</button>
+
+<div class="header">
+  <img src="${(typeof LOGO_B64!=='undefined')?LOGO_B64:''}" class="logo" onerror="this.style.display='none'">
+  <div>
+    <div class="brand-name">บริษัท พระจันทร์ ๕๐ จำกัด</div>
+    <div class="brand-sub">Puisabpak — Quality Control (QC)</div>
+  </div>
+  <div class="doc-ref">
+    FM-QC-001 | SD-QC-001<br>
+    พิมพ์วันที่: ${stampTH}
+  </div>
+</div>
+
+<div class="title-bar">
+  <h1>ใบบันทึกการรับวัตถุดิบหน้างาน</h1>
+  <p>MATERIAL RECEIVING INSPECTION RECORD</p>
+</div>
+
+<div class="info-grid">
+  <div>
+    <div class="info-row"><span class="info-label">เลขที่เอกสาร</span><span class="info-value" style="font-family:monospace;font-weight:700">${rec.docNo}</span></div>
+    <div class="info-row"><span class="info-label">Supplier</span><span class="info-value">${sp.name}</span></div>
+    <div class="info-row"><span class="info-label">ทะเบียนรถ</span><span class="info-value">${rec.carReg||'—'}</span></div>
+    <div class="info-row"><span class="info-label">PO / DO No.</span><span class="info-value">${escH(rec.poNo||'—')}</span></div>
+    <div class="info-row"><span class="info-label">ผู้ตรวจรับ QC</span><span class="info-value" style="font-weight:600">${rec.inspector}</span></div>
+  </div>
+  <div>
+    <div class="info-row"><span class="info-label">วันที่รับ</span><span class="info-value">${rec.date}</span></div>
+    <div class="info-row"><span class="info-label">เวลา</span><span class="info-value">${rec.time||'—'}</span></div>
+    <div class="info-row"><span class="info-label">อุณหภูมิรถ</span><span class="info-value">
+      ${rec.carTemp!=null?rec.carTemp+'°C':'—'}</span></div>
+    <div class="info-row"><span class="info-label">หมายเหตุ</span><span class="info-value">${rec.note||'—'}</span></div>
+  </div>
+</div>
+
+<div class="sampling-bar">แผนการสุ่มตัวอย่าง SD-QC-001: เนื้อสัตว์ 10% &nbsp;|&nbsp; ไม้เสียบ 5% &nbsp;|&nbsp; ของแห้ง √N+1 &nbsp;|&nbsp; หอม/พริก/กระเทียม OPL MIL-STD-105E &nbsp;|&nbsp; หมูบด IQC (pH + อุณหภูมิ) &nbsp;|&nbsp; บรรจุภัณฑ์ AQL</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:4%">#</th>
+      <th style="width:9%">รหัส</th>
+      <th style="width:15%">ชื่อวัตถุดิบ</th>
+      <th style="width:6%">ประเภท</th>
+      <th style="width:12%">Lot No</th>
+      <th style="width:10%">จำนวน</th>
+      <th style="width:11%">Temp (°C)</th>
+      <th style="width:7%">Visual</th>
+      <th style="width:17%">เอกสาร / COA</th>
+      <th style="width:7%">ผล</th>
+      <th>หมายเหตุ</th>
+    </tr>
+  </thead>
+  <tbody>${matRows}</tbody>
+</table>
+
+${aqlHTML}
+${porkHTML}
+${mats.some(m=>wtSummary(m))?`<div style="font-size:12px;font-weight:700;color:#0f2744;margin:8px 0 4px;padding:5px 10px;background:#e1f5ee;border-radius:6px;border-left:3px solid #0d7a5f">ผลการสุ่มชั่งน้ำหนักตามจำนวนตัวอย่าง (น้ำหนักสุทธิ kg)</div>
+<table><thead><tr><th>#</th><th>วัตถุดิบ</th><th>ภาชนะที่รับ</th><th>จำนวนตัวอย่าง</th><th>น้ำหนักตามฉลาก (kg)</th><th>น้ำหนักที่ชั่งได้ (kg)</th><th>ผล</th></tr></thead><tbody>${mats.filter(m=>wtSummary(m)).map(m=>{const w=wtCalc(m);const mi=MATERIALS.find(x=>x.code===m.code)||{};
+    return `<tr><td style="text-align:center">${mats.indexOf(m)+1}</td><td>${escH(m.name||mi.name||m.code)}</td><td style="text-align:center">${w.N}</td><td style="text-align:center">${w.n} (${w.rule})</td><td style="text-align:center">${w.lab??'—'}</td>
+      <td style="text-align:center">${w.vals.map(v=>'<span style="'+(wtSt(v,w.lab)==='fail'?'color:#c0392b;font-weight:700':'')+'">'+escH(v===''?'—':v)+'</span>').join(' / ')}</td>
+      <td style="text-align:center;font-weight:700;color:${w.verdict==='HOLD'?'#c0392b':'#2e7d32'}">${w.verdict==='HOLD'?'ไม่ครบ':w.lab!==null?'ครบ':'บันทึก'}</td></tr>`;}).join('')}</tbody></table>`:''}
+
+<div class="result-box" style="color:${overallColor};background:${overallBg};border-color:${overallColor}">
+  ผลการตรวจรับโดยรวม: ${overall}
+</div>
+
+${photoHTML?`<div class="${mats.filter(m=>m.photo1||m.photo2).length>0?'page-break':''}">
+<div style="font-size:13px;font-weight:700;color:#0f2744;margin:8px 0 6px;padding:6px 12px;background:#f4f5f7;border-radius:6px;border-left:3px solid #0d7a5f">📷 รูปถ่ายสินค้า — Photo Evidence</div>
+${photoHTML}</div>`:''}
+
+<div class="sig-section">
+  <div class="sig-box">
+    <div class="sig-title">ลายเซ็นผู้ตรวจรับ</div>
+    ${sigImg}
+    <div class="sig-name" style="font-weight:700">${sig.signerName||rec.inspector||'—'}</div>
+    <div class="sig-role">QC Inspector</div>
+    ${sig.signedAt?`<div class="sig-stamp">✓ Electronically Signed: ${sig.signedAt}</div>`:''}
+  </div>
+  <div class="sig-box">
+    <div class="sig-title">ทบทวน / QC Supervisor</div>
+    <div style="height:50px;border-bottom:1px solid #ccc;margin:0 16px 6px"></div>
+    <div class="sig-name">................................................</div>
+    <div class="sig-role">QC Supervisor</div>
+    <div style="font-size:11px;color:#9aa0ab;margin-top:4px">วันที่: _____ / _____ / _______</div>
+  </div>
+</div>
+
+<div class="footer">
+  <span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) | FM-QC-001 | SD-QC-001</span>
+  <span>พิมพ์: ${stampTH}</span>
+</div>
+
+<script>
+window.onload = function(){
+  // Auto open print dialog after fonts load
+  setTimeout(()=>{ if(document.fonts) document.fonts.ready.then(()=>window.print()); else window.print(); }, 800);
+};
+<\/script>
+</body>
+</html>`;
+
+  const w=window.open('','_blank','width=950,height=750');
+  if(!w){showToast&&showToast('กรุณาอนุญาต Popup','err');return;}
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
+
+let records=[],ncLogs=[],curMats=[],matIdx=0,_lastRec=null;
+const sigState={empty:true,drawing:false};
+
+function genDoc(){
+  const n=new Date();
+  const d=n.getFullYear()+String(n.getMonth()+1).padStart(2,'0')+String(n.getDate()).padStart(2,'0');
+  const seq=String((parseInt(localStorage.getItem('fmqa31_'+d)||'0')+1)).padStart(3,'0');
+  try{localStorage.setItem('fmqa31_'+d,parseInt(seq));}catch(e){}
+  return 'FM-QC-001-'+d+'-'+seq;
+}
+
+function init(){
+  const n=new Date();
+  const days=['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+  document.getElementById('home-date').textContent='วัน'+days[n.getDay()]+'ที่ '+n.getDate()+'/'+(n.getMonth()+1)+'/'+(n.getFullYear()+543);
+  document.getElementById('f-date').value=todayStr();
+  document.getElementById('f-time').value=n.toTimeString().slice(0,5);
+  document.getElementById('f-docno').value=genDoc();
+  ['save-modal','nc-modal'].forEach(id=>{
+    document.getElementById(id).addEventListener('click',e=>{if(e.target===document.getElementById(id)){id==='save-modal'?closeSaveModal():closeNCM();}});
+  });
+  cAql();
+  const hl=document.getElementById('home-logo');if(hl)hl.src=LOGO_B64;
+  syncFromCloud();
+}
+
+function goHome(){goS('sc-home');renderHome();}
+function goToForm(){goFP(1);goS('sc-form');}
+function goS(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
+function goFP(n){
+  document.querySelectorAll('.fp').forEach(p=>p.classList.remove('active'));
+  document.getElementById('fp'+n).classList.add('active');
+  if(n===3)buildSumm();
+  [1,2,3].forEach(i=>{
+    document.getElementById('fs'+i).className='fstep'+(i<n?' done':i===n?' active':'');
+    const l=document.getElementById('fl'+i);if(l)l.className='fline'+(i<n?' done':'');
+  });
+}
+function onSupChg(){
+  const id=document.getElementById('f-sup').value;
+  const sp=SUPPLIERS.find(s=>s.id===id);
+  document.getElementById('f-mtype').value=sp?sp.type:'';
+  chkCT();
+}
+function chkCT(){
+  const id=document.getElementById('f-sup').value;
+  const sp=SUPPLIERS.find(s=>s.id===id);
+  const v=parseFloat(document.getElementById('f-ctemp').value);
+  const el=document.getElementById('ct-st');
+  if(!sp||isNaN(v)){el.textContent='';return;}
+  if(sp.type==='RM'){el.style.color=v>=0&&v<=4?'var(--green)':'var(--red)';el.textContent=v>=0&&v<=4?'✓ PASS (0–4°C)':'✗ FAIL (0–4°C)';}
+  else{el.style.color='var(--gray3)';el.textContent='N/A';}
+}
+function addMat(){
+  const idx=matIdx++;
+  curMats.push({idx,code:'',lot:'',qty:'',unit:'',mfg:'',exp:'',t1:'',t2:'',t3:'',visual:'PASS',leak:'N/A',doc:'PASS',docDo:'PASS',docLabel:'PASS',coa:'',coaNo:'',coaOk:'',result:'PASS',note:'',photo1:null,photo2:null});
+  renderMats();
+  setTimeout(()=>{const l=document.getElementById('mat-list');l.lastElementChild&&l.lastElementChild.scrollIntoView({behavior:'smooth'});},80);
+}
+function delMat(idx){curMats=curMats.filter(m=>m.idx!==idx);renderMats();}
+function togMat(idx){document.getElementById('mb-'+idx)?.classList.toggle('open');}
+function setMat(idx,f,v){const m=curMats.find(m=>m.idx===idx);if(m)m[f]=v;if(['t1','t2','t3'].includes(f))renderMats();if(f==='qty'){porkRefresh(idx);wtRefresh(idx,true);}}
+function onMC(idx,code){const m=curMats.find(m=>m.idx===idx);const mi=MATERIALS.find(x=>x.code===code)||{};if(m){m.code=code;if(mi.unit)m.unit=mi.unit;aqlInit(m,code);if(m.aql)aqlApply(m);if(isPork(m)){porkDefaults(m);porkApply(m);}m.wt=[];m.wtN='';m.wtLab=undefined;wtApply(m);}renderMats();}
+function getSamp(code,qty){
+  const mi=MATERIALS.find(m=>m.code===code);
+  if(!mi||!qty||isNaN(qty))return null;
+  if(mi.cat==='Meat')return{n:'10%',unit:'ของจำนวนถุง',method:'กลุ่มเนื้อสัตว์/ปลาแช่แข็ง — สุ่ม 10% ของจำนวนถุงที่รับ (อย่างน้อย 1 ถุง)'};
+  if(mi.type==='RM'){const n=Math.ceil(Math.sqrt(Math.max(1,Math.ceil(qty)))+1);return{n,unit:'ภาชนะบรรจุ',method:'√'+Math.ceil(qty)+'+1 (N = จำนวนภาชนะบรรจุ)'};}
+  return null;
+}
+function pill(idx,fld,opts){return opts.map(o=>`<button type="button" class="tp ${o.c}${(curMats.find(m=>m.idx===idx)||{})[fld]===o.v?' sel':''}" onclick="setMat(${idx},'${fld}','${o.v}');renderMats()">${o.l}</button>`).join('');}
+function renderMats(){
+  const el=document.getElementById('mat-list');
+  if(!curMats.length){el.innerHTML='';return;}
+  el.innerHTML=curMats.map((m,i)=>{
+    const mi=MATERIALS.find(x=>x.code===m.code)||{};
+    const showT=(mi.minTemp??null)!==null;
+    const pork=isPork(m);const samp=(m.aql||pork||wtOn(m))?null:getSamp(m.code,parseFloat(m.qty));
+    const aqTog=AQL_CODES[m.code]?`<label class="aq-tg" style="margin-top:12px"><input type="checkbox" ${m.aql?'checked':''} onchange="togAql(${m.idx},this.checked)">ใช้แผนสุ่ม OPL หอม / พริก / กระเทียม (AQL)</label>`:'';
+    const aqHtml=pork?porkHtml(m):m.aql?aqlHtml(m):'';
+    const mn=mi.minTemp??mi.minT;const mx=mi.maxTemp??mi.maxT;
+    const tHtml=`<div style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;color:var(--gray4);display:block;margin-bottom:6px">&#x1F321; อุณหภูมิ${showT?' (Spec: '+(mi.tLabel||mn+'–'+mx+'°C')+')':''}</label>
+      <div class="tgrid">${[1,2,3].map(n2=>{const v=m['t'+n2];const vn=parseFloat(v);let tst='';if(v!==''&&v!==null&&v!==undefined&&mn!=null)tst=vn>=mn&&vn<=mx?'pass':'fail';return`<div><label style="font-size:11px;font-weight:600;color:var(--gray3);display:block;margin-bottom:4px">ครั้งที่ ${n2}</label><input type="number" step="0.1" inputmode="decimal" value="${v??''}" placeholder="°C" oninput="setMat(${m.idx},'t${n2}',this.value)" style="text-align:center;padding:10px 4px">${tst?`<div class="tst ${tst}">${tst==='pass'?'✓ Pass':'✗ Fail'}</div>`:''} </div>`;}).join('')}</div></div>`;
+    const sampHtml=samp?`<div class="sbox"><div class="sn">${samp.n}</div><div><div class="sl">สุ่มตรวจ (${samp.unit})</div><div class="sd">${samp.method}</div></div></div>`:'';
+    const photoHtml=`<div style="margin-top:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--gray4);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">&#x1F4F7; รูปถ่ายสินค้า</div>
+      <div class="photo-row">${[1,2].map(s=>`<div>
+        <div style="font-size:11px;font-weight:600;color:var(--gray3);margin-bottom:4px">รูปที่ ${s}</div>
+        <div class="photo-slot ${m['photo'+s]?'has-photo':''}" id="ps-${m.idx}-${s}">
+          <img class="photo-preview" id="pp-${m.idx}-${s}" src="${m['photo'+s]||''}" style="display:${m['photo'+s]?'block':'none'}">
+          <label class="psl" id="pl-${m.idx}-${s}" style="display:${m['photo'+s]?'none':'flex'}" for="pi-${m.idx}-${s}">
+            <span class="psi">&#x1F4F7;</span><span class="pst">เลือกรูปหรือถ่ายภาพ</span><span class="pss">JPG, PNG</span></label>
+          <input type="file" accept="image/*" id="pi-${m.idx}-${s}" style="display:none" onchange="setPhoto(${m.idx},${s},this)">
+          <button class="photo-clear" id="pc-${m.idx}-${s}" style="display:${m['photo'+s]?'flex':'none'}" onclick="clrPhoto(${m.idx},${s})">&#x2715;</button>
+        </div></div>`).join('')}</div></div>`;
+    return `<div class="mc anim"><div class="mch" onclick="togMat(${m.idx})">
+      <div class="mn">${i+1}</div>
+      <div class="mi2"><div class="mname">${m.code?m.code+' — '+(mi.name||''):'— ยังไม่เลือก —'}</div>
+        <div class="mmeta">${m.qty?m.qty+' '+(m.unit||''):'ยังไม่ระบุ'} ${m.lot?'| '+m.lot:''}</div></div>
+      ${mi.type?`<span class="mbdg b-${mi.type}">${mi.type}</span>`:''}
+      <button class="mdel" onclick="event.stopPropagation();delMat(${m.idx})">&#x2715;</button>
+    </div>
+    <div class="mb open" id="mb-${m.idx}">
+      <div class="fg"><label>วัตถุดิบ <span class="req">*</span></label>
+        <select onchange="onMC(${m.idx},this.value)"><option value="">-- เลือก --</option>
+        ${MATERIALS.map(x=>`<option value="${x.code}" ${x.code===m.code?'selected':''}>${x.code} — ${x.name}</option>`).join('')}</select></div>
+      <div class="ig">
+        <div class="fg"><label>Lot No <span class="req">*</span></label><input type="text" value="${m.lot}" placeholder="Lot/Batch" oninput="setMat(${m.idx},'lot',this.value)"></div>
+        <div class="fg"><label>จำนวน <span class="req">*</span></label><input type="number" step="0.01" inputmode="decimal" value="${m.qty}" placeholder="0.0" oninput="setMat(${m.idx},'qty',this.value)"></div>
+      </div>
+      <div class="ig">
+        <div class="fg"><label>วันผลิต</label><input type="date" value="${m.mfg}" oninput="setMat(${m.idx},'mfg',this.value)"></div>
+        <div class="fg"><label>วันหมดอายุ</label><input type="date" value="${m.exp}" oninput="setMat(${m.idx},'exp',this.value)"></div>
+      </div>
+      ${mi.store?`<div style="font-size:12px;color:var(--gray4);background:var(--gray1);border-radius:8px;padding:8px 10px;margin-bottom:12px">&#x1F4E6; การเก็บรักษา: ${mi.store}</div>`:''}
+      ${pork||!showT?'':tHtml}
+      <div style="margin-bottom:12px;${pork?'display:none':''}"><label style="font-size:12px;font-weight:600;color:var(--gray4);margin-bottom:6px;display:block">Visual Check</label><div class="trow">${pill(m.idx,'visual',[{v:'PASS',c:'pass',l:'✓ PASS'},{v:'FAIL',c:'fail',l:'✗ FAIL'}])}</div></div>
+      <div style="margin-bottom:12px;${pork?'display:none':''}"><label style="font-size:12px;font-weight:600;color:var(--gray4);margin-bottom:6px;display:block">Leak Check</label><div class="trow">${pill(m.idx,'leak',[{v:'PASS',c:'pass',l:'PASS'},{v:'FAIL',c:'fail',l:'FAIL'},{v:'N/A',c:'na',l:'N/A'}])}</div></div>
+      ${docHtml(m)}
+      ${sampHtml}
+      ${aqTog}${aqHtml}${wtHtml(m)}
+      <div style="margin-top:12px"><label style="font-size:13px;font-weight:700;color:var(--gray4);margin-bottom:8px;display:block">ผลการตรวจรับ</label><div class="trow" id="rs-${m.idx}">${resPills(m.idx)}</div></div>
+      <div class="fg" style="margin-top:12px"><label>หมายเหตุ</label><input type="text" value="${m.note}" placeholder="หมายเหตุ..." oninput="setMat(${m.idx},'note',this.value)"></div>
+      ${photoHtml}
+    </div></div>`;
+  }).join('');
+}
+function setPhoto(idx,slot,input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const mx=900,sc=Math.min(1,mx/Math.max(img.width,img.height));
+      const cv=document.createElement('canvas');cv.width=Math.round(img.width*sc);cv.height=Math.round(img.height*sc);
+      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+      const url=cv.toDataURL('image/jpeg',0.7);
+      const m=curMats.find(m=>m.idx===idx);if(m)m['photo'+slot]=url;
+      const p=document.getElementById('pp-'+idx+'-'+slot);
+      const s=document.getElementById('ps-'+idx+'-'+slot);
+      const c=document.getElementById('pc-'+idx+'-'+slot);
+      const l=document.getElementById('pl-'+idx+'-'+slot);
+      if(p){p.src=url;p.style.display='block';}
+      if(s)s.classList.add('has-photo');
+      if(c)c.style.display='flex';
+      if(l)l.style.display='none';
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function clrPhoto(idx,slot){
+  const m=curMats.find(m=>m.idx===idx);if(m)m['photo'+slot]=null;
+  const p=document.getElementById('pp-'+idx+'-'+slot);const s2=document.getElementById('ps-'+idx+'-'+slot);
+  const c=document.getElementById('pc-'+idx+'-'+slot);const l=document.getElementById('pl-'+idx+'-'+slot);
+  if(p){p.src='';p.style.display='none';}if(s2)s2.classList.remove('has-photo');
+  if(c)c.style.display='none';if(l)l.style.display='flex';
+  const inp=document.getElementById('pi-'+idx+'-'+slot);if(inp)inp.value='';
+}
+function initSig(){
+  const cv=document.getElementById('sig-cv');if(!cv||cv._init)return;cv._init=true;
+  const ctx=cv.getContext('2d');ctx.strokeStyle='#0f2744';ctx.lineWidth=2.5;ctx.lineCap='round';ctx.lineJoin='round';
+  const pos=(e,c)=>{const r=c.getBoundingClientRect();const sx=c.width/r.width,sy=c.height/r.height;const src=e.touches?e.touches[0]:e;return{x:(src.clientX-r.left)*sx,y:(src.clientY-r.top)*sy};};
+  const start=e=>{e.preventDefault();sigState.drawing=true;const p=pos(e,cv);ctx.beginPath();ctx.moveTo(p.x,p.y);markSig();};
+  const move=e=>{e.preventDefault();if(!sigState.drawing)return;const p=pos(e,cv);ctx.lineTo(p.x,p.y);ctx.stroke();};
+  const end=e=>{e.preventDefault();sigState.drawing=false;};
+  ['mousedown','touchstart'].forEach(t=>cv.addEventListener(t,start,{passive:false}));
+  ['mousemove','touchmove'].forEach(t=>cv.addEventListener(t,move,{passive:false}));
+  ['mouseup','mouseleave','touchend'].forEach(t=>cv.addEventListener(t,end,{passive:false}));
+  const sn=document.getElementById('sig-name');
+  if(sn&&!sn.value)sn.value=document.getElementById('f-inspector').value||'';
+  document.getElementById('sig-dt').value=new Date().toLocaleString('th-TH');
+}
+function markSig(){sigState.empty=false;document.getElementById('sig-hint').classList.add('h');document.getElementById('sig-wrap').classList.add('signed');document.getElementById('sig-st').textContent='✓ เซ็นแล้ว';document.getElementById('sig-st').className='sst so';}
+function clearSig(){const cv=document.getElementById('sig-cv');cv.getContext('2d').clearRect(0,0,cv.width,cv.height);sigState.empty=true;document.getElementById('sig-hint').classList.remove('h');document.getElementById('sig-wrap').classList.remove('signed');document.getElementById('sig-st').textContent='ยังไม่ได้เซ็น';document.getElementById('sig-st').className='sst se';}
+function getSigB64(){if(sigState.empty)return null;return document.getElementById('sig-cv')?.toDataURL('image/png');}
+function buildSumm(){
+  const sp=SUPPLIERS.find(s=>s.id===document.getElementById('f-sup').value)||{name:'—'};
+  const date=document.getElementById('f-date').value;
+  const aP=curMats.every(m=>m.result==='PASS');const hR=curMats.some(m=>m.result==='REJECT');
+  const res=aP?'<span class="pill pill-pass">PASS ทั้งหมด</span>':hR?'<span class="pill pill-fail">REJECT</span>':'<span class="pill pill-hold">มี HOLD</span>';
+  document.getElementById('summ').innerHTML=`<div style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;justify-content:space-between"><span style="color:var(--gray3);font-size:13px">วันที่</span><span style="font-weight:600;font-size:13px">${date}</span></div>
+    <div style="display:flex;justify-content:space-between"><span style="color:var(--gray3);font-size:13px">Supplier</span><span style="font-weight:600;font-size:13px;text-align:right;max-width:200px">${sp.name}</span></div>
+    <div style="display:flex;justify-content:space-between"><span style="color:var(--gray3);font-size:13px">รายการ</span><span style="font-weight:600;font-size:13px">${curMats.length} รายการ</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--gray3);font-size:13px">ผลโดยรวม</span>${res}</div>
+    <div style="border-top:1px solid var(--border);padding-top:10px">
+      ${curMats.map((m,i)=>{const mi=MATERIALS.find(x=>x.code===m.code)||{};const rc=m.result==='PASS'?'pass':m.result==='REJECT'?'fail':'hold';return`<div style="padding:5px 0;border-bottom:1px solid var(--gray1)"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px">${i+1}. ${mi.name||m.code||'—'}</span><span class="pill pill-${rc}">${m.result}</span></div>${inspSummary(m)?`<div style="font-size:11px;color:var(--gray3);margin-top:2px">${inspSummary(m)}</div>`:''}</div>`;}   ).join('')}
+    </div></div>`;
+  const sn=document.getElementById('sig-name');if(sn&&!sn.value)sn.value=document.getElementById('f-inspector').value||'';
+  document.getElementById('sig-dt').value=new Date().toLocaleString('th-TH');
+  setTimeout(()=>initSig(),80);
+}
+function saveRecord(){
+  const date=document.getElementById('f-date').value;
+  const sup=document.getElementById('f-sup').value.trim();
+  const insp=document.getElementById('f-inspector').value;
+  if(!date||!sup||!insp){showToast('กรอกข้อมูลให้ครบ','err');return;}
+  if(!curMats.length){showToast('เพิ่มรายการวัตถุดิบก่อน','err');return;}
+  for(let i=0;i<curMats.length;i++){const er=docCheck(curMats[i],i+1)||aqlCheck(curMats[i],i+1)||porkCheck(curMats[i],i+1)||wtCheck(curMats[i],i+1);if(er){goFP(2);showToast(er,'err');return;}}
+  if(sigState.empty){showToast('กรุณาเซ็นชื่อก่อนบันทึก','err');return;}
+  const docNo=document.getElementById('f-docno').value||genDoc();
+  const sigB64=getSigB64();
+  const sigName=document.getElementById('sig-name').value||insp;
+  const sigDt=document.getElementById('sig-dt').value||new Date().toLocaleString('th-TH');
+  const rec={docNo,date,time:document.getElementById('f-time').value,supplier:sup,
+    carReg:document.getElementById('f-car').value,
+    carTemp:document.getElementById('f-ctemp').value!==''?parseFloat(document.getElementById('f-ctemp').value):null,
+    inspector:insp,note:document.getElementById('f-note').value,poNo:document.getElementById('f-po').value.trim(),
+    mats:curMats.map(m=>({...m})),materials:curMats.map(m=>({...m})),
+    sig:{signerName:sigName,signedAt:sigDt,sigBase64:sigB64}};
+  records.unshift(rec);_lastRec=rec;
+  cloudSaveRecord(rec).catch(()=>{});
+  let ncCreated=false;
+  rec.mats.forEach(m=>{
+    if(m.result==='HOLD'||m.result==='REJECT'){
+      const _nc={id:'NC'+String(ncLogs.length+1).padStart(3,'0'),docNo,supplier:sup,
+        failType:m.result==='REJECT'?'Rejected Material':'Hold — Pending Investigation',
+        corrective:'—',qa:insp,status:'Open',closedDate:'',ncrId:'',date,result:m.result,matIdx:m.idx,mat:{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit},note:[m.note||m.code,inspSummary(m),m.doc==='FAIL'?'เอกสาร: '+docSummary(m):'',m.wtV==='HOLD'?wtSummary(m):''].filter(Boolean).join(' | ')};
+      ncLogs.unshift(_nc);cloudSaveNC(_nc).catch(()=>{});ncCreated=true;
+    }
+  });
+  const spInfo=SUPPLIERS.find(s=>s.id===sup)||{name:sup};
+  document.getElementById('save-sub').innerHTML=`Doc: <strong>${docNo}</strong><br>${rec.mats.length} รายการ | ${spInfo.name}${ncCreated?'<br>&#x26A0; สร้าง NC อัตโนมัติ<br><button class="bm" style="margin-top:10px;padding:10px;font-size:13px;background:#1e3a8a;color:#fff;width:100%" onclick="closeSaveModal();goS(\'sc-nc\')">&#x1F4DD; ไปหน้า NC Log เพื่อเปิด NCR</button>':''}`;
+  const prev=document.getElementById('sig-prev-img');
+  if(sigB64){prev.src=sigB64;prev.style.display='block';}else{prev.style.display='none';}
+  document.getElementById('save-modal').classList.add('open');
+  resetForm();renderHome();renderNC();
+}
+function resetForm(){
+  document.getElementById('f-docno').value=genDoc();
+  ['f-sup','f-mtype','f-car','f-note','f-po'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('f-ctemp').value='';document.getElementById('ct-st').textContent='';
+  curMats=[];matIdx=0;renderMats();goFP(1);clearSig();
+}
+function closeSaveModal(){document.getElementById('save-modal').classList.remove('open');}
+function dlExcel(){exportExcel();closeSaveModal();}
+function dlPDF(){if(_lastRec)generatePDF(_lastRec);closeSaveModal();}
+function supNames(){return [...new Set(records.map(r=>r.supplier).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'));}
+function renderHome(){
+  const dl=document.getElementById('sup-list');if(dl)dl.innerHTML=supNames().map(n=>`<option value="${escH(n)}">`).join('');
+  document.getElementById('hs-t').textContent=records.length;
+  document.getElementById('hs-p').textContent=records.filter(r=>(r.mats||r.materials||[]).every(m=>m.result==='PASS')).length;
+  const open=ncLogs.filter(n=>n.status==='Open').length;
+  document.getElementById('hs-n').textContent=open;
+  document.getElementById('hqnc').textContent=ncLogs.length+' รายการ';
+  document.getElementById('ncdot').style.display=open?'':'none';
+  document.getElementById('nc-badge').textContent=ncLogs.length;
+  const list=document.getElementById('rl');
+  if(!records.length){list.innerHTML=`<div class="empty"><div class="ei">&#x1F4E6;</div><div class="et">ยังไม่มีข้อมูลการรับ</div><div class="esub">กด "+ รับสินค้า"</div></div>`;return;}
+  list.innerHTML=records.slice(0,5).map(r=>{
+    const sp=SUPPLIERS.find(s=>s.id===r.supplier)||{name:r.supplier};
+    const mats=r.mats||r.materials||[];
+    const aP=mats.every(m=>m.result==='PASS');const rc=aP?'pass':mats.some(m=>m.result==='REJECT')?'fail':'hold';
+    const hasNC=ncLogs.some(nc=>nc.docNo===r.docNo);
+    return `<div class="ri"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="rdoc">${r.docNo}</span><span style="font-size:12px;color:var(--gray3)">${r.date}</span></div>
+      <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;margin-right:8px">${sp.name}</span>
+        <div style="display:flex;gap:6px;flex-shrink:0">${hasNC?'<span class="pill pill-open">NC</span>':''}<span class="pill pill-${rc}">${aP?'PASS':mats.some(m=>m.result==='REJECT')?'REJECT':'HOLD'}</span></div></div>
+      <div style="font-size:12px;color:var(--gray3);margin-top:4px">${mats.length} รายการ — ${r.inspector}</div></div>`;
+  }).join('');
+}
+function renderHist(){
+  const q=(document.getElementById('h-search').value||'').toLowerCase();
+  const filtered=records.filter(r=>{const sp=SUPPLIERS.find(s=>s.id===r.supplier)||{name:r.supplier};return !q||r.docNo.toLowerCase().includes(q)||sp.name.toLowerCase().includes(q)||((r.mats||r.materials||[]).some(m=>m.name&&m.name.toLowerCase().includes(q)));});
+  const list=document.getElementById('hl');
+  if(!filtered.length){list.innerHTML=`<div class="empty"><div class="ei">&#x1F50D;</div><div class="et">ไม่พบข้อมูล</div><div class="esub">ลองเปลี่ยนคำค้นหา</div></div>`;return;}
+  list.innerHTML=filtered.map(r=>{
+    const sp=SUPPLIERS.find(s=>s.id===r.supplier)||{name:r.supplier};
+    const mats=r.mats||r.materials||[];const aP=mats.every(m=>m.result==='PASS');const rc=aP?'pass':mats.some(m=>m.result==='REJECT')?'fail':'hold';
+    return `<div class="hi"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="rdoc">${r.docNo}</span><span style="font-size:12px;color:var(--gray3)">${r.date} ${r.time||''}</span></div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px">${sp.name}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--gray3)">&#x1F321; ${r.carTemp!=null?r.carTemp+'°C':'—'}</span>
+        <span style="font-size:12px;color:var(--gray3)">&#x1F4E6; ${mats.length} รายการ</span>
+        <span style="font-size:12px;color:var(--gray3)">&#x1F464; ${r.inspector}</span>
+        <span class="pill pill-${rc}">${aP?'PASS':mats.some(m=>m.result==='REJECT')?'REJECT':'HOLD'}</span>
+        <button onclick="printDoc('${r.docNo}')" style="margin-left:auto;padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--white);color:var(--teal);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer">&#x1F5A8; พิมพ์ใบรับ</button>
+      </div></div>`;
+  }).join('');
+}
+function renderNC(){
+  const el=document.getElementById('ncl');
+  document.getElementById('nc-badge').textContent=ncLogs.length;
+  document.getElementById('ncdot').style.display=ncLogs.some(n=>n.status==='Open')?'':'none';
+  if(!ncLogs.length){el.innerHTML=`<div class="empty"><div class="ei">&#x2714;&#xFE0F;</div><div class="et">ไม่มีรายการ NC</div></div>`;return;}
+  el.innerHTML=ncLogs.map(nc=>{
+    const sp=SUPPLIERS.find(s=>s.id===nc.supplier)||{name:nc.supplier||'—'};
+    return `<div class="nc-item ${nc.status.toLowerCase()}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-family:monospace;font-size:12px;font-weight:700;color:var(--navy)">${nc.id}</span>
+        <span class="pill ${nc.status==='Closed'?'pill-closed':'pill-open'}">${nc.status}</span>
+      </div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:4px">${nc.failType}</div>
+      <div style="font-size:12px;color:var(--gray3)">Doc: ${nc.docNo} | ${sp.name}</div>
+      <div style="font-size:12px;color:var(--gray3);margin-top:3px">${nc.corrective}</div>
+      ${nc.note?`<div style="font-size:12px;color:var(--gray3)">${escH(nc.note)}</div>`:''}
+      ${ncrBox(nc)}
+      ${nc.status==='Open'?`<button class="bm bt" style="margin-top:10px;padding:10px;font-size:13px" onclick="closeNC('${nc.id}')">&#x2714; ปิด NC</button>`:`<div style="font-size:12px;color:var(--gray3);margin-top:6px">ปิดวันที่ ${nc.closedDate}</div>`}
+    </div>`;
+  }).join('');
+}
+// ════ เชื่อมกับระบบ NCR e-Form (FM-QA-001) ════
+const NCR_APP_URL='https://puisabpak-ncr.pages.dev';
+let _ncrWin=null,_ncrFor=null;
+function matName(code){const m=MATERIALS.find(x=>x.code===code);return m?m.name:(code||'');}
+function ncrRef(nc){return nc.docNo+' / '+nc.id;}
+function ncrBox(nc){
+  const b='margin-top:8px;padding:10px;font-size:13px;width:100%;';
+  if(nc.ncrId){
+    return `<div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:#e8f0fe;font-size:12px;color:#1e3a8a">
+      NCR e-Form: <strong style="font-family:monospace">${escH(nc.ncrId)}</strong>
+      <button class="bm" style="${b}background:#1e3a8a;color:#fff" onclick="viewNCR('${nc.id}')">&#x1F517; ดู NCR ${escH(nc.ncrId)}</button>
+      <div style="margin-top:6px;text-align:right"><span style="text-decoration:underline;cursor:pointer" onclick="setNCRId('${nc.id}')">แก้เลข NCR</span></div></div>`;
+  }
+  return `<button class="bm" style="${b}background:#1e3a8a;color:#fff" onclick="openNCR('${nc.id}')">&#x1F4DD; เปิด NCR ในระบบ NCR e-Form</button>
+    <div style="margin-top:6px;font-size:12px;color:var(--gray3);text-align:right"><span style="text-decoration:underline;cursor:pointer" onclick="setNCRId('${nc.id}')">มีเลข NCR แล้ว — ใส่เลขเอง</span></div>`;
+}
+function ncrMat(nc){
+  const rec=records.find(r=>r.docNo===nc.docNo);const mats=rec?(rec.mats||rec.materials||[]):[];
+  let m=null;
+  if(nc.matIdx!=null)m=mats.find(x=>x.idx===nc.matIdx)||null;
+  if(!m){const bad=mats.filter(x=>x.result==='HOLD'||x.result==='REJECT');if(bad.length===1)m=bad[0];}
+  return {rec,m};
+}
+function openNCR(id){
+  const nc=ncLogs.find(n=>n.id===id);if(!nc)return;
+  const {rec,m}=ncrMat(nc);
+  const mat=nc.mat||(m?{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit}:null);
+  const result=nc.result||(m?m.result:'')||(/reject/i.test(nc.failType)?'REJECT':/hold/i.test(nc.failType)?'HOLD':'');
+  const sp=SUPPLIERS.find(x=>x.id===nc.supplier)||{name:nc.supplier||''};
+  const lines=['ตรวจรับวัตถุดิบไม่ผ่านเกณฑ์ (ใบตรวจรับ '+nc.docNo+')'+(result?' — ผลการตรวจ: '+result:''),
+    mat&&mat.name?'รายการ: '+[mat.code,mat.name].filter(Boolean).join(' '):'',
+    'ประเภทปัญหา: '+nc.failType,nc.note?'รายละเอียด: '+nc.note:'',
+    rec&&rec.carReg?'ทะเบียนรถ: '+rec.carReg+(rec.carTemp!=null?' | อุณหภูมิรถ '+rec.carTemp+'°C':''):'',
+    rec&&rec.poNo?'PO: '+rec.poNo:''].filter(Boolean);
+  const q=new URLSearchParams();
+  const put=(k,v)=>{if(v!==undefined&&v!==null&&String(v).trim()!=='')q.set(k,String(v));};
+  put('source_type','RM_RECEIVING');put('source_ref',ncrRef(nc));put('supplier_name',sp.name);
+  put('found_date',nc.date||(rec&&rec.date)||todayStr());put('reported_by',nc.qa);
+  put('nc_description',lines.join('\n').slice(0,1500));
+  if(mat){put('material_code',mat.code);put('material_name',mat.name);put('lot_no',mat.lot);
+    if(mat.qty!==''&&!isNaN(parseFloat(mat.qty)))put('defect_qty',parseFloat(mat.qty));put('defect_unit',mat.unit);}
+  if(result==='HOLD')put('immediate_action','กักสินค้า (HOLD) ติดป้ายบ่งชี้ รอผลการพิจารณา');
+  if(result==='REJECT')put('immediate_action','ปฏิเสธการรับ (REJECT) แยกสินค้าและแจ้งผู้ส่งมอบ');
+  _ncrFor=id;
+  _ncrWin=window.open(NCR_APP_URL+'/ncr/new?'+q.toString(),'_blank');
+  if(!_ncrWin)showToast('เปิดหน้าต่างใหม่ไม่ได้ กรุณาอนุญาต pop-up','err');
+  else showToast('เปิดระบบ NCR แล้ว — ตรวจข้อมูลและกดบันทึก','ok');
+}
+function viewNCR(id){const nc=ncLogs.find(n=>n.id===id);if(nc&&nc.ncrId)window.open(NCR_APP_URL+'/ncr/'+encodeURIComponent(nc.ncrId),'_blank');}
+function setNCRId(id){
+  const nc=ncLogs.find(n=>n.id===id);if(!nc)return;
+  const v=prompt('เลขที่ NCR จากระบบ NCR e-Form (เช่น NCR-2610-001)\nเว้นว่างเพื่อลบเลขที่บันทึกไว้',nc.ncrId||'');
+  if(v===null)return;const t=v.trim().toUpperCase();
+  if(t&&!/^NCR-\d{4}-\d{3,}$/.test(t)){showToast('รูปแบบเลข NCR ไม่ถูกต้อง','err');return;}
+  nc.ncrId=t;saveLocal();renderNC();showToast(t?'บันทึกเลข NCR แล้ว':'ลบเลข NCR แล้ว','ok');
+}
+window.addEventListener('message',e=>{
+  if(e.origin!==NCR_APP_URL||!_ncrWin||e.source!==_ncrWin||!e.data)return;
+  const nc=ncLogs.find(n=>n.id===_ncrFor);if(!nc)return;
+  if(e.data.type==='ncr-eform-ready'){
+    const {m}=ncrMat(nc);const photos=m?[m.photo1,m.photo2].filter(Boolean):[];
+    if(photos.length)e.source.postMessage({type:'ncr-prefill',photos},NCR_APP_URL);
+  }else if(e.data.type==='ncr-created'&&/^NCR-\d{4}-\d{3,}$/.test(String(e.data.ncr_id||''))&&e.data.source_ref===ncrRef(nc)){
+    nc.ncrId=e.data.ncr_id;saveLocal();renderNC();showToast('ผูกกับ '+nc.ncrId+' แล้ว','ok');
+  }
+});
+function closeNC(id){
+  const _n=ncLogs.find(n=>n.id===id);
+  if(_n&&!_n.ncrId&&!confirm('NC นี้ยังไม่มีเลข NCR ในระบบ NCR e-Form\nต้องการปิดในแอปนี้เลยหรือไม่?'))return;
+  const nc=ncLogs.find(n=>n.id===id);
+  if(nc){nc.status='Closed';nc.closedDate=todayStr();cloudCloseNC(id,{status:'Closed',closed_date:nc.closedDate}).catch(()=>{});}
+  renderNC();renderHome();showToast('ปิด NC เรียบร้อย','ok');
+}
+function openNCModal(){
+  const sel=document.getElementById('nm-doc');
+  sel.innerHTML='<option value="">-- เลือก Doc No --</option>';
+  records.forEach(r=>{const sp=SUPPLIERS.find(s=>s.id===r.supplier)||{name:r.supplier};sel.innerHTML+=`<option value="${r.docNo}" data-sp="${escH(r.supplier)}" data-spn="${escH(sp.name)}">${r.docNo} — ${r.date}</option>`;});
+  ['nm-sup','nm-ft','nm-ca','nm-nt'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('nm-qa').value='';document._ncSp='';
+  document.getElementById('nc-modal').classList.add('open');
+}
+function onNCDC(){const sel=document.getElementById('nm-doc');const opt=sel.options[sel.selectedIndex];document.getElementById('nm-sup').value=opt.dataset.spn||'';document._ncSp=opt.dataset.sp||'';}
+function closeNCM(){document.getElementById('nc-modal').classList.remove('open');}
+function saveNC(){
+  const docNo=document.getElementById('nm-doc').value;const failType=document.getElementById('nm-ft').value;
+  if(!docNo){showToast('เลือก Doc No ก่อน','err');return;}if(!failType){showToast('เลือกประเภทปัญหา','err');return;}
+  const _nc={id:'NC'+String(ncLogs.length+1).padStart(3,'0'),docNo,supplier:document._ncSp||'',failType,
+    corrective:document.getElementById('nm-ca').value||'—',qa:document.getElementById('nm-qa').value||'',
+    status:'Open',closedDate:'',ncrId:'',date:todayStr(),note:document.getElementById('nm-nt').value||''};
+  ncLogs.unshift(_nc);cloudSaveNC(_nc).catch(()=>{});
+  closeNCM();renderNC();renderHome();showToast('สร้าง NC เรียบร้อย ✓','ok');
+}
+function cMeat(){if(!document.getElementById('c-mt'))return;const bag=parseInt(document.getElementById('c-mt').value);const wt=parseFloat(document.getElementById('c-mw').value);const res=document.getElementById('cr-m');if(isNaN(wt)||wt<=0){res.style.display='none';return;}const bags=Math.ceil(wt/bag);const n=Math.max(1,Math.ceil(bags*0.1));document.getElementById('crn-m').textContent=n;document.getElementById('crd-m').textContent='= '+bags+' ถุง × 10% = '+n+' ถุง';res.style.display='block';}
+function cWood(){const p=parseInt(document.getElementById('c-wq').value);const res=document.getElementById('cr-w');if(isNaN(p)||p<=0){res.style.display='none';return;}let n=p<=20?1:p<=40?2:p<=60?3:p<=80?4:5;document.getElementById('crn-w').textContent=n;res.style.display='block';}
+function cDry(){const n=parseInt(document.getElementById('c-dq').value);const res=document.getElementById('cr-d');if(isNaN(n)||n<=0){res.style.display='none';return;}const s=Math.ceil(Math.sqrt(n)+1);document.getElementById('crn-d').textContent=s;document.getElementById('crd-d').textContent='= √'+n+'+1 ≈ '+s;res.style.display='block';}
+function exportExcel(){
+  const wb=XLSX.utils.book_new();
+  const h1=[['Doc_No','Date','Time','Supplier_ID','Supplier_Name','Car_Registration','Car_Temp_C','QA_Inspector','Note','Signer','Signed_At','Overall']];
+  records.forEach(r=>{const sp=SUPPLIERS.find(s=>s.id===r.supplier)||{name:r.supplier};h1.push([r.docNo,r.date,r.time||'',r.supplier,sp.name,r.carReg||'',r.carTemp!==null&&r.carTemp!==undefined?r.carTemp:'',r.inspector,r.note||'',r.sig?.signerName||'',r.sig?.signedAt||'',(r.mats||r.materials||[]).every(m=>m.result==='PASS')?'PASS':(r.mats||r.materials||[]).some(m=>m.result==='REJECT')?'REJECT':'HOLD']);});
+  const wsH=XLSX.utils.aoa_to_sheet(h1);wsH['!cols']=[20,12,8,10,35,14,12,20,30,20,22,8].map(w=>({wch:w}));XLSX.utils.book_append_sheet(wb,wsH,'Receiving_Header');
+  const d1=[['Detail_ID','Doc_No','Date','Supplier','Material_Code','Material_Name','Type','Lot_No','Qty','Unit','MFG','EXP','Temp1','Temp2','Temp3','Avg_Temp','Temp_Status','Visual','Leak','Document','Result','Note','AQL_Crop','Lot_Bags','Plan_Sample_Bags','Plan_g_per_Bag','Sample_Bags','Sample_g','Bag_kg','3_Point','Critical_pcs','Major_g','Major_pct','Minor_g','Minor_pct','AQL_Verdict','Pork_Lot_Bags','Pork_Sample_Bags','Net_kg','Core_Temp','pH','pH_Min','pH_Max','Packaging','Label','Color','Odor','Foreign_Matter','IQC_Verdict','PO_DO_No','DO_Invoice','COA','COA_No','COA_Result','Label_Lot','Wt_Containers','Wt_Samples','Wt_Label_kg','Wt_Values_kg','Wt_Result']];
+  records.forEach(r=>{const sp=SUPPLIERS.find(s=>s.id===r.supplier)||{name:r.supplier};(r.mats||r.materials||[]).forEach((m,i)=>{const mi=MATERIALS.find(x=>x.code===m.code)||{};const ts=[m.t1,m.t2,m.t3].filter(t=>t!==''&&t!==null&&t!==undefined).map(Number).filter(t=>!isNaN(t));const avg=ts.length?parseFloat((ts.reduce((a,b)=>a+b,0)/ts.length).toFixed(1)):'';const mn=mi.minTemp??mi.minT;const mx2=mi.maxTemp??mi.maxT;const tst=ts.length&&mn!=null?(ts.every(t=>t>=mn&&t<=mx2)?'PASS':'FAIL'):'';d1.push([r.docNo+'_'+String(i+1).padStart(2,'0'),r.docNo,r.date,sp.name,m.code,m.name||'',mi.type||'',m.lot||'',m.qty!==''&&m.qty!=null?parseFloat(m.qty):'',m.unit||'',m.mfg||'',m.exp||'',m.t1!==''&&m.t1!=null?parseFloat(m.t1):'',m.t2!==''&&m.t2!=null?parseFloat(m.t2):'',m.t3!==''&&m.t3!=null?parseFloat(m.t3):'',avg,tst,m.visual||'',m.leak||'',m.doc||'',m.result||'',m.note||''].concat(m.aql?(c=>[AQL_CROPS[m.crop]||'',c.bags,c.plan?c.plan.n:'',c.plan?c.plan.g:'',c.sBags,c.totG,m.bagKg??'',m.pos||'',c.cr,c.maG,c.maPct==null?'':+c.maPct.toFixed(2),c.miG,c.miPct==null?'':+c.miPct.toFixed(2),aqlVerdictTxt(c.verdict)])(aqlCalc(m)):Array(14).fill('')).concat(isPork(m)&&Array.isArray(m.pk)?(p=>[p.iqc_lot_bags,p.iqc_sample_bags,p.iqc_net_kg,p.iqc_core_temp,p.iqc_ph,p.iqc_ph_min,p.iqc_ph_max,p.iqc_packaging,p.iqc_label,p.iqc_color,p.iqc_odor,p.iqc_foreign_matter,p.iqc_verdict])(porkCloud(m)):Array(13).fill('')).concat([r.poNo||'',m.docDo||'',COA_TXT[m.coa]||'',m.coaNo||'',m.coaOk||'',m.docLabel||''],(w=>w&&Array.isArray(m.wt)?[w.N,w.n,w.lab??'',w.vals.join('/'),w.verdict==='HOLD'?'FAIL':w.verdict==='PASS'&&w.lab!==null?'PASS':'']:[])(wtCalc(m))));});});
+  const wsD=XLSX.utils.aoa_to_sheet(d1);wsD['!cols']=[18,14,12,24,10,18,6,14,10,8,12,12,10,10,10,10,10,8,8,10,8,20,10,9,10,10,10,10,8,8,10,9,9,9,9,12,10,10,14,14,14,8,8,10,8,8,8,10,12,16,10,10,16,10,10,10,10,10,20,8].map(w=>({wch:w}));XLSX.utils.book_append_sheet(wb,wsD,'Receiving_Detail');
+  const n1=[['NC_ID','Doc_No','Supplier','Fail_Type','Corrective_Action','QA','Status','Closed_Date','Note']];
+  ncLogs.forEach(nc=>{const sp=SUPPLIERS.find(s=>s.id===nc.supplier)||{name:nc.supplier||'—'};n1.push([nc.id,nc.docNo,sp.name,nc.failType,nc.corrective,nc.qa,nc.status,nc.closedDate||'',nc.note||'']);});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(n1),'NC_Log');
+  const sig=[['Doc_No','Date','Signer_Name','Signed_At']];
+  records.forEach(r=>{sig.push([r.docNo,r.date,r.sig?.signerName||'',r.sig?.signedAt||'']);});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sig),'Signatures');
+  const mat=[['Code','Name','Type','Category','Unit','Min_Temp','Max_Temp','Storage']];
+  MATERIALS.forEach(m=>mat.push([m.code,m.name,m.type,m.cat,m.unit,m.tLabel?'':m.minTemp??m.minT??'',m.maxTemp??m.maxT??'',m.store||'']));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(mat),'Material_Master');
+  const now=new Date();const stamp=now.getFullYear()+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0');
+  XLSX.writeFile(wb,'QA_Receiving_'+stamp+'.xlsx');
+  showToast('ดาวน์โหลด Excel เรียบร้อย ✓','ok');
+}
+// ════ รายงาน A4 — รายวัน / ราย Supplier ════
+let repMode='day';
+function fmtD(d){if(!d)return'—';const p=String(d).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+(parseInt(p[0])+543):d;}
+function printDoc(docNo){const r=records.find(x=>x.docNo===docNo);if(r)generatePDF(r);}
+function goRep(){
+  goS('sc-rep');
+  const d=document.getElementById('rp-date');if(!d.value)d.value=todayStr();
+  const s=document.getElementById('rp-sup');const cur=s.value;
+  s.innerHTML='<option value="">-- เลือก Supplier --</option>'+supNames().map(n=>'<option value="'+escH(n)+'">'+escH(n)+'</option>').join('');
+  s.value=cur;setRep(repMode);
+}
+function setRep(m){
+  repMode=m;
+  document.getElementById('rp-m-day').classList.toggle('sel',m==='day');
+  document.getElementById('rp-m-sup').classList.toggle('sel',m==='sup');
+  document.getElementById('rp-day').style.display=m==='day'?'':'none';
+  document.getElementById('rp-sup-box').style.display=m==='sup'?'':'none';
+  repCount();
+}
+function repRecs(){
+  let rs;
+  if(repMode==='day'){const d=document.getElementById('rp-date').value;rs=records.filter(r=>r.date===d);}
+  else{const s=document.getElementById('rp-sup').value,f=document.getElementById('rp-from').value,t=document.getElementById('rp-to').value;
+    rs=s?records.filter(r=>r.supplier===s&&(!f||r.date>=f)&&(!t||r.date<=t)):[];}
+  return rs.slice().sort((a,b)=>(a.date+(a.time||'')+a.docNo).localeCompare(b.date+(b.time||'')+b.docNo));
+}
+function repCount(){
+  const rs=repRecs();const n=rs.reduce((a,r)=>a+(r.mats||r.materials||[]).length,0);
+  document.getElementById('rp-cnt').innerHTML='<div class="crn">'+rs.length+'</div><div class="cru">ใบรับ ('+n+' รายการวัตถุดิบ)</div>';
+}
+function printReport(){
+  const rs=repRecs();
+  if(repMode==='sup'&&!document.getElementById('rp-sup').value){showToast('เลือก Supplier ก่อน','err');return;}
+  if(!rs.length){showToast('ไม่พบข้อมูลตามเงื่อนไข','err');return;}
+  const day=repMode==='day';
+  const now=new Date();const stamp=fmtD(todayStr())+' '+now.toTimeString().slice(0,5);
+  const dates=rs.map(r=>r.date).sort();
+  const f=document.getElementById('rp-from').value,t=document.getElementById('rp-to').value;
+  const scope=day?'วันที่รับ: <b>'+fmtD(document.getElementById('rp-date').value)+'</b>'
+    :'Supplier: <b>'+escH(document.getElementById('rp-sup').value)+'</b> &nbsp;|&nbsp; ช่วงวันที่: <b>'+fmtD(f||dates[0])+' – '+fmtD(t||dates[dates.length-1])+'</b>';
+  let no=0,cP=0,cH=0,cR=0;
+  const body=rs.map(r=>{
+    const mats=r.mats||r.materials||[];
+    return mats.map((m,i)=>{
+      no++;const mi=MATERIALS.find(x=>x.code===m.code)||{};
+      if(m.result==='PASS')cP++;else if(m.result==='REJECT')cR++;else cH++;
+      const ts=[m.t1,m.t2,m.t3].filter(x=>x!==''&&x!==null&&x!==undefined).join(' / ')||'—';
+      const insp=inspSummary(m)||('Visual '+(m.visual||'—')+' | Leak '+(m.leak||'—')+(docSummary(m)?'':' | Document '+(m.doc||'—')));
+      const col=m.result==='PASS'?'#2e7d32':m.result==='REJECT'?'#c0392b':'#b35c00';
+      const bg=m.result==='PASS'?'#e8f5e9':m.result==='REJECT'?'#ffebee':'#fff3e0';
+      const span=i===0?' rowspan="'+mats.length+'"':'';
+      const head=i===0?'<td'+span+' class="mono">'+escH(r.docNo)+(r.poNo?'<br>PO/DO: '+escH(r.poNo):'')+'</td><td'+span+' class="c">'+(day?'':fmtD(r.date)+'<br>')+escH(r.time||'—')+'</td>'+
+        (day?'<td'+span+'>'+escH(r.supplier)+'</td>':'')+
+        '<td'+span+' class="c">'+escH(r.carReg||'—')+'<br>'+(r.carTemp!=null?r.carTemp+'°C':'—')+'</td>':'';
+      const tail=i===0?'<td'+span+'>'+escH(r.inspector||'')+'</td>':'';
+      return'<tr><td class="c">'+no+'</td>'+head+'<td class="mono">'+escH(m.code||'—')+'</td><td>'+escH(m.name||mi.name||'—')+'</td><td>'+escH(m.lot||'—')+'</td>'+
+        '<td class="c">'+(m.qty!==''&&m.qty!=null?escH(m.qty)+' '+escH(m.unit||''):'—')+'</td><td class="c">'+fmtD(m.mfg)+'<br>'+fmtD(m.exp)+'</td><td class="c">'+escH(ts)+'</td>'+
+        '<td class="s">'+escH(insp)+(wtSummary(m)?'<br><b>น้ำหนัก:</b> '+escH(wtSummary(m)):'')+(docSummary(m)?'<br><b>เอกสาร:</b> '+escH(docSummary(m)):'')+'</td><td class="c" style="background:'+bg+';color:'+col+';font-weight:700">'+escH(m.result||'—')+'</td>'+tail+'<td class="s">'+escH(m.note||'')+'</td></tr>';
+    }).join('');
+  }).join('');
+  const docs=new Set(rs.map(r=>r.docNo));const ncs=ncLogs.filter(n=>docs.has(n.docNo));
+  const ncHtml=ncs.length?'<div class="sec">รายการ NC ที่เกี่ยวข้อง ('+ncs.length+' รายการ)</div><table><thead><tr><th>NC No.</th><th>เลขที่เอกสาร</th><th>ประเภทปัญหา</th><th>รายละเอียด</th><th>Corrective Action</th><th>สถานะ</th></tr></thead><tbody>'+
+    ncs.map(n=>'<tr><td class="mono c">'+escH(n.id)+'</td><td class="mono">'+escH(n.docNo)+'</td><td>'+escH(n.failType)+'</td><td class="s">'+escH(n.note||'')+'</td><td class="s">'+escH(n.corrective||'')+'</td><td class="c">'+escH(n.status)+(n.closedDate?' '+fmtD(n.closedDate):'')+'</td></tr>').join('')+'</tbody></table>':'';
+  const html=`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>FM-QC-001 รายงาน${day?'รายวัน':'ราย Supplier'}</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Sarabun',sans-serif;font-size:11px;color:#1a2130;background:#fff}
+@page{size:A4 landscape;margin:9mm 9mm}
+@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.no-print{display:none!important}thead{display:table-header-group}tr{page-break-inside:avoid}}
+.hd{display:flex;align-items:center;gap:12px;border-bottom:2px solid #0f2744;padding-bottom:8px}
+.hd img{width:54px;height:54px;object-fit:contain}
+.co{font-size:16px;font-weight:700;color:#0f2744}.co small{display:block;font-size:11px;font-weight:500;color:#5c6470}
+.ref{margin-left:auto;text-align:right;font-size:10px;color:#5c6470;line-height:1.7}
+h1{font-size:15px;text-align:center;margin:8px 0 2px;color:#0f2744}
+.scope{text-align:center;font-size:12px;margin-bottom:8px}
+.sum{display:flex;gap:8px;margin-bottom:8px}
+.sum div{flex:1;border:1px solid #dde1e7;border-radius:6px;padding:5px 8px;text-align:center}
+.sum b{display:block;font-size:16px}
+table{width:100%;border-collapse:collapse;margin-bottom:8px}
+th{background:#0f2744;color:#fff;padding:5px 4px;font-size:10px;font-weight:600;border:1px solid #0f2744}
+td{padding:4px 5px;border:1px solid #c9ced6;vertical-align:top}
+.c{text-align:center}.mono{font-family:monospace;font-size:10px}.s{font-size:10px}
+.sec{font-size:12px;font-weight:700;color:#0f2744;margin:8px 0 4px}
+.sg{display:flex;gap:40px;margin-top:22px;page-break-inside:avoid}
+.sg div{flex:1;text-align:center;font-size:11px}
+.sg .ln{border-bottom:1px solid #333;height:34px;margin:0 30px 5px}
+.ft{margin-top:10px;font-size:9px;color:#5c6470;display:flex;justify-content:space-between;border-top:1px solid #dde1e7;padding-top:4px}
+.pb{position:fixed;top:10px;right:10px;padding:10px 20px;background:#0d7a5f;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer}
+</style></head><body>
+<button class="pb no-print" onclick="window.print()">🖨 พิมพ์ / บันทึก PDF</button>
+<div class="hd"><img src="${LOGO_B64}"><div class="co">บริษัท พระจันทร์ ๕๐ จำกัด<small>Puisabpak — Quality Control (QC)</small></div>
+<div class="ref">รหัสเอกสาร: FM-QC-001<br>อ้างอิง: SD-QC-001<br>พิมพ์: ${stamp}</div></div>
+<h1>รายงานการตรวจรับและตรวจสอบวัตถุดิบ — ${day?'รายวัน':'ราย Supplier'}</h1>
+<div class="scope">${scope}</div>
+<div class="sum"><div><b>${rs.length}</b>ใบรับ</div><div><b>${no}</b>รายการวัตถุดิบ</div><div style="color:#2e7d32"><b>${cP}</b>PASS</div><div style="color:#b35c00"><b>${cH}</b>HOLD</div><div style="color:#c0392b"><b>${cR}</b>REJECT</div><div><b>${ncs.filter(n=>n.status==='Open').length}</b>NC ที่ยังเปิด</div></div>
+<table><thead><tr><th>#</th><th>เลขที่เอกสาร</th><th>${day?'เวลา':'วันที่ / เวลา'}</th>${day?'<th>Supplier</th>':''}<th>ทะเบียนรถ /<br>อุณหภูมิรถ</th><th>รหัส</th><th>วัตถุดิบ</th><th>Lot No</th><th>จำนวน</th><th>วันผลิต /<br>วันหมดอายุ</th><th>อุณหภูมิ<br>(°C)</th><th>ผลการสุ่มตรวจ</th><th>ผล</th><th>ผู้ตรวจรับ QC</th><th>หมายเหตุ</th></tr></thead>
+<tbody>${body}</tbody></table>
+${ncHtml}
+<div class="sg"><div><div class="ln"></div>จัดทำโดย (QC Officer)<br>วันที่ ____/____/______</div><div><div class="ln"></div>ทบทวนโดย (QC Supervisor)<br>วันที่ ____/____/______</div></div>
+<div class="ft"><span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) | FM-QC-001 | SD-QC-001</span><span>พิมพ์: ${stamp}</span></div>
+<script>window.onload=function(){setTimeout(()=>{if(document.fonts)document.fonts.ready.then(()=>window.print());else window.print();},800);};<\/script>
+</body></html>`;
+  const w=window.open('','_blank','width=1150,height=800');
+  if(!w){showToast('กรุณาอนุญาต Popup','err');return;}
+  w.document.open();w.document.write(html);w.document.close();
+}
+
+// ════ การตรวจเอกสาร (PO/DO, ใบส่งของ, COA, ฉลาก) — ตาม FM-QC-001 ════
+const COA_TXT={Y:'มี',N:'ไม่มี',NA:'ไม่กำหนด'};
+function docEval(m){            // PASS เมื่อเอกสารครบและถูกต้อง
+  if(m.docDo==='FAIL'||m.docLabel==='FAIL')return'FAIL';
+  if(m.coa==='N')return'FAIL';
+  if(m.coa==='Y'&&m.coaOk==='FAIL')return'FAIL';
+  return'PASS';
+}
+function docApply(m){
+  m.doc=docEval(m);const v=m.doc==='FAIL'?'HOLD':'PASS';const prev=m.docV;m.docV=v;
+  if(m.result===prev||RES_RANK[m.result]<RES_RANK[v])m.result=v;
+  if(m.aql)aqlApply(m);if(isPork(m))porkApply(m);enforceMin(m);
+}
+function setDoc(idx,f,v){const m=curMats.find(x=>x.idx===idx);if(m){m[f]=v;if(f==='coa'&&v!=='Y'){m.coaOk='';}docApply(m);}renderMats();}
+function docSummary(m){
+  if(!m||m.coa===undefined)return'';const s=v=>v==='PASS'?'ผ่าน':v==='FAIL'?'ไม่ผ่าน':'—';
+  return'ใบส่งของ '+s(m.docDo)+' | COA '+(COA_TXT[m.coa]||'—')+(m.coa==='Y'?(m.coaNo?' ('+m.coaNo+')':'')+' '+s(m.coaOk):'')+' | ฉลาก/Lot '+s(m.docLabel);
+}
+function docCheck(m,no){
+  if(m.coa===undefined)return'';const p='รายการที่ '+no+': ';
+  if(!m.coa)return p+'เลือกสถานะ COA (มี / ไม่มี / ไม่กำหนด)';
+  if(m.coa==='Y'&&!m.coaOk)return p+'ระบุผลตรวจ COA (ผ่าน / ไม่ผ่าน)';
+  if(docEval(m)==='FAIL'&&RES_RANK[m.result]===0)return p+'เอกสารไม่ครบ/ไม่ผ่าน — ให้ผล PASS ไม่ได้ (HOLD หรือ REJECT)';
+  return'';
+}
+function docHtml(m){
+  const i=m.idx;const lb=t=>'<label style="font-size:12px;font-weight:600;color:var(--gray4);margin-bottom:6px;display:block">'+t+'</label>';
+  const pf=f=>'<div class="trow"><button type="button" class="tp pass'+(m[f]==='PASS'?' sel':'')+'" onclick="setDoc('+i+',\''+f+'\',\'PASS\')">✓ ผ่าน</button><button type="button" class="tp fail'+(m[f]==='FAIL'?' sel':'')+'" onclick="setDoc('+i+',\''+f+'\',\'FAIL\')">✗ ไม่ผ่าน</button></div>';
+  const bad=docEval(m)==='FAIL';
+  return'<div class="aq" style="background:#f8fafc;border-color:var(--border)"><div class="aq-h" style="color:var(--navy)">&#x1F4C4; การตรวจเอกสาร</div><div class="aq-s">ใบส่งของ / COA / ฉลาก — เทียบกับ PO และ Raw Material Specification</div>'+
+    '<div style="margin-bottom:10px">'+lb('ใบส่งของ / Invoice ตรงกับ PO (ชนิด จำนวน)')+pf('docDo')+'</div>'+
+    '<div style="margin-bottom:10px">'+lb('COA (Certificate of Analysis) <span class="req">*</span>')+'<div class="trow">'+
+      '<button type="button" class="tp pass'+(m.coa==='Y'?' sel':'')+'" onclick="setDoc('+i+',\'coa\',\'Y\')">มี</button>'+
+      '<button type="button" class="tp fail'+(m.coa==='N'?' sel':'')+'" onclick="setDoc('+i+',\'coa\',\'N\')">ไม่มี</button>'+
+      '<button type="button" class="tp na'+(m.coa==='NA'?' sel':'')+'" onclick="setDoc('+i+',\'coa\',\'NA\')">ไม่กำหนด</button></div></div>'+
+    (m.coa==='Y'?'<div class="fg"><label>เลขที่ COA / วันที่ออก</label><input type="text" value="'+escH(m.coaNo||'')+'" placeholder="เช่น COA-12345" oninput="setMat('+i+',\'coaNo\',this.value)"></div>'+
+      '<div style="margin-bottom:10px">'+lb('COA ตรงกับ Lot และผลวิเคราะห์ผ่าน Specification <span class="req">*</span>')+pf('coaOk')+'</div>':'')+
+    (m.coa==='N'?'<div class="aq-v hold" style="margin-bottom:10px">COA กำหนดให้มีแต่ไม่ได้รับ — HOLD จนกว่าจะได้เอกสาร</div>':'')+
+    '<div>'+lb('ฉลาก / ชื่อวัตถุดิบ / Lot ตรงกับเอกสาร')+pf('docLabel')+'</div>'+
+    (bad&&m.coa!=='N'?'<div class="aq-v hold" style="margin-top:10px">เอกสารไม่ผ่าน — HOLD และออก NC</div>':'')+'</div>';
+}
+
+// ════ สุ่มชั่งน้ำหนักตามจำนวนตัวอย่าง (วัตถุดิบทุกรายการ ยกเว้นหมูบดซึ่งชั่งในฟอร์ม IQC) ════
+function wtOn(m){const mi=MATERIALS.find(x=>x.code===m.code);return !!mi&&mi.type==='RM'&&!isPork(m);}
+function wtCalc(m){
+  if(!wtOn(m))return null;
+  const mi=MATERIALS.find(x=>x.code===m.code);
+  if(m.wtLab===undefined||m.wtLab===null)m.wtLab=m.aql?AQL_BAG_KG:'';
+  if(m.wtN===undefined)m.wtN='';if(!Array.isArray(m.wt))m.wt=[];
+  let N,n,rule,auto=false;
+  if(m.aql){const c=aqlCalc(m);N=c.bags;n=c.plan?c.plan.n:Math.floor(c.sBags);rule='ตามแผน OPL';}
+  else{
+    N=Math.floor(aqlN(m.wtN));
+    if(!N&&mi.unit!=='กิโลกรัม'&&mi.unit!=='กรัม'){N=Math.floor(aqlN(m.qty));auto=N>0;}   // หน่วยนับเป็นภาชนะอยู่แล้ว
+    if(mi.cat==='Meat'){n=N?Math.max(1,Math.ceil(N*0.1)):0;rule='10% ของจำนวนภาชนะ';}
+    else{n=N?Math.min(N,Math.ceil(Math.sqrt(N)+1)):0;rule='√N+1';}
+  }
+  n=Math.min(n||0,30);
+  while(m.wt.length<n)m.wt.push('');
+  const vals=m.wt.slice(0,n);const lab=pkNum(m.wtLab);
+  const miss=[];if(!N)miss.push(m.aql?'จำนวนถุงที่รับเข้า':'จำนวนภาชนะบรรจุที่รับ');
+  else if(!n)miss.push('จำนวนถุงที่สุ่ม');
+  else if(vals.some(v=>pkNum(v)===null))miss.push('น้ำหนักตัวอย่างให้ครบ '+n+' ตัวอย่าง');
+  const low=[];if(lab!==null)vals.forEach((v,i)=>{const x=pkNum(v);if(x!==null&&x<lab)low.push('ตัวอย่างที่ '+(i+1)+': '+x+' kg ไม่ครบ '+lab+' kg');});
+  const verdict=low.length?'HOLD':(miss.length?null:'PASS');
+  return{N,n,rule,auto,vals,lab,miss,low,verdict};
+}
+function enforceMin(m){          // ผลการตรวจรับต้องไม่ดีกว่าผลของทุกหัวข้อตรวจ
+  let r=0;const up=v=>{if(v&&RES_RANK[v]>r)r=RES_RANK[v];};
+  if(m.coa!==undefined&&docEval(m)==='FAIL')up('HOLD');
+  if(m.aql)up(aqlCalc(m).verdict);
+  if(isPork(m))up(porkCalc(m).verdict);
+  const w=wtCalc(m);if(w)up(w.verdict);
+  if(RES_RANK[m.result]<r)m.result=['PASS','HOLD','REJECT'][r];
+}
+function wtApply(m){
+  const w=wtCalc(m);if(!w)return null;const prev=m.wtV;m.wtV=w.verdict||'';
+  if(w.verdict&&m.result===prev)m.result=w.verdict;
+  enforceMin(m);return w;
+}
+function wtSt(v,lab){const x=pkNum(v);return x===null?'':lab===null?'rec':x>=lab?'pass':'fail';}
+function wtStTxt(s){return s==='pass'?'✓ Pass':s==='fail'?'✗ ไม่ครบ':s==='rec'?'บันทึกแล้ว':'';}
+function wtPlanHtml(m,w){
+  if(!w.N)return m.aql?'กรอกจำนวนถุงที่รับเข้าในแผน OPL ด้านบนก่อน':'กรอกจำนวนภาชนะบรรจุที่รับ (ถุง / กล่อง / ปี๊บ / แกลลอน) เพื่อคำนวณจำนวนตัวอย่าง';
+  return'รับเข้า '+w.N+' ภาชนะ'+(w.auto?' (จากช่องจำนวน)':'')+' → ชั่ง <b>'+w.n+'</b> ตัวอย่าง ('+w.rule+')'+(w.lab!==null?' | เกณฑ์: ไม่น้อยกว่า '+w.lab+' kg':' | ยังไม่ระบุน้ำหนักตามฉลาก — บันทึกค่าอย่างเดียว');
+}
+function wtRowsHtml(m,w){
+  const i=m.idx;
+  return'<div class="aq-d">'+w.vals.map((v,k)=>{const s=wtSt(v,w.lab);
+    return'<div><label style="min-height:0">ตัวอย่างที่ '+(k+1)+' (kg)</label><input type="number" min="0" step="0.01" inputmode="decimal" value="'+escH(v??'')+'" placeholder="kg" oninput="setWt('+i+','+k+',this.value)">'+
+      '<div class="tst '+(s==='rec'?'':s)+'" id="wts-'+i+'-'+k+'" style="margin-bottom:8px">'+wtStTxt(s)+'</div></div>';}).join('')+'</div>';
+}
+function wtVerdictHtml(idx,w){
+  const cls=w.verdict==='PASS'?'pass':w.verdict==='HOLD'?'hold':'na';
+  const head=w.verdict==='PASS'?(w.lab!==null?'&#x2714; น้ำหนักครบทุกตัวอย่าง':'&#x2714; บันทึกน้ำหนักครบทุกตัวอย่าง'):w.verdict==='HOLD'?'&#x26A0; HOLD — น้ำหนักไม่ครบตามฉลาก':'รอข้อมูลการชั่ง';
+  return'<div class="aq-v '+cls+'" id="wtv-'+idx+'">'+head+w.low.map(x=>'<small>'+x+'</small>').join('')+(w.miss.length&&w.verdict!=='HOLD'?'<small>ยังไม่ครบ: '+w.miss.join(', ')+'</small>':'')+'</div>';
+}
+function wtHtml(m){
+  const w=wtCalc(m);if(!w)return'';const i=m.idx;
+  const lab='<div class="fg"><label>น้ำหนักตามฉลาก / หน้าถุง (kg)</label><input type="number" min="0" step="0.01" inputmode="decimal" value="'+escH(m.wtLab??'')+'" placeholder="kg ต่อภาชนะ" oninput="setWtF('+i+',\'wtLab\',this.value)"></div>';
+  return'<div class="aq" style="background:#f8fafc;border-color:var(--border)"><div class="aq-h" style="color:var(--navy)">&#x2696;&#xFE0F; สุ่มชั่งน้ำหนักตามจำนวนตัวอย่าง</div><div class="aq-s">ชั่งน้ำหนักสุทธิ (หักน้ำหนักภาชนะ) ของทุกตัวอย่างที่สุ่ม</div>'+
+    (m.aql?lab:'<div class="ig"><div class="fg"><label>จำนวนภาชนะบรรจุที่รับ <span class="req">*</span></label><input type="number" min="1" step="1" inputmode="numeric" value="'+escH(m.wtN??'')+'" placeholder="'+(w.auto?'อัตโนมัติ '+w.N:'ถุง / กล่อง / ปี๊บ')+'" oninput="setWtF('+i+',\'wtN\',this.value)"></div>'+lab+'</div>')+
+    '<div class="aq-plan" id="wtp-'+i+'">'+wtPlanHtml(m,w)+'</div>'+
+    '<div id="wtr-'+i+'">'+wtRowsHtml(m,w)+'</div>'+wtVerdictHtml(i,w)+'</div>';
+}
+function wtRefresh(idx,rows){
+  const m=curMats.find(x=>x.idx===idx);if(!m)return;const w=wtApply(m);if(!w)return;
+  const pe=document.getElementById('wtp-'+idx);if(pe)pe.innerHTML=wtPlanHtml(m,w);
+  const re=document.getElementById('wtr-'+idx);
+  if(re&&(rows||re.querySelectorAll('input').length!==w.n))re.innerHTML=wtRowsHtml(m,w);
+  const ve=document.getElementById('wtv-'+idx);if(ve)ve.outerHTML=wtVerdictHtml(idx,w);
+  const rs=document.getElementById('rs-'+idx);if(rs)rs.innerHTML=resPills(idx);
+}
+function setWtF(idx,f,v){const m=curMats.find(x=>x.idx===idx);if(!m)return;m[f]=v;wtRefresh(idx,true);}
+function setWt(idx,k,v){
+  const m=curMats.find(x=>x.idx===idx);if(!m||!Array.isArray(m.wt))return;m.wt[k]=v;
+  const w=wtCalc(m);const s=wtSt(v,w.lab);const el=document.getElementById('wts-'+idx+'-'+k);
+  if(el){el.className='tst '+(s==='rec'?'':s);el.textContent=wtStTxt(s);}
+  wtRefresh(idx);
+}
+function wtSummary(m){
+  if(!m||!Array.isArray(m.wt))return'';const w=wtCalc(m);if(!w||!w.n)return'';
+  return'ชั่ง '+w.n+' ตัวอย่างจาก '+w.N+' ภาชนะ: '+w.vals.map(v=>v===''?'-':v).join(' / ')+' kg'+(w.lab!==null?' (ฉลาก '+w.lab+' kg) '+(w.verdict==='PASS'?'ครบ':w.verdict==='HOLD'?'ไม่ครบ':''):'');
+}
+function wtCheck(m,no){
+  const w=wtCalc(m);if(!w)return'';const p='รายการที่ '+no+': ';
+  if(w.miss.length)return p+'สุ่มชั่งน้ำหนัก — กรอก'+w.miss[0];
+  if(w.verdict==='HOLD'&&RES_RANK[m.result]===0)return p+'น้ำหนักไม่ครบตามฉลาก — ให้ผล PASS ไม่ได้';
+  return'';
+}
+
+function showToast(msg,type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='toast show '+(type||'');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2500);
+}
+function renderHist2(){renderHist();}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+# FM-QC-001 receiving inspection app: one static page served by its own Worker.
+# Records stay in the browser of the device that fills them in; this Worker stores nothing.
+name = "puisabpak-receiving"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "./public"
