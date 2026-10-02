@@ -1,4 +1,4 @@
-import { COMPANY_SHORT, COMPANY_NAME, COMPANY_NAME_EN, FORM_CODE_CAPA, FORM_REVISION } from '../config'
+import { LOGO_URL, COMPANY_NAME, COMPANY_NAME_EN, FORM_CODE_CAPA, FORM_REVISION } from '../config'
 
 const fmt = (d) => {
   if (!d) return '-'
@@ -34,7 +34,7 @@ export default function CAPAFormA4({ data }) {
         <tbody>
           <tr>
             <td rowSpan={3} style={{ width: '22%', textAlign: 'center', padding: '4px' }}>
-              <div style={{ fontSize: '13pt', fontWeight: '700', color: '#1a365d' }}>{COMPANY_SHORT}</div>
+              <img src={LOGO_URL} alt={COMPANY_NAME} style={{ height: '13mm', width: '13mm', objectFit: 'contain', display: 'block', margin: '0 auto 1mm' }} />
               <div style={{ fontSize: '7.5pt', color: '#444', lineHeight: '1.4' }}>{COMPANY_NAME}</div>
               <div style={{ fontSize: '7pt', color: '#666' }}>{COMPANY_NAME_EN}</div>
             </td>

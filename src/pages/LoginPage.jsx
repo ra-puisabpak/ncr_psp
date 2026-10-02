@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { LogIn } from 'lucide-react'
 import { useAuth } from '../auth'
-import { COMPANY_NAME } from '../config'
+import { COMPANY_NAME, LOGO_URL } from '../config'
 
 const inputCls = 'border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400 w-full'
 
@@ -35,6 +35,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
       <form onSubmit={submit} className="w-full max-w-sm bg-white rounded-2xl shadow p-6 flex flex-col gap-4">
         <div>
+          <img src={LOGO_URL} alt="" className="w-20 h-20 mx-auto mb-3 object-contain" />
           <div className="font-bold text-blue-900 text-lg leading-tight">{COMPANY_NAME}</div>
           <div className="text-sm text-gray-500">ระบบ NCR / CAPA · เข้าสู่ระบบ</div>
         </div>
