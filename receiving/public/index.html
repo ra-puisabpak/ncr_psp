@@ -166,48 +166,47 @@ function syncFromCloud(){
 }
 window.addEventListener('online',()=>{if(session&&pendingCount())refreshAll(false);});
 // ════ แสดงเอกสารสำหรับพิมพ์ในหน้าเดียวกัน (ไม่ใช้ pop-up ซึ่งมือถือมักบล็อก) ════
-function putPrintDoc(key,html){
-  return new Promise((res,rej)=>{
-    const rq=indexedDB.open('fmqc001_print',1);
-    rq.onupgradeneeded=()=>rq.result.createObjectStore('docs');
-    rq.onerror=()=>rej(rq.error);
-    rq.onsuccess=()=>{const tx=rq.result.transaction('docs','readwrite');const st=tx.objectStore('docs');st.clear();st.put(html,key);
-      tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);};
-  });
-}
+// แสดงเอกสารในแอปแล้วสั่งพิมพ์จากหน้าเดียวกัน (วิธีเดียวกับระบบ NCR e-Form) — ไม่เปิดหน้าต่างหรือแท็บใหม่
+// ใช้ Shadow DOM เพื่อให้รูปแบบของเอกสารไม่ปนกับรูปแบบของแอป
 async function showPrint(html){
   const old=document.getElementById('_pv');if(old)old.remove();
-  // เปิดจากไอคอนหน้าจอหลัก (โดยเฉพาะ iPhone) แอปสั่งพิมพ์เองไม่ได้ จึงฝากเอกสารไว้ที่เซิร์ฟเวอร์ชั่วคราว
-  // แล้วเปิดด้วยเบราว์เซอร์ของเครื่อง ซึ่งพิมพ์และบันทึก PDF ได้ตามปกติ
-  const inApp=!!(navigator.standalone||(window.matchMedia&&['standalone','fullscreen','minimal-ui'].some(m=>matchMedia('(display-mode: '+m+')').matches)));
+  const doc=new DOMParser().parseFromString(html,'text/html');
+  doc.querySelectorAll('script,.print-btn,.pb,link').forEach(e=>e.remove());
+  const css=[...doc.querySelectorAll('style')].map(e=>e.textContent).join('\n');
+  const page=(css.match(/@page\s*\{[^}]*\}/)||['@page{size:A4;margin:10mm 12mm}'])[0];
+  const scoped=css.replace(/@page\s*\{[^}]*\}/g,'').replace(/(^|[\s},{])body(?=\s*\{)/g,'$1.pbody').replace(/@media screen\{\.pbody\{[^}]*\}\}/,'');
   const ov=document.createElement('div');ov.id='_pv';
-  ov.style.cssText='position:fixed;inset:0;z-index:10000;background:#fff;display:flex;flex-direction:column';
   const b='flex:1;padding:12px 6px;border-radius:10px;border:none;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;text-align:center;text-decoration:none';
-  ov.innerHTML=`<div style="display:flex;gap:8px;padding:10px;background:#0f2744">
-    <a id="_pvp" style="${b};flex:2;background:#5c6470;color:#fff;pointer-events:none">&#x23F3; กำลังเตรียมเอกสาร...</a>
-    <button id="_pvc" style="${b};background:#e2e8f0;color:#0f2744">ปิด</button></div>
-    <div id="_pvh" style="padding:6px 12px;font-size:12px;color:#5c6470;background:#f1f5f9">ตัวอย่างเอกสาร</div>
-    <iframe id="_pvf" sandbox="" title="ตัวอย่างเอกสาร" style="flex:1;border:0;width:100%;background:#fff"></iframe>`;
+  ov.innerHTML=`<style>
+    #_pv{position:fixed;inset:0;z-index:10000;background:#eef1f5;display:flex;flex-direction:column}
+    #_pvs{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:10px}
+    #_pvd{background:#fff;padding:12px;box-shadow:0 1px 6px rgba(0,0,0,.15);margin:0 auto}
+    @media print{
+      ${page}
+      html,body{height:auto!important;overflow:visible!important;display:block!important;background:#fff!important}
+      body>*:not(#_pv){display:none!important}
+      #_pv{position:static!important;display:block!important;background:#fff!important}
+      #_pvb,#_pvh{display:none!important}
+      #_pvs{overflow:visible!important;padding:0!important}
+      #_pvd{box-shadow:none!important;padding:0!important;width:auto!important;zoom:1!important}
+    }</style>
+    <div id="_pvb" style="display:flex;gap:8px;padding:10px;background:#0f2744">
+      <button id="_pvc" style="${b};background:#e2e8f0;color:#0f2744">&#x2190; กลับ</button>
+      <button id="_pvp" style="${b};flex:2;background:#0d7a5f;color:#fff">&#x1F5A8; พิมพ์ / บันทึก PDF</button></div>
+    <div id="_pvh" style="padding:6px 12px;font-size:12px;color:#5c6470;background:#f1f5f9;display:flex;justify-content:space-between;gap:8px;align-items:center">
+      <span>ตัวอย่างเอกสาร</span><a id="_pvo" target="_blank" rel="noopener" style="display:none;color:#0d7a5f;font-weight:700">เปิดในเบราว์เซอร์</a></div>
+    <div id="_pvs"><div id="_pvd"></div></div>`;
   document.body.appendChild(ov);
-  ov.querySelector('#_pvf').srcdoc=html.replace('</head>','<style>.no-print{display:none!important}</style></head>');
-  ov.querySelector('#_pvc').onclick=()=>ov.remove();
-  const pb=ov.querySelector('#_pvp'),hint=ov.querySelector('#_pvh');
-  const ready=(href,newTab,text)=>{
-    if(!ov.isConnected)return;
-    pb.href=href;if(newTab){pb.target='_blank';pb.rel='noopener';}
-    pb.style.background='#0d7a5f';pb.style.pointerEvents='auto';pb.innerHTML='&#x1F5A8; พิมพ์ / บันทึก PDF';hint.textContent=text;
-  };
-  let url=null;
-  if(session){try{url=(await api('POST','/api/print-doc',{html})).url;}catch(e){}}
-  if(url){ready(url,true,inApp?'กดปุ่มเขียวเพื่อเปิดเอกสารในเบราว์เซอร์ แล้วเลือกเครื่องพิมพ์หรือบันทึก PDF (ลิงก์ใช้ได้ 30 นาที)':'กดปุ่มเขียวเพื่อเปิดหน้าพิมพ์ในแท็บใหม่');return;}
-  // ส่งขึ้นเซิร์ฟเวอร์ไม่ได้ (ไม่มีสัญญาณ) — ใช้หน้าพิมพ์ภายในเครื่องแทน
-  const key=newUid();
-  try{await putPrintDoc(key,html);}catch(e){
-    if(ov.isConnected){pb.style.background='#e8900a';pb.textContent='เปิดหน้าพิมพ์ไม่ได้';hint.textContent='ไม่มีสัญญาณอินเทอร์เน็ต และเครื่องนี้เก็บเอกสารชั่วคราวไม่ได้ ลองใหม่เมื่อมีสัญญาณ';}
-    return;
-  }
-  ready('print#'+key,!inApp,inApp?'ไม่มีสัญญาณ — เปิดหน้าพิมพ์ในแอป (กด "กลับ" เพื่อกลับมา) หากหน้าต่างพิมพ์ไม่ขึ้น ให้ลองใหม่เมื่อมีสัญญาณ':'กดปุ่มเขียวเพื่อเปิดหน้าพิมพ์ในแท็บใหม่');
-  if(inApp)pb.onclick=e=>{if(typeof curMats!=='undefined'&&curMats.length&&!confirm('ใบตรวจรับที่กำลังกรอกยังไม่ได้บันทึก และจะหายเมื่อไปหน้าพิมพ์\nไปหน้าพิมพ์หรือไม่?'))e.preventDefault();};
+  const root=ov.querySelector('#_pvd').attachShadow({mode:'open'});
+  root.innerHTML='<style>'+scoped+'\n.pbody{display:block}</style><div class="pbody">'+doc.body.innerHTML+'</div>';
+  // ตัวอย่างบนจอ: จัดหน้ากว้างเท่ากระดาษจริงแล้วย่อให้พอดีจอ (ตอนพิมพ์ใช้ขนาดจริง)
+  const pd=ov.querySelector('#_pvd'),paperW=(/landscape/.test(page)?1054:703)+24;
+  const fit=()=>{pd.style.width=paperW+'px';pd.style.zoom=Math.min(1,(ov.querySelector('#_pvs').clientWidth-20)/paperW);};
+  fit();window.addEventListener('resize',fit);
+  ov.querySelector('#_pvc').onclick=()=>{window.removeEventListener('resize',fit);ov.remove();};
+  ov.querySelector('#_pvp').onclick=()=>window.print();
+  // ทางสำรอง: ฝากเอกสารไว้ที่เซิร์ฟเวอร์ 30 นาที แล้วเปิดด้วยเบราว์เซอร์ของเครื่อง เผื่อเครื่องที่สั่งพิมพ์จากแอปไม่ได้
+  if(session){try{const r=await api('POST','/api/print-doc',{html});const o=ov.querySelector('#_pvo');if(o&&ov.isConnected){o.href=r.url;o.style.display='inline';}}catch(e){}}
 }
 function exportExcelCloud(){exportExcel();}
 function todayStr(){const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');}
