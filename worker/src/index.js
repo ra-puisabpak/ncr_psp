@@ -5,6 +5,9 @@
 const SESSION_HOURS = 12;
 const SUPPLIER_LINK_DAYS = 14;
 const MAX_FAILED = 5;
+const MAX_PHOTOS = 8;            // per NCR
+const MAX_PHOTO_BYTES = 1024 * 1024; // after the phone has resized the picture
+const PHOTO_TYPES = { 'image/jpeg': [0xff, 0xd8, 0xff], 'image/png': [0x89, 0x50, 0x4e, 0x47], 'image/webp': [0x52, 0x49, 0x46, 0x46] };
 const LOCK_MINUTES = 15;
 
 const ROLES = ['QA_MANAGER', 'FSTL', 'QC', 'SUPERVISOR', 'VIEWER'];
@@ -89,6 +92,27 @@ function safeEqual(a, b) {
 function passwordProblem(pw) {
   if (typeof pw !== 'string' || pw.length < 8) return 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร';
   return null;
+}
+
+function decodePhoto(b) {
+  const type = String(b.content_type || '');
+  const magic = PHOTO_TYPES[type];
+  if (!magic) fail(400, 'รองรับเฉพาะไฟล์ภาพ JPEG, PNG หรือ WebP');
+  const b64 = String(b.data || '').replace(/^data:[^,]*,/, '');
+  if (!b64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) fail(400, 'ข้อมูลภาพไม่ถูกต้อง');
+  if (b64.length * 0.75 > MAX_PHOTO_BYTES) fail(413, 'ไฟล์ภาพใหญ่เกิน 1 MB');
+  let head;
+  try { head = atob(b64.slice(0, 16)); } catch { fail(400, 'ข้อมูลภาพไม่ถูกต้อง'); }
+  if (!magic.every((v, i) => head.charCodeAt(i) === v)) fail(400, 'ไฟล์ไม่ใช่ภาพตามชนิดที่ระบุ');
+  return { type, b64, size: Math.floor(b64.length * 0.75) };
+}
+function photoResponse(row, cors) {
+  const bin = atob(row.data);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Response(bytes, { headers: {
+    'Content-Type': row.content_type, 'Cache-Control': 'private, max-age=3600',
+    'X-Content-Type-Options': 'nosniff', 'Content-Disposition': 'inline', ...cors } });
 }
 
 class HttpError extends Error {
@@ -243,7 +267,7 @@ export default {
       }
 
       // ----- supplier link endpoints (the token is the only credential; no login) -----
-      const sup = path.match(/^\/api\/supplier\/([A-Za-z0-9_-]{20,})$/);
+      const sup = path.match(/^\/api\/supplier\/([A-Za-z0-9_-]{20,})(?:\/photos\/(\d+))?$/);
       if (sup) {
         const link = await DB.prepare('SELECT * FROM supplier_links WHERE token_hash=?').bind(await sha256(sup[1])).first();
         const cfg = link && SUPPLIER[link.entity];
@@ -251,9 +275,20 @@ export default {
         const doc = await DB.prepare(`SELECT * FROM ${cfg.table} WHERE ${cfg.pk}=?`).bind(link.entity_id).first();
         if (!doc) fail(404, 'ไม่พบเอกสาร');
         const locked = cfg.locked(doc);
+        if (sup[2]) {
+          // A photo of the one NCR this link opens; photos of other documents are not reachable.
+          if (method !== 'GET' || link.entity !== 'ncr') fail(404, 'ไม่พบภาพ');
+          const ph = await DB.prepare('SELECT content_type, data FROM ncr_photos WHERE id=? AND ncr_id=? AND removed=0')
+            .bind(Number(sup[2]), link.entity_id).first();
+          if (!ph) fail(404, 'ไม่พบภาพ');
+          return photoResponse(ph, cors);
+        }
         if (method === 'GET') {
+          const photos = link.entity === 'ncr'
+            ? (await DB.prepare('SELECT id FROM ncr_photos WHERE ncr_id=? AND removed=0 ORDER BY id').bind(link.entity_id).all()).results
+            : [];
           return json({ type: link.entity, ...Object.fromEntries(cfg.view.map((k) => [k, doc[k] ?? null])),
-            can_reply: !locked, link_expires_at: link.expires_at });
+            photos, can_reply: !locked, link_expires_at: link.expires_at });
         }
         if (method === 'POST') {
           if (locked) fail(409, 'เอกสารนี้ปิดแล้ว ไม่สามารถแก้ไขคำตอบได้');
@@ -435,6 +470,49 @@ export default {
         ]);
         await audit(DB, user.username, 'user', 'create_supplier_link', entity, id, { expires_at: expires });
         return json({ token, expires_at: expires }, 201);
+      }
+
+      // ----- NCR photos -----
+      const pm = path.match(/^\/api\/ncr\/([^/]+)\/photos(?:\/(\d+)(\/remove)?)?$/);
+      if (pm) {
+        const id = decodeURIComponent(pm[1]);
+        const ncr = await DB.prepare('SELECT ncr_id, status FROM ncr_records WHERE ncr_id=?').bind(id).first();
+        if (!ncr) fail(404, 'ไม่พบ NCR');
+        const locked = ncr.status === 'Closed' || ncr.status === 'Cancelled';
+        if (!pm[2]) {
+          if (method === 'GET') {
+            const { results } = await DB.prepare(
+              'SELECT id, content_type, size, created_by, created_at FROM ncr_photos WHERE ncr_id=? AND removed=0 ORDER BY id').bind(id).all();
+            return json(results);
+          }
+          if (method === 'POST') {
+            need(user, WRITERS);
+            if (locked) fail(409, 'NCR ปิดแล้ว เพิ่มภาพไม่ได้');
+            const ph = decodePhoto(await body());
+            const { n } = await DB.prepare('SELECT COUNT(*) AS n FROM ncr_photos WHERE ncr_id=? AND removed=0').bind(id).first();
+            if (n >= MAX_PHOTOS) fail(409, `แนบภาพได้ไม่เกิน ${MAX_PHOTOS} ภาพต่อ NCR`);
+            const ts = nowIso();
+            await DB.prepare('INSERT INTO ncr_photos (ncr_id,content_type,size,data,created_by,created_at) VALUES (?,?,?,?,?,?)')
+              .bind(id, ph.type, ph.size, ph.b64, user.username, ts).run();
+            const row = await DB.prepare('SELECT id FROM ncr_photos WHERE ncr_id=? AND created_at=? AND created_by=? ORDER BY id DESC LIMIT 1')
+              .bind(id, ts, user.username).first();
+            await audit(DB, user.username, 'user', 'add_photo', 'ncr', id, { photo_id: row.id, size: ph.size });
+            return json({ success: true, id: row.id }, 201);
+          }
+        } else {
+          const ph = await DB.prepare('SELECT id, content_type, data FROM ncr_photos WHERE id=? AND ncr_id=? AND removed=0')
+            .bind(Number(pm[2]), id).first();
+          if (!ph) fail(404, 'ไม่พบภาพ');
+          if (!pm[3] && method === 'GET') return photoResponse(ph, cors);
+          if (pm[3] && method === 'POST') {
+            need(user, WRITERS);
+            if (locked) fail(409, 'NCR ปิดแล้ว ลบภาพไม่ได้');
+            // Photos are hidden, not erased, so the record of what was attached stays intact.
+            await DB.prepare('UPDATE ncr_photos SET removed=1, removed_by=?, removed_at=? WHERE id=?').bind(user.username, nowIso(), ph.id).run();
+            await audit(DB, user.username, 'user', 'remove_photo', 'ncr', id, { photo_id: ph.id });
+            return json({ success: true });
+          }
+        }
       }
 
       // ----- NCR read / update -----

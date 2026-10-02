@@ -116,6 +116,21 @@ CREATE TABLE IF NOT EXISTS capa_actions (
 );
 CREATE INDEX IF NOT EXISTS idx_capa_src ON capa_actions(source_ref);
 
+-- Photos attached to an NCR (resized on the phone before upload, stored as base64).
+CREATE TABLE IF NOT EXISTS ncr_photos (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  ncr_id       TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  size         INTEGER NOT NULL,
+  data         TEXT NOT NULL,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  removed      INTEGER NOT NULL DEFAULT 0,
+  removed_by   TEXT,
+  removed_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_photos_ncr ON ncr_photos(ncr_id);
+
 -- Reply links sent to a supplier: one NCR or one CAPA each. Only the hash of the token is stored.
 CREATE TABLE IF NOT EXISTS supplier_links (
   token_hash  TEXT PRIMARY KEY,

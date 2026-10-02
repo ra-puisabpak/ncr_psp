@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supplierApi } from '../api/d1Api'
 import { SOURCE_TH as SOURCE_LABELS } from '../data/masterData'
+import { PhotoThumb } from '../components/Photos'
 import { COMPANY_NAME, COMPANY_NAME_EN } from '../config'
 import { Save, CheckCircle2, AlertTriangle, ClipboardList } from 'lucide-react'
 
@@ -134,6 +135,16 @@ export default function SupplierReplyPage() {
                 <ReadField label="จำนวนของเสีย" value={ncr?.defect_qty != null ? `${ncr.defect_qty} ${ncr.defect_unit || ''}`.trim() : '-'} />
                 <ReadField label="รายละเอียดปัญหา" value={ncr?.nc_description} full />
                 <ReadField label="การแก้ไขเบื้องต้น (โดยผู้ผลิต)" value={ncr?.immediate_action} full />
+                {ncr?.photos?.length > 0 && (
+                  <div className="sm:col-span-2 flex flex-col gap-1">
+                    <span className="text-[11px] font-medium text-gray-500">ภาพถ่ายประกอบ (แตะเพื่อดูภาพเต็ม)</span>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                      {ncr.photos.map((p) => (
+                        <PhotoThumb key={p.id} load={() => supplierApi.photoBlob(token, p.id)} />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

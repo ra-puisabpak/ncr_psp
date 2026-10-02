@@ -34,6 +34,16 @@ async function request(path, options = {}, { auth = true } = {}) {
   return data
 }
 
+// Fetches an image; photos are private, so the request carries the login (or a supplier token in the path).
+async function requestBlob(path, { auth = true } = {}) {
+  const headers = {}
+  const token = session.token()
+  if (auth && token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(`${API_URL}${path}`, { headers })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.blob()
+}
+
 const post = (path, body, opt) => request(path, { method: 'POST', body: JSON.stringify(body ?? {}) }, opt)
 const patch = (path, body) => request(path, { method: 'PATCH', body: JSON.stringify(body) })
 const enc = encodeURIComponent
@@ -75,6 +85,12 @@ export const ncrApi = {
   update: (id, body) => patch(`/api/ncr/${enc(id)}`, body),
   supplierLink: (id) => post(`/api/ncr/${enc(id)}/supplier-link`),
   revokeSupplierLink: (id) => post(`/api/ncr/${enc(id)}/supplier-link/revoke`),
+  photos: (id) => ({
+    list: () => request(`/api/ncr/${enc(id)}/photos`),
+    upload: (body) => post(`/api/ncr/${enc(id)}/photos`, body),
+    remove: (photoId) => post(`/api/ncr/${enc(id)}/photos/${photoId}/remove`),
+    blob: (photoId) => requestBlob(`/api/ncr/${enc(id)}/photos/${photoId}`),
+  }),
 }
 
 export const capaApi = {
@@ -91,4 +107,5 @@ export const capaApi = {
 export const supplierApi = {
   get: (token) => request(`/api/supplier/${enc(token)}`, {}, { auth: false }),
   reply: (token, body) => post(`/api/supplier/${enc(token)}`, body, { auth: false }),
+  photoBlob: (token, photoId) => requestBlob(`/api/supplier/${enc(token)}/photos/${photoId}`, { auth: false }),
 }

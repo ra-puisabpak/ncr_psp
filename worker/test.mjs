@@ -150,6 +150,43 @@ check('QA closes complete CAPA', r.status === 200, r);
 r = await call('GET', `/api/capa/${capa}`, { token: qa });
 check('server stamps CAPA verifier and closer', r.j.verified_by === 'qam' && r.j.closed_by === 'qam' && r.j.approved_by === 'qam', r.j);
 
+// photos
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+r = await call('POST', `/api/ncr/${id2}/photos`, { body: { content_type: 'image/png', data: PNG } });
+check('photo upload needs login', r.status === 401, r);
+r = await call('POST', `/api/ncr/${id2}/photos`, { token: qc, body: { content_type: 'image/jpeg', data: PNG } });
+check('photo with wrong type is refused', r.status === 400, r);
+r = await call('POST', `/api/ncr/${id2}/photos`, { token: qc, body: { content_type: 'text/html', data: 'PGh0bWw+' } });
+check('non-image upload is refused', r.status === 400, r);
+r = await call('POST', `/api/ncr/${id2}/photos`, { token: qc, body: { content_type: 'image/png', data: 'data:image/png;base64,' + PNG } });
+check('QC uploads a photo', r.status === 201 && r.j.id > 0, r);
+const pid = r.j.id;
+r = await call('GET', `/api/ncr/${id2}/photos`, { token: qc });
+check('photo is listed', r.status === 200 && r.j.length === 1 && r.j[0].id === pid && !('data' in r.j[0]), r.j);
+{
+  const res = await worker.fetch(new Request(`https://api.example/api/ncr/${id2}/photos/${pid}`, { headers: { Authorization: `Bearer ${qc}` } }), env);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  check('photo downloads as the original image', res.status === 200 && res.headers.get('Content-Type') === 'image/png' && bytes[0] === 0x89 && bytes[1] === 0x50);
+}
+r = await call('GET', `/api/ncr/${id2}/photos/${pid}`);
+check('photo download needs login', r.status === 401, r);
+r = await call('POST', `/api/ncr/${id2}/supplier-link`, { token: qc });
+const ptok = r.j.token;
+r = await call('GET', `/api/supplier/${ptok}`);
+check('supplier link lists the NCR photos', r.status === 200 && r.j.photos.length === 1 && r.j.photos[0].id === pid, r.j);
+{
+  const res = await worker.fetch(new Request(`https://api.example/api/supplier/${ptok}/photos/${pid}`), env);
+  check('supplier opens the photo through the link', res.status === 200 && res.headers.get('Content-Type') === 'image/png');
+}
+r = await call('POST', `/api/ncr/${id}/photos`, { token: qc, body: { content_type: 'image/png', data: PNG } });
+const otherPid = r.j.id;
+r = await call('GET', `/api/supplier/${ptok}/photos/${otherPid}`);
+check('supplier link cannot open photos of another NCR', r.status === 404, r);
+r = await call('POST', `/api/ncr/${id2}/photos/${pid}/remove`, { token: qc });
+check('photo can be removed while NCR is open', r.status === 200, r);
+r = await call('GET', `/api/supplier/${ptok}/photos/${pid}`);
+check('removed photo is no longer served', r.status === 404, r);
+
 // audit, paging, lockout, CORS, logout
 r = await call('GET', `/api/audit?entity_id=${id}`, { token: qa });
 check('audit trail has full history', r.status === 200 && r.j.some((a) => a.action === 'supplier_reply' && a.actor_type === 'supplier') && r.j.some((a) => a.action === 'close') && r.j.some((a) => a.action === 'reopen'), r.j.map((a) => a.action));

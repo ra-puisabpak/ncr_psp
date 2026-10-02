@@ -8,6 +8,7 @@ import { FORM_CODE_NCR } from '../config'
 import { useAuth, isQA, canWrite } from '../auth'
 import SupplierLinkBox from '../components/SupplierLinkBox'
 import AuditTrail from '../components/AuditTrail'
+import PhotoSection from '../components/Photos'
 import { Save, ArrowLeft, Printer, Plus, ClipboardList, Lock, RotateCcw } from 'lucide-react'
 
 const SEVERITY_OPTIONS = ['Critical', 'Major', 'Minor']
@@ -32,7 +33,7 @@ const EMPTY_FORM = {
   material_name: '', supplier_name: '', parameter_name: '', critical_limit: '', actual_result: '',
   visual_check: '', defect_qty: '', defect_unit: '', hold_location: '', severity: 'Major',
   allergen: '', shipped_status: 'NOT_SHIPPED', shipped_qty: '', shipped_customer: '',
-  nc_description: '', immediate_action: '', reported_by: '', assignee: '', target_date: '', photo_urls: '',
+  nc_description: '', immediate_action: '', reported_by: '', assignee: '', target_date: '',
   root_cause: '', corrective_action: '', preventive_action: '',
   disposition: '', disposition_reason: '', recall_required: '',
   verification_result: 'Pending', verification_note: '', status: 'Open', status_reason: '',
@@ -86,6 +87,7 @@ export default function NCRDetailPage() {
   const [error, setError] = useState(null)
   const [saveMsg, setSaveMsg] = useState(null)
   const [version, setVersion] = useState(0)
+  const [pendingPhotos, setPendingPhotos] = useState([]) // chosen before the first save
 
   const load = useCallback(async () => {
     const [ncr, capaList] = await Promise.all([ncrApi.get(id), capaApi.listByNcr(id)])
@@ -124,6 +126,13 @@ export default function NCRDetailPage() {
         payload.supplier_id = codeOf(SUPPLIERS, form.supplier_name)
         payload.parameter_id = codeOf(PARAMETERS, form.parameter_name)
         const res = await ncrApi.create(payload)
+        // The NCR now has a number, so the photos chosen on this form can be attached to it.
+        let photoError = null
+        for (const p of pendingPhotos) {
+          try { await ncrApi.photos(res.ncr_id).upload({ content_type: p.content_type, data: p.data }) }
+          catch (e) { photoError = e.message }
+        }
+        if (photoError) window.alert(`บันทึก NCR ${res.ncr_id} แล้ว แต่อัปโหลดภาพบางภาพไม่สำเร็จ: ${photoError}`)
         navigate(`/ncr/${res.ncr_id}`, { replace: true })
         return
       }
@@ -299,8 +308,14 @@ export default function NCRDetailPage() {
                 <FieldRow label="ผู้รับผิดชอบ (Assignee)">
                   <input type="text" className={inputCls} value={form.assignee} onChange={set('assignee')} disabled={readOnly} />
                 </FieldRow>
-                <FieldRow label="ลิงก์ภาพถ่าย (ถ้ามี คั่นด้วยเว้นวรรค)" full>
-                  <input type="text" className={inputCls} value={form.photo_urls} onChange={set('photo_urls')} placeholder="https://..." disabled={readOnly} />
+                <FieldRow label="ภาพถ่าย" full>
+                  <PhotoSection
+                    key={isNew ? 'new' : id}
+                    api={isNew ? null : ncrApi.photos(id)}
+                    readOnly={readOnly}
+                    pending={pendingPhotos}
+                    setPending={setPendingPhotos}
+                  />
                 </FieldRow>
               </div>
 
