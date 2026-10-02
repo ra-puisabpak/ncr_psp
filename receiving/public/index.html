@@ -168,7 +168,7 @@ window.addEventListener('online',()=>{if(session&&pendingCount())refreshAll(fals
 // ════ แสดงเอกสารสำหรับพิมพ์ในหน้าเดียวกัน (ไม่ใช้ pop-up ซึ่งมือถือมักบล็อก) ════
 // แสดงเอกสารในแอปแล้วสั่งพิมพ์จากหน้าเดียวกัน (วิธีเดียวกับระบบ NCR e-Form) — ไม่เปิดหน้าต่างหรือแท็บใหม่
 // ใช้ Shadow DOM เพื่อให้รูปแบบของเอกสารไม่ปนกับรูปแบบของแอป
-async function showPrint(html){
+async function showPrint(html,opt){
   const old=document.getElementById('_pv');if(old)old.remove();
   const doc=new DOMParser().parseFromString(html,'text/html');
   doc.querySelectorAll('script,.print-btn,.pb,link').forEach(e=>e.remove());
@@ -203,13 +203,26 @@ async function showPrint(html){
       <span>ตัวอย่างเอกสาร A4 แนวตั้ง</span><a id="_pvo" target="_blank" rel="noopener" style="display:none;color:#0d7a5f;font-weight:700">เปิดในเบราว์เซอร์</a></div>
     <div id="_pvs"><div id="_pvd"></div></div>`;
   document.body.appendChild(ov);
-  ov.querySelector('#_pvd').attachShadow({mode:'open'}).innerHTML='<style>'+scoped+'</style>'+inner;
+  const root=ov.querySelector('#_pvd').attachShadow({mode:'open'});
+  root.innerHTML='<style>'+scoped+'</style>'+inner;
+  // ใบที่ต้องอยู่หน้าเดียว: ถ้าเนื้อหายาวเกินกระดาษ A4 ให้ย่อสัดส่วนทั้งใบลงจนพอดี (ย่อได้ถึงราวครึ่งหนึ่ง เกินกว่านั้นจะขึ้นหน้าใหม่)
+  let designW=703;
+  const fitOne=()=>{
+    const pb=root.querySelector('.pbody');if(!pb||!ov.isConnected||!(window.CSS&&CSS.supports('width','1cqw')))return;
+    for(let i=0;i<10;i++){
+      pb.style.setProperty('--u','calc(100cqw/'+designW+')');
+      const r=pb.getBoundingClientRect();if(!r.width)return;
+      const ratio=r.height/r.width;if(ratio<=1.44||designW>=1400)break;
+      designW=Math.min(1400,Math.ceil(designW*Math.sqrt(ratio/1.44)*1.02));
+    }
+  };
+  if(opt&&opt.onePage){fitOne();await new Promise(r=>setTimeout(r,350));fitOne();}
   ov.querySelector('#_pvc').onclick=()=>ov.remove();
   ov.querySelector('#_pvp').onclick=()=>window.print();
   // ทางสำรอง: ฝากเอกสารไว้ที่เซิร์ฟเวอร์ 30 นาที แล้วเปิดด้วยเบราว์เซอร์ของเครื่อง เผื่อเครื่องที่สั่งพิมพ์จากแอปไม่ได้
   if(session){
     const full='<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escH(doc.title||'FM-QC-001')+'</title>'+
-      '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet"><style>'+page+'html,body{margin:0;padding:0;background:#fff}@media screen{body{padding:3%}}'+scoped+'</style></head><body>'+inner+
+      '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet"><style>'+page+'html,body{margin:0;padding:0;background:#fff}@media screen{body{padding:3%}}'+scoped+(designW!==703?'.pbody{--u:calc(100cqw/'+designW+')!important}':'')+'</style></head><body>'+inner+
       '<script>window.onload=function(){setTimeout(function(){window.print()},700)}<\/script></body></html>';
     try{const r=await api('POST','/api/print-doc',{html:full});const o=ov.querySelector('#_pvo');if(o&&ov.isConnected){o.href=r.url;o.style.display='inline';}}catch(e){}
   }
@@ -1091,9 +1104,9 @@ function generatePDF(rec){
   const cb=(on,t)=>'<span class="ck"><span class="cb'+(on?' on':'')+'"></span>'+t+'</span>';
   const pf=v=>cb(v==='PASS','ผ่าน')+cb(v==='FAIL','ไม่ผ่าน');
   const nm=m=>{const mi=MATERIALS.find(x=>x.code===m.code)||{};return m.name||mi.name||'';};
-  const pad=(rows,n,blank)=>{const o=rows.slice();for(let i=o.length;i<n;i++)o.push(blank(i+1));return o.join('');};
+  const pad=(rows,n,blank)=>{const o=rows.slice();for(let i=o.length;i<1;i++)o.push(blank(i+1));return o.join('');};
   const aqlMats=mats.filter(m=>m.aql),porkMats=mats.filter(m=>isPork(m)),photoMats=mats.filter(m=>m.photo1||m.photo2);
-  const pages=1+((aqlMats.length||porkMats.length)?1:0)+(photoMats.length?1:0);
+  const pages=1;   // ทั้งใบอยู่ในหน้าเดียว — ถ้าเนื้อหายาว หน้าพิมพ์จะย่อสัดส่วนลงให้พอดีกระดาษ
   let pageNo=0;
   const head=(title,third)=>{pageNo++;return `<div class="hd">
     <img src="${LOGO_B64}" class="logo">
@@ -1150,12 +1163,11 @@ function generatePDF(rec){
     <div class="sec">3. การสุ่มชั่งน้ำหนักตามจำนวนตัวอย่าง (น้ำหนักสุทธิ kg)</div>
     <table><colgroup><col style="width:4%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:15%"></colgroup>
       <thead><tr><th>#</th><th>ภาชนะที่รับ</th><th>จำนวนตัวอย่าง</th><th>น้ำหนักตามฉลาก</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>ครบ / ไม่ครบ</th></tr></thead><tbody>${s3}</tbody></table>
-    <div class="nt">จำนวนตัวอย่าง: หอม / พริก / กระเทียม และหมูบด ตามตารางจำนวนถุง (หน้า 2) | ปลาแช่แข็ง 10% ของจำนวนภาชนะ (อย่างน้อย 1) | วัตถุดิบอื่น √N+1 (N = จำนวนภาชนะที่รับ)</div>
+    <div class="nt">จำนวนตัวอย่าง: หอม / พริก / กระเทียม และหมูบด ตามตารางจำนวนถุง (ข้อ 5) | ปลาแช่แข็ง 10% ของจำนวนภาชนะ (อย่างน้อย 1) | วัตถุดิบอื่น √N+1 (N = จำนวนภาชนะที่รับ)</div>
     <div class="sec">4. ผลการตรวจรับ</div>
     <table><colgroup><col style="width:4%"><col style="width:34%"><col style="width:46%"><col style="width:16%"></colgroup>
       <thead><tr><th>#</th><th>ผลการตรวจรับ</th><th>หมายเหตุ / ข้อบกพร่องที่พบ</th><th>NC No. (ถ้ามี)</th></tr></thead><tbody>${s4}</tbody></table>
-    <div class="nt">HOLD / REJECT ต้องแยกเก็บ ติดป้ายสถานะ ห้ามนำไปใช้ และออกรายงาน NC</div>
-    ${foot()}</div>`;
+    <div class="nt">HOLD / REJECT ต้องแยกเก็บ ติดป้ายสถานะ ห้ามนำไปใช้ และออกรายงาน NC</div>`;
 
   // ── หน้า 2: บันทึกการสุ่มตรวจ
   if(aqlMats.length||porkMats.length){
@@ -1174,7 +1186,7 @@ function generatePDF(rec){
           ${grp('cr','CRITICAL','ชิ้น',c.cr,'—','0 ชิ้น<br>พบ 1 = Reject')}${grp('ma','MAJOR','g',c.maG,aqlPct(c.maPct),'≤ '+AQL_LIMIT.major+'%')}${grp('mi','MINOR','g',c.miG,aqlPct(c.miPct),'≤ '+AQL_LIMIT.minor+'%')}</tbody></table></div></div>
       <div class="vd"><b>ผล AQL:</b> ${cb(c.verdict==='PASS','ACCEPT')+cb(c.verdict==='HOLD','CAR / HOLD')+cb(c.verdict==='REJECT','REJECT ทั้งลอต')}${c.why.length?'<span class="sm bad" style="margin-left:auto">'+E(c.why.join(' ; '))+'</span>':''}</div></div>`;}).join('');
     const porkBlk=porkMats.map(m=>{const c=porkCalc(m);const rows=[];
-      for(let i=0;i<Math.max(5,c.rows.length);i++){const r=c.rows[i]||{};rows.push(`<tr><td class="c">${i+1}</td><td class="c">${dash(r.w)}</td><td class="c">${dash(r.t)}</td><td class="c">${dash(r.ph)}</td></tr>`);}
+      for(let i=0;i<Math.max(1,c.rows.length);i++){const r=c.rows[i]||{};rows.push(`<tr><td class="c">${i+1}</td><td class="c">${dash(r.w)}</td><td class="c">${dash(r.t)}</td><td class="c">${dash(r.ph)}</td></tr>`);}
       return `<div class="keep"><div class="sec">6. IQC หมูบด (แช่เย็น ถุงละ ${PORK.bagKg} kg)</div>
       <div class="fl"><div><b>รายการที่ #:</b> ${mats.indexOf(m)+1}</div><div><b>ถุงที่รับเข้า:</b> ${c.bags||''}</div><div><b>ถุงที่สุ่ม:</b> ${c.n||''}</div><div><b>น้ำหนักหน้าถุง (kg):</b> ${c.lab}</div></div>
       <div class="two"><div style="flex:1">
@@ -1185,18 +1197,15 @@ function generatePDF(rec){
           ${PORK_CHK.map(k=>`<tr><td>${k[1]}</td><td class="c">${pf(m[k[0]])}</td></tr>`).join('')}
           <tr><td>ทำความสะอาดหัววัด pH และเช็ดแอลกอฮอล์ (Food Grade) ทุกครั้งก่อนวัดถุงต่อไป</td><td class="c">${cb(m.pkProbe==='Y','ทำแล้วทุกครั้ง')}</td></tr></tbody></table></div></div>
       <div class="vd"><b>ผล IQC หมูบด:</b> ${cb(c.verdict==='PASS','ACCEPT')+cb(c.verdict==='HOLD','HOLD')+cb(c.verdict==='REJECT','REJECT')}${c.rej.concat(c.hold).length?'<span class="sm bad" style="margin-left:auto">'+E(c.rej.concat(c.hold).join(' ; '))+'</span>':''}</div></div>`;}).join('');
-    body+=`<div class="pg brk">${head('บันทึกการสุ่มตรวจ — หอม / พริก / กระเทียม และหมูบด','<b>Supplier:</b> '+E(sp.name||''))}
-      ${aqlBlk}${porkBlk}
-      <div class="keep"><div class="sec">7. หมายเหตุ / การดำเนินการ</div><div class="box">${E(rec.note||'')}</div></div>
-      ${foot()}</div>`;
+    body+=aqlBlk+porkBlk;
   }
-  // ── เอกสารแนบ: รูปถ่าย
+  body+=`<div class="keep"><div class="sec">7. หมายเหตุ / การดำเนินการ</div><div class="box">${E(rec.note||'')}</div></div>`;
+  // ── รูปถ่ายประกอบ (ย่อเป็นแถวเดียวกัน)
   if(photoMats.length){
-    body+=`<div class="pg brk">${head('เอกสารแนบ — รูปถ่ายประกอบการตรวจรับ','<b>Supplier:</b> '+E(sp.name||''))}
-      <div class="ph">${photoMats.map(m=>`<div class="keep phb"><div class="pht">${mats.indexOf(m)+1}. ${E(m.code||'')} — ${E(nm(m))} | Lot: ${E(m.lot||'—')}</div>
-        <div class="phr">${[m.photo1,m.photo2].filter(Boolean).map((p,i)=>`<div><img src="${p}"><span class="sm">รูปที่ ${i+1}</span></div>`).join('')}</div></div>`).join('')}</div>
-      <div class="ft"><span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) | FM-QC-001 | SD-QC-001 | ${E(rec.docNo)}</span><span>หน้า ${pageNo} / ${pages}</span></div></div>`;
+    body+=`<div class="keep"><div class="sec">รูปถ่ายประกอบการตรวจรับ</div><div class="ph">${photoMats.map(m=>[m.photo1,m.photo2].filter(Boolean).map((p,i)=>
+      `<div><img src="${p}"><span class="sm">รายการที่ ${mats.indexOf(m)+1} — ${E(m.code||'')} (${i+1})</span></div>`).join('')).join('')}</div></div>`;
   }
+  body+=foot()+'</div>';
 
   const html=`<!DOCTYPE html>
 <html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1230,17 +1239,17 @@ td{border:1px solid #1a2130;padding:1.5px 4px;font-size:10px;line-height:1.25;he
 .two{display:flex;gap:10px;align-items:flex-start}
 .vd{display:flex;align-items:center;gap:14px;border:1px solid #1a2130;padding:6px 10px;margin:6px 0 2px;font-size:11.5px;font-weight:700}
 .vd .ck{font-size:11.5px;margin:0 8px}.vd .sm{font-weight:400}
-.box{border:1px solid #1a2130;min-height:54px;padding:5px 7px;white-space:pre-wrap}
+.box{border:1px solid #1a2130;min-height:30px;padding:5px 7px;white-space:pre-wrap}
 .sg{display:flex;gap:60px;margin-top:6px;padding:0 20px}
 .sg>div{flex:1;text-align:center;font-size:10.5px}
 .sgi{height:34px;display:flex;align-items:flex-end;justify-content:center}.sgi img{max-height:34px;max-width:150px}
 .ln{border-top:1.5px solid #1a2130;margin-bottom:4px}
 .ft{display:flex;justify-content:space-between;border-top:1px solid #c5ccd6;margin-top:7px;padding-top:4px;font-size:8.5px;color:#5c6470}
-.ph{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.ph{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px}.ph>div{text-align:center}.ph img{width:100%;height:84px;object-fit:cover;border:1px solid #9aa5b1;display:block;margin-bottom:1px}
 .phb{border:1px solid #1a2130;padding:6px 8px}.pht{font-weight:700;color:#0f2744;font-size:10.5px;margin-bottom:5px}
 .phr{display:flex;gap:6px}.phr>div{flex:0 0 calc(50% - 3px);text-align:center}.phr img{width:100%;height:118px;object-fit:cover;border:1px solid #9aa5b1;display:block;margin-bottom:2px}
 </style></head><body>${body}</body></html>`;
-  showPrint(html);
+  showPrint(html,{onePage:true});
 }
 
 let records=[],ncLogs=[],curMats=[],matIdx=0,_lastRec=null;
