@@ -166,21 +166,31 @@ function syncFromCloud(){
 }
 window.addEventListener('online',()=>{if(session&&pendingCount())refreshAll(false);});
 // ════ แสดงเอกสารสำหรับพิมพ์ในหน้าเดียวกัน (ไม่ใช้ pop-up ซึ่งมือถือมักบล็อก) ════
-function showPrint(html){
+function putPrintDoc(key,html){
+  return new Promise((res,rej)=>{
+    const rq=indexedDB.open('fmqc001_print',1);
+    rq.onupgradeneeded=()=>rq.result.createObjectStore('docs');
+    rq.onerror=()=>rej(rq.error);
+    rq.onsuccess=()=>{const tx=rq.result.transaction('docs','readwrite');const st=tx.objectStore('docs');st.clear();st.put(html,key);
+      tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);};
+  });
+}
+async function showPrint(html){
   const old=document.getElementById('_pv');if(old)old.remove();
-  const url=URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'}));
+  const key=newUid();let stored=true;
+  try{await putPrintDoc(key,html);}catch(e){stored=false;}
   const ov=document.createElement('div');ov.id='_pv';
   ov.style.cssText='position:fixed;inset:0;z-index:10000;background:#fff;display:flex;flex-direction:column';
-  const b='flex:1;padding:11px 6px;border-radius:10px;border:none;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;text-align:center;text-decoration:none';
+  const b='flex:1;padding:12px 6px;border-radius:10px;border:none;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;text-align:center;text-decoration:none';
   ov.innerHTML=`<div style="display:flex;gap:8px;padding:10px;background:#0f2744">
-    <button id="_pvp" style="${b};background:#0d7a5f;color:#fff">&#x1F5A8; พิมพ์ / PDF</button>
-    <a id="_pvo" href="${url}" target="_blank" rel="noopener" style="${b};background:#fff;color:#0f2744">เปิดแท็บใหม่</a>
+    ${stored?`<a id="_pvp" href="print#${key}" target="_blank" style="${b};flex:2;background:#0d7a5f;color:#fff">&#x1F5A8; พิมพ์ / บันทึก PDF</a>`
+      :`<span style="${b};flex:2;background:#e8900a;color:#fff">เครื่องนี้เปิดหน้าพิมพ์ไม่ได้</span>`}
     <button id="_pvc" style="${b};background:#e2e8f0;color:#0f2744">ปิด</button></div>
-    <iframe id="_pvf" title="เอกสารสำหรับพิมพ์" style="flex:1;border:0;width:100%;background:#fff"></iframe>`;
+    <div style="padding:6px 12px;font-size:12px;color:#5c6470;background:#f1f5f9">ตัวอย่างเอกสาร — กด "พิมพ์ / บันทึก PDF" เพื่อเปิดหน้าพิมพ์ในแท็บใหม่</div>
+    <iframe id="_pvf" sandbox="" title="ตัวอย่างเอกสาร" style="flex:1;border:0;width:100%;background:#fff"></iframe>`;
   document.body.appendChild(ov);
-  const f=ov.querySelector('#_pvf');f.src=url;
-  ov.querySelector('#_pvp').onclick=()=>{try{f.contentWindow.focus();f.contentWindow.print();}catch(e){window.open(url,'_blank');}};
-  ov.querySelector('#_pvc').onclick=()=>{ov.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+  ov.querySelector('#_pvf').srcdoc=html;
+  ov.querySelector('#_pvc').onclick=()=>ov.remove();
 }
 function exportExcelCloud(){exportExcel();}
 function todayStr(){const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');}

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>พิมพ์เอกสาร FM-QC-001</title>
+</head>
+<body style="font-family:sans-serif;padding:24px;color:#0f2744">
+<p id="m">กำลังเปิดเอกสาร...</p>
+<script>
+// The receiving app leaves the document to print in this browser's own storage; this page shows it at a
+// normal web address, because phones cannot print a page opened from a pop-up or a blob: address.
+(function () {
+  var key = location.hash.slice(1);
+  function show(html) {
+    if (!html) { document.getElementById('m').textContent = 'ไม่พบเอกสาร กรุณากลับไปที่แอปแล้วกดพิมพ์ใหม่'; return; }
+    document.open(); document.write(html); document.close();
+  }
+  try {
+    var rq = indexedDB.open('fmqc001_print', 1);
+    rq.onupgradeneeded = function () { rq.result.createObjectStore('docs'); };
+    rq.onerror = function () { show(null); };
+    rq.onsuccess = function () {
+      var g = rq.result.transaction('docs').objectStore('docs').get(key);
+      g.onsuccess = function () { show(g.result); };
+      g.onerror = function () { show(null); };
+    };
+  } catch (e) { show(null); }
+})();
+</script>
+</body>
+</html>
