@@ -12,8 +12,12 @@
 const API='https://puisabpak-ncr-api.rapuisabpak.workers.dev';
 const LS_KEY='fmqc001_data_v1',SS_KEY='fmqc001_session';
 let session=null;try{session=JSON.parse(localStorage.getItem(SS_KEY)||'null');}catch(e){}
+// โหมดทดลองใช้: บัญชีบทบาท "ดูอย่างเดียว" (เช่นชื่อผู้ใช้ visitor) กรอกและพิมพ์ได้ทุกขั้นตอน แต่ไม่มีอะไรถูกบันทึก —
+// ไม่ส่งขึ้นฐานข้อมูล ไม่เก็บในเครื่อง และไม่แสดงข้อมูลจริงของบริษัท ข้อมูลที่ลองกรอกหายเมื่อปิดหรือรีเฟรชแอป
+function isDemo(){return !!(session&&session.user&&(session.user.role==='VIEWER'||session.user.username==='visitor'));}
 function newUid(){return (window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12)+'-'+Math.random().toString(36).slice(2,12);}
 function saveLocal(){
+  if(isDemo())return true;
   // ใบที่ส่งขึ้นฐานข้อมูลแล้วไม่ต้องเก็บรูปในเครื่อง (ดึงจากฐานข้อมูลเมื่อใช้) — ใบที่ยังไม่ส่งเก็บรูปไว้ด้วย
   const pack=noPhoto=>JSON.stringify({records:records.map(r=>{const o={...r,mats:(r.mats||r.materials||[]).map(m=>(noPhoto||r.synced)?{...m,photo1:null,photo2:null}:m)};if(r.synced&&o.sig)o.sig={...o.sig,sigBase64:null};delete o.materials;return o;}),ncLogs});
   try{localStorage.setItem(LS_KEY,pack(false));return true;}
@@ -23,6 +27,7 @@ function saveLocal(){
   }
 }
 function loadLocal(){
+  if(isDemo()){records=[];ncLogs=[];return;}
   try{const d=JSON.parse(localStorage.getItem(LS_KEY)||'null');
     if(d){records=(d.records||[]).map(r=>({...r,uid:r.uid||newUid(),synced:!!r.synced,materials:r.mats}));
       ncLogs=(d.ncLogs||[]).map(n=>({...n,uid:n.uid||newUid(),synced:!!n.synced}));}}catch(e){}
@@ -38,11 +43,12 @@ async function api(method,path,body){
     return j;
   }finally{clearTimeout(t);}
 }
-function pendingCount(){return records.filter(r=>!r.synced).length+ncLogs.filter(n=>!n.synced||n.dirty).length;}
+function pendingCount(){if(isDemo())return 0;return records.filter(r=>!r.synced).length+ncLogs.filter(n=>!n.synced||n.dirty).length;}
 let _syncing=null;
 function syncAll(){if(!_syncing)_syncing=_syncRun().finally(()=>{_syncing=null;});return _syncing;}
 async function _syncRun(){
   await null;
+  if(isDemo())return {ok:true,demo:true};
   if(!session)return {ok:false,err:'ยังไม่ได้เข้าสู่ระบบ'};
   let err='';
   for(const rec of records.filter(r=>!r.synced).reverse()){
@@ -71,6 +77,7 @@ async function _syncRun(){
   return {ok:!err,err};
 }
 async function pullAll(){
+  if(isDemo())return;
   const d=await api('GET','/api/recv');
   const mem=new Map(records.filter(r=>r.synced).map(r=>[r.docNo,r]));
   const dirty=new Map(ncLogs.filter(n=>n.synced&&n.dirty).map(n=>[n.id,n]));
@@ -84,7 +91,7 @@ async function pullAll(){
   if(typeof curMats!=='undefined'&&!curMats.length){const f=document.getElementById('f-docno');if(f)f.value=genDoc();}
 }
 async function ensurePhotos(rec){
-  if(!rec||!rec.synced)return;
+  if(!rec||!rec.synced||isDemo())return;
   const mats=rec.mats||rec.materials||[];
   if(!mats.some(m=>(m.hasPhoto1&&!m.photo1)||(m.hasPhoto2&&!m.photo2))&&!(rec.sig&&rec.sig.hasSig&&!rec.sig.sigBase64))return;
   const list=await api('GET','/api/recv/'+encodeURIComponent(rec.docNo)+'/photos');
@@ -92,6 +99,7 @@ async function ensurePhotos(rec){
 }
 async function refreshAll(manual){
   if(!session){showLogin();return;}
+  if(isDemo()){renderAll();if(manual)showCloudStatus('โหมดทดลองใช้ — ไม่มีการบันทึกข้อมูล','warn');return;}
   if(manual)showCloudStatus('กำลังซิงก์กับฐานข้อมูล...');
   try{
     const r=await syncAll();
@@ -110,10 +118,14 @@ function renderWho(){
   let el=document.getElementById('_who');
   if(!el){const sub=document.querySelector('.home-hero .home-sub');if(!sub)return;el=document.createElement('div');el.id='_who';
     el.style.cssText='margin-top:10px;font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap';sub.insertAdjacentElement('afterend',el);}
+  let bn=document.getElementById('_demo');
+  if(isDemo()&&!bn){bn=document.createElement('div');bn.id='_demo';bn.textContent='โหมดทดลองใช้ — กรอกและพิมพ์ได้ แต่ไม่บันทึกข้อมูล';
+    bn.style.cssText='position:fixed;left:0;right:0;bottom:64px;z-index:8000;background:#8a5200;color:#fff;text-align:center;font-size:12px;font-weight:700;padding:5px 8px;pointer-events:none';document.body.appendChild(bn);}
+  if(!isDemo()&&bn)bn.remove();
   const p=pendingCount();const b='padding:5px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.5);background:transparent;color:inherit;font:inherit;font-weight:600;cursor:pointer';
   el.innerHTML=session?`<span>&#x1F464; ${escH(session.user.display_name)}</span>
-    <span style="padding:3px 8px;border-radius:10px;background:${p?'#e8900a':'#0d7a5f'};color:#fff;font-weight:600">${p?'รอส่ง '+p+' รายการ':'ฐานข้อมูล D1 ✓'}</span>
-    <button style="${b}" onclick="refreshAll(true)">&#x21BB; ซิงก์</button><button style="${b}" onclick="doLogout()">ออกจากระบบ</button>`
+    <span style="padding:3px 8px;border-radius:10px;background:${p?'#e8900a':'#0d7a5f'};color:#fff;font-weight:600">${isDemo()?'โหมดทดลองใช้':p?'รอส่ง '+p+' รายการ':'ฐานข้อมูล D1 ✓'}</span>
+    ${isDemo()?'':`<button style="${b}" onclick="refreshAll(true)">&#x21BB; ซิงก์</button>`}<button style="${b}" onclick="doLogout()">ออกจากระบบ</button>`
     :`<button style="${b}" onclick="showLogin()">เข้าสู่ระบบ</button>`;
 }
 function showLogin(msg){
@@ -143,6 +155,7 @@ async function doLogin(e){
     const j=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(j.error||'เข้าสู่ระบบไม่สำเร็จ');
     session={token:j.token,user:j.user};try{localStorage.setItem(SS_KEY,JSON.stringify(session));}catch(e2){}
+    loadLocal();   // บัญชีทดลองเริ่มจากว่าง บัญชีจริงโหลดรายการที่ค้างในเครื่อง
     document.getElementById('_lp').value='';document.getElementById('_login').style.display='none';
     const fi=document.getElementById('f-inspector');if(fi&&!fi.value)fi.value=session.user.display_name;
     renderWho();refreshAll(true);
@@ -150,12 +163,13 @@ async function doLogin(e){
   finally{b.disabled=false;b.textContent='เข้าสู่ระบบ';}
 }
 async function doLogout(){
-  const p=records.filter(r=>!r.synced).length+ncLogs.filter(n=>!n.synced||n.dirty).length;
+  const demo=isDemo();const p=demo?0:records.filter(r=>!r.synced).length+ncLogs.filter(n=>!n.synced||n.dirty).length;
   if(!confirm(p?'มี '+p+' รายการที่ยังไม่ได้ส่งขึ้นฐานข้อมูล (จะเก็บไว้ในเครื่องนี้)\nออกจากระบบหรือไม่?':'ออกจากระบบหรือไม่?'))return;
   try{await api('POST','/api/logout');}catch(e){}
   session=null;try{localStorage.removeItem(SS_KEY);}catch(e){}
-  records=records.filter(r=>!r.synced);ncLogs=ncLogs.filter(n=>!n.synced||n.dirty);   // ไม่ทิ้งข้อมูลของฐานข้อมูลไว้ในเครื่อง
-  saveLocal();renderAll();showLogin();
+  if(demo){loadLocal();}else{records=records.filter(r=>!r.synced);ncLogs=ncLogs.filter(n=>!n.synced||n.dirty);   // ไม่ทิ้งข้อมูลของฐานข้อมูลไว้ในเครื่อง
+    saveLocal();}
+  renderAll();showLogin();
 }
 async function cloudSaveRecord(rec){const ok=saveLocal();return ok;}
 async function cloudSaveNC(nc){return saveLocal();}
@@ -222,7 +236,7 @@ async function showPrint(html,opt){
   ov.querySelector('#_pvp').onclick=()=>window.print();
   if(opt&&opt.onePage){await new Promise(r=>setTimeout(r,350));fitOne();}   // วัดซ้ำหลังรูปและฟอนต์โหลดเสร็จ
   // ทางสำรอง: ฝากเอกสารไว้ที่เซิร์ฟเวอร์ 30 นาที แล้วเปิดด้วยเบราว์เซอร์ของเครื่อง เผื่อเครื่องที่สั่งพิมพ์จากแอปไม่ได้
-  if(session){
+  if(session&&!isDemo()){
     const full='<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escH(doc.title||'FM-QC-001')+'</title>'+
       '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet"><style>'+page+'html,body{margin:0;padding:0;background:#fff}@media screen{body{padding:3%}}'+scoped+(designW!==703?'.pbody{--u:calc(100cqw/'+designW+')!important}':'')+'</style></head><body>'+inner+
       '<script>window.onload=function(){setTimeout(function(){window.print()},700)}<\/script></body></html>';
@@ -633,7 +647,7 @@ textarea{resize:none;min-height:80px}
       <div class="ssub" id="save-sub"></div>
       <div class="srows">
         <div style="font-size:11px;font-weight:700;color:var(--gray3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">ข้อมูลที่บันทึก</div>
-        <div class="srow"><div class="sric" style="background:#c8e6c9;color:#1b5e20">&#x1F4BE;</div><div style="font-size:13px"><strong>ฐานข้อมูลกลาง (D1)</strong> — ใบรับ + NC Log + ลายเซ็น + รูปถ่าย</div></div>
+        <div class="srow"><div class="sric" style="background:#c8e6c9;color:#1b5e20">&#x1F4BE;</div><div style="font-size:13px"><strong>ฐานข้อมูลกลาง (D1)</strong> — ใบรับ + NC Log + ลายเซ็น + รูปถ่าย (บัญชีทดลองใช้: ไม่บันทึก)</div></div>
       </div>
       <img id="sig-prev-img" style="max-height:48px;border:1px solid var(--border);border-radius:8px;background:#fafbfc;padding:4px;margin-bottom:12px;display:none">
       <button class="bm bt" style="width:100%;margin-bottom:10px" onclick="dlExcel()">&#x1F4E5; ดาวน์โหลด Excel</button>
@@ -894,7 +908,7 @@ function setAql(idx,f,v){
 }
 function setAqlPill(idx,f,v){const m=curMats.find(x=>x.idx===idx);if(m)m[f]=v;renderMats();}
 const COND_ROLES=['QA_MANAGER','FSTL','SUPERVISOR','QC'];   // ผู้มีสิทธิ์รับแบบมีเงื่อนไข (ตรงกับที่เซิร์ฟเวอร์ตรวจ)
-function canCond(){return !!(session&&session.user&&COND_ROLES.includes(session.user.role));}
+function canCond(){return isDemo()||!!(session&&session.user&&COND_ROLES.includes(session.user.role));}
 function resPills(idx){
   const p=pill(idx,'result',[{v:'PASS',c:'pass',l:'✓ PASS'},{v:'COND',c:'hold',l:'◐ รับแบบ<br>มีเงื่อนไข'},{v:'HOLD',c:'hold',l:'⏸ HOLD'},{v:'REJECT',c:'fail',l:'✗ REJECT'}]);
   if(canCond())return p;
@@ -1155,7 +1169,7 @@ function generatePDF(rec){
     return out;}),
     6,i=>`<tr><td class="c">${i}</td>${'<td></td>'.repeat(9)}<td class="c">${wOk('')}</td></tr>`);
   // ── 4. ผลการตรวจรับ
-  const ncOf=m=>ncLogs.filter(n=>n.docNo===rec.docNo&&(n.matIdx===m.idx||(n.matIdx==null&&mats.filter(x=>x.result!=='PASS').length===1&&m.result!=='PASS'))).map(n=>n.synced===false?'รอออกเลข':E(n.ncrId||n.id)).join('<br>');
+  const ncOf=m=>ncLogs.filter(n=>n.docNo===rec.docNo&&(n.matIdx===m.idx||(n.matIdx==null&&mats.filter(x=>x.result!=='PASS').length===1&&m.result!=='PASS'))).map(n=>isDemo()?'(ทดลอง)':n.synced===false?'รอออกเลข':E(n.ncrId||n.id)).join('<br>');
   const res=v=>cb(v==='PASS','PASS')+cb(v==='COND','รับแบบมีเงื่อนไข')+cb(v==='HOLD','HOLD')+cb(v==='REJECT','REJECT');
   const s4=pad(mats.map((m,i)=>`<tr><td class="c">${i+1}</td><td class="c${m.result==='REJECT'?' rj':m.result==='HOLD'||m.result==='COND'?' hd2':''}" style="white-space:nowrap">${res(m.result)}</td><td>${E(m.note||'')}${m.result==='COND'&&m.condBy?'<br><span class="sm">รับแบบมีเงื่อนไขโดย: '+E(m.condBy)+'</span>':''}</td><td class="c mono">${ncOf(m)}</td></tr>`),
     6,i=>`<tr><td class="c">${i}</td><td class="c">${res('')}</td><td></td><td></td></tr>`);
@@ -1507,6 +1521,7 @@ function saveRecord(){
   const setSub=st=>{if(_lastRec===rec)document.getElementById('save-sub').innerHTML=subHtml(st);};
   setSub('<span style="color:#e8900a">&#x23F3; กำลังส่งขึ้นฐานข้อมูล...</span>');
   syncAll().then(r=>{
+    if(r&&r.demo){setSub('<span style="color:#8a5200">&#x26A0; โหมดทดลองใช้ — ใบนี้ไม่ได้บันทึกลงฐานข้อมูล และจะหายเมื่อปิดแอป</span>');return;}
     if(rec.synced)setSub('<span style="color:#0d7a5f">&#x2705; บันทึกลงฐานข้อมูล D1 แล้ว</span>');
     else setSub('<span style="color:#b3261e">&#x26A0; ยังไม่ได้ส่งขึ้นฐานข้อมูล ('+escH(r.err||'ไม่มีอินเทอร์เน็ต')+')<br>เก็บไว้ในเครื่องนี้ก่อน กด "ซิงก์" ที่หน้าหลักเพื่อส่งอีกครั้ง</span>');
   });
@@ -1541,7 +1556,7 @@ function renderHome(){
     const mats=r.mats||r.materials||[];
     const aP=mats.every(m=>m.result==='PASS');const rc=aP?'pass':mats.some(m=>m.result==='REJECT')?'fail':'hold';
     const hasNC=ncLogs.some(nc=>nc.docNo===r.docNo);
-    return `<div class="ri"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="rdoc">${r.docNo}${r.synced?'':' <span style="color:#e8900a">(รอส่ง)</span>'}</span><span style="font-size:12px;color:var(--gray3)">${r.date}</span></div>
+    return `<div class="ri"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="rdoc">${r.docNo}${r.synced?'':isDemo()?' <span style="color:#8a5200">(ทดลอง)</span>':' <span style="color:#e8900a">(รอส่ง)</span>'}</span><span style="font-size:12px;color:var(--gray3)">${r.date}</span></div>
       <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;margin-right:8px">${sp.name}</span>
         <div style="display:flex;gap:6px;flex-shrink:0">${hasNC?'<span class="pill pill-open">NC</span>':''}<span class="pill pill-${rc}">${RES_TXT[worstRes(mats)]}</span></div></div>
       <div style="font-size:12px;color:var(--gray3);margin-top:4px">${mats.length} รายการ — ${r.inspector}</div></div>`;
@@ -1555,7 +1570,7 @@ function renderHist(){
   list.innerHTML=filtered.map(r=>{
     const sp=SUPPLIERS.find(s=>s.id===r.supplier)||{name:r.supplier};
     const mats=r.mats||r.materials||[];const aP=mats.every(m=>m.result==='PASS');const rc=aP?'pass':mats.some(m=>m.result==='REJECT')?'fail':'hold';
-    return `<div class="hi"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="rdoc">${r.docNo}${r.synced?'':' <span style="color:#e8900a">(รอส่ง)</span>'}</span><span style="font-size:12px;color:var(--gray3)">${r.date} ${r.time||''}</span></div>
+    return `<div class="hi"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="rdoc">${r.docNo}${r.synced?'':isDemo()?' <span style="color:#8a5200">(ทดลอง)</span>':' <span style="color:#e8900a">(รอส่ง)</span>'}</span><span style="font-size:12px;color:var(--gray3)">${r.date} ${r.time||''}</span></div>
       <div style="font-size:14px;font-weight:600;margin-bottom:6px">${sp.name}</div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--gray3)">&#x1F321; ${r.carTemp!=null?r.carTemp+'°C':'—'}</span>
@@ -1593,7 +1608,7 @@ const NCR_APP_URL='https://puisabpak-ncr.pages.dev';
 let _ncrWin=null,_ncrFor=null;
 function nextNcId(){return 'NC'+String(Math.max(0,...ncLogs.map(n=>parseInt(String(n.id).slice(2))||0))+1).padStart(3,'0');}
 function isNcr(nc){return /^NCR-/.test(String(nc.id||''));}          // NC ที่ออกเลขร่วมกับระบบ NCR e-Form แล้ว
-function ncNo(nc){return nc.synced?(nc.ncrId||nc.id):'รอออกเลข NCR';}
+function ncNo(nc){return isDemo()?'NCR (ทดลอง)':nc.synced?(nc.ncrId||nc.id):'รอออกเลข NCR';}
 function ncBrief(nc){                                              // ข้อความสั้นของปัญหา: ชนิดผล + หมายเหตุของผู้ตรวจ (ไม่เอาผลสุ่มตรวจทั้งชุด)
   const t=RES_TXT[nc.result]&&nc.result!=='PASS'?RES_TXT[nc.result]:String(nc.failType||'').split(' — ')[0];
   const rec=records.find(r=>r.docNo===nc.docNo);const m=rec&&nc.matIdx!=null?(rec.mats||[]).find(x=>x.idx===nc.matIdx):null;
@@ -1604,6 +1619,7 @@ function matName(code){const m=MATERIALS.find(x=>x.code===code);return m?m.name:
 function ncrRef(nc){return nc.docNo+' / '+nc.id;}
 function ncrBox(nc){
   const b='margin-top:8px;padding:10px;font-size:13px;width:100%;';
+  if(isDemo())return `<div style="margin-top:8px;font-size:12px;color:#8a5200">โหมดทดลองใช้ — ไม่มีการออกเลข NCR จริง</div>`;
   if(!nc.synced)return `<div style="margin-top:8px;font-size:12px;color:#e8900a">ยังไม่ได้ส่งขึ้นฐานข้อมูล — เลข NCR จะออกเมื่อส่งสำเร็จ (กด "ซิงก์" ที่หน้าหลัก)</div>`;
   if(isNcr(nc))return `<button class="bm" style="${b}background:#1e3a8a;color:#fff" onclick="viewNCR('${nc.id}')">&#x1F517; เปิดใน NCR e-Form${nc.status==='Open'?' (สอบสวน / ปิด)':''}</button>`;
   // NC รุ่นเก่าที่ยังใช้เลข NCxxx: ผูกกับ NCR เองได้
