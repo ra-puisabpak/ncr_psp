@@ -200,7 +200,7 @@ async function showPrint(html){
   const root=ov.querySelector('#_pvd').attachShadow({mode:'open'});
   root.innerHTML='<style>'+scoped+'\n.pbody{display:block}</style><div class="pbody">'+doc.body.innerHTML+'</div>';
   // ตัวอย่างบนจอ: จัดหน้ากว้างเท่ากระดาษจริงแล้วย่อให้พอดีจอ (ตอนพิมพ์ใช้ขนาดจริง)
-  const pd=ov.querySelector('#_pvd'),paperW=(/margin:10mm 9mm/.test(page)?726:703)+24;
+  const pd=ov.querySelector('#_pvd'),paperW=703+24;
   const fit=()=>{pd.style.width=paperW+'px';pd.style.zoom=Math.min(1,(ov.querySelector('#_pvs').clientWidth-20)/paperW);};
   fit();window.addEventListener('resize',fit);
   ov.querySelector('#_pvc').onclick=()=>{window.removeEventListener('resize',fit);ov.remove();};
@@ -1799,68 +1799,89 @@ function printReport(){
   const scope=day?'วันที่รับ: <b>'+fmtD(document.getElementById('rp-date').value)+'</b>'
     :'Supplier: <b>'+escH(document.getElementById('rp-sup').value)+'</b> &nbsp;|&nbsp; ช่วงวันที่: <b>'+fmtD(f||dates[0])+' – '+fmtD(t||dates[dates.length-1])+'</b>';
   let no=0,cP=0,cH=0,cR=0;
+  const resTd=v=>{const col=v==='PASS'?'#2e7d32':v==='REJECT'?'#c0392b':'#b35c00';const bg=v==='PASS'?'#e8f5e9':v==='REJECT'?'#ffebee':'#fff3e0';
+    return '<td class="c" style="background:'+bg+';color:'+col+';font-weight:700">'+escH(v||'—')+'</td>';};
   const body=rs.map(r=>{
     const mats=r.mats||r.materials||[];
-    return mats.map((m,i)=>{
+    const worst=mats.some(m=>m.result==='REJECT')?'REJECT':mats.some(m=>m.result==='HOLD')?'HOLD':'PASS';
+    const rows=mats.map(m=>{
       no++;const mi=MATERIALS.find(x=>x.code===m.code)||{};
       if(m.result==='PASS')cP++;else if(m.result==='REJECT')cR++;else cH++;
       const ts=[m.t1,m.t2,m.t3].filter(x=>x!==''&&x!==null&&x!==undefined).join(' / ')||'—';
-      const insp=inspSummary(m)||('Visual '+(m.visual||'—')+' | Leak '+(m.leak||'—')+(docSummary(m)?'':' | Document '+(m.doc||'—')));
-      const col=m.result==='PASS'?'#2e7d32':m.result==='REJECT'?'#c0392b':'#b35c00';
-      const bg=m.result==='PASS'?'#e8f5e9':m.result==='REJECT'?'#ffebee':'#fff3e0';
-      const span=i===0?' rowspan="'+mats.length+'"':'';
-      const head=i===0?'<td'+span+' class="mono">'+escH(r.docNo)+(r.poNo?'<br>PO/DO: '+escH(r.poNo):'')+'</td><td'+span+' class="c">'+(day?'':fmtD(r.date)+'<br>')+escH(r.time||'—')+'</td>'+
-        (day?'<td'+span+'>'+escH(r.supplier)+'</td>':'')+
-        '<td'+span+' class="c">'+escH(r.carReg||'—')+'<br>'+(r.carTemp!=null?r.carTemp+'°C':'—')+'</td>':'';
-      const tail=i===0?'<td'+span+'>'+escH(r.inspector||'')+'</td>':'';
-      return'<tr><td class="c">'+no+'</td>'+head+'<td class="mono">'+escH(m.code||'—')+'</td><td>'+escH(m.name||mi.name||'—')+'</td><td>'+escH(m.lot||'—')+'</td>'+
-        '<td class="c">'+(m.qty!==''&&m.qty!=null?escH(m.qty)+'<br>'+escH(m.unit||''):'—')+'</td><td class="c">'+fmtD(m.mfg)+'<br>'+fmtD(m.exp)+'</td><td class="c">'+escH(ts)+'</td>'+
-        '<td class="s">'+escH(insp)+(wtSummary(m)?'<br><b>น้ำหนัก:</b> '+escH(wtSummary(m)):'')+(docSummary(m)?'<br><b>เอกสาร:</b> '+escH(docSummary(m)):'')+'</td><td class="c" style="background:'+bg+';color:'+col+';font-weight:700">'+escH(m.result||'—')+'</td>'+tail+'<td class="s">'+escH(m.note||'')+'</td></tr>';
+      const insp=inspSummary(m)||('Visual '+(m.visual||'—')+' · Leak '+(m.leak||'—'));
+      const det=['<b>ผลตรวจ:</b> '+escH(insp),docSummary(m)?'<b>เอกสาร:</b> '+escH(docSummary(m)):'<b>เอกสาร:</b> '+escH(m.doc||'—'),
+        wtSummary(m)?'<b>น้ำหนัก:</b> '+escH(wtSummary(m)):'',m.note?'<b>หมายเหตุ:</b> '+escH(m.note):''].filter(Boolean).join(' &nbsp;|&nbsp; ');
+      return '<tbody class="it"><tr><td class="c" rowspan="2">'+no+'</td><td class="mono c">'+escH(m.code||'—')+'</td><td><b>'+escH(m.name||mi.name||'—')+'</b></td><td>'+escH(m.lot||'—')+'</td>'+
+        '<td class="c">'+(m.qty!==''&&m.qty!=null?escH(m.qty)+' '+escH(m.unit||''):'—')+'</td><td class="c">'+fmtD(m.mfg)+'</td><td class="c">'+fmtD(m.exp)+'</td><td class="c">'+escH(ts)+'</td>'+resTd(m.result)+'</tr>'+
+        '<tr><td colspan="8" class="det">'+det+'</td></tr></tbody>';
     }).join('');
+    const col=worst==='PASS'?'#2e7d32':worst==='REJECT'?'#c0392b':'#b35c00';
+    return '<table class="doc"><colgroup><col style="width:4%"><col style="width:9%"><col style="width:22%"><col style="width:13%"><col style="width:11%"><col style="width:10.5%"><col style="width:10.5%"><col style="width:11%"><col style="width:9%"></colgroup>'+
+      '<thead><tr><td colspan="9" class="dh"><div class="dh1"><span class="mono">'+escH(r.docNo)+'</span><span style="color:'+col+'">'+worst+'</span></div>'+
+      '<div class="dh2">'+(day?'':'<span>วันที่รับ <b>'+fmtD(r.date)+'</b></span>')+'<span>เวลา <b>'+escH(r.time||'—')+'</b></span>'+(day?'<span>ผู้ส่งมอบ <b>'+escH(r.supplier)+'</b></span>':'')+
+      '<span>ทะเบียนรถ <b>'+escH(r.carReg||'—')+'</b></span><span>อุณหภูมิรถ <b>'+(r.carTemp!=null?r.carTemp+' °C':'—')+'</b></span><span>PO/DO <b>'+escH(r.poNo||'—')+'</b></span><span>ผู้ตรวจรับ <b>'+escH(r.inspector||'—')+'</b></span></div></td></tr>'+
+      '<tr><th>#</th><th>รหัส</th><th>วัตถุดิบ</th><th>Lot No</th><th>จำนวน</th><th>วันผลิต</th><th>วันหมดอายุ</th><th>อุณหภูมิ (°C)</th><th>ผล</th></tr></thead>'+rows+'</table>';
   }).join('');
   const docs=new Set(rs.map(r=>r.docNo));const ncs=ncLogs.filter(n=>docs.has(n.docNo));
-  const ncHtml=ncs.length?'<div class="sec">รายการ NC ที่เกี่ยวข้อง ('+ncs.length+' รายการ)</div><table><thead><tr><th>NC No.</th><th>เลขที่เอกสาร</th><th>ประเภทปัญหา</th><th>รายละเอียด</th><th>Corrective Action</th><th>สถานะ</th></tr></thead><tbody>'+
-    ncs.map(n=>'<tr><td class="mono c">'+escH(n.id)+'</td><td class="mono">'+escH(n.docNo)+'</td><td>'+escH(n.failType)+'</td><td class="s">'+escH(n.note||'')+'</td><td class="s">'+escH(n.corrective||'')+'</td><td class="c">'+escH(n.status)+(n.closedDate?' '+fmtD(n.closedDate):'')+'</td></tr>').join('')+'</tbody></table>':'';
+  const ncHtml=ncs.length?'<div class="sec">รายการ NC ที่เกี่ยวข้อง ('+ncs.length+' รายการ)</div><table class="nc"><thead><tr><th style="width:9%">NC No.</th><th style="width:22%">เลขที่ใบตรวจรับ</th><th style="width:19%">ประเภทปัญหา</th><th>รายละเอียด</th><th style="width:14%">NCR e-Form</th><th style="width:12%">สถานะ</th></tr></thead><tbody>'+
+    ncs.map(n=>'<tr><td class="mono c">'+escH(n.id)+'</td><td class="mono">'+escH(n.docNo)+'</td><td>'+escH(n.failType)+'</td><td>'+escH(n.note||'')+'</td><td class="mono c">'+escH(n.ncrId||'—')+'</td><td class="c">'+(n.status==='Closed'?'ปิดแล้ว':'เปิดอยู่')+(n.closedDate?'<br>'+fmtD(n.closedDate):'')+'</td></tr>').join('')+'</tbody></table>':'';
   const html=`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>FM-QC-001 รายงาน${day?'รายวัน':'ราย Supplier'}</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Sarabun',sans-serif;font-size:9.5px;line-height:1.3;color:#1a2130;background:#fff}
-@page{size:A4 portrait;margin:10mm 9mm}
-@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.no-print{display:none!important}thead{display:table-header-group}tr{page-break-inside:avoid}}
-.hd{display:flex;align-items:center;gap:12px;border-bottom:2px solid #0f2744;padding-bottom:8px}
-.hd img{width:54px;height:54px;object-fit:contain}
-.co{font-size:16px;font-weight:700;color:#0f2744}.co small{display:block;font-size:11px;font-weight:500;color:#5c6470}
-.ref{margin-left:auto;text-align:right;font-size:10px;color:#5c6470;line-height:1.7}
-h1{font-size:14px;text-align:center;margin:8px 0 2px;color:#0f2744}
-.scope{text-align:center;font-size:11px;margin-bottom:8px}
-.sum{display:flex;gap:8px;margin-bottom:8px}
-.sum div{flex:1;border:1px solid #9aa5b1;padding:4px 6px;text-align:center}
-.sum b{display:block;font-size:15px}
-table{width:100%;border-collapse:collapse;margin-bottom:8px}
-table{table-layout:auto}
-th{background:#e9edf2;color:#0f2744;padding:4px 3px;font-size:8.5px;font-weight:700;border:1px solid #9aa5b1;line-height:1.2}
-td{padding:3px 3px;border:1px solid #9aa5b1;vertical-align:top}
-.c{text-align:center;white-space:nowrap}.mono{font-family:monospace;font-size:8.5px}.s{font-size:8.5px}
-.sec{font-size:12px;font-weight:700;color:#0f2744;margin:8px 0 4px}
-.sg{display:flex;gap:40px;margin-top:22px;page-break-inside:avoid}
-.sg div{flex:1;text-align:center;font-size:11px}
-.sg .ln{border-bottom:1px solid #333;height:34px;margin:0 30px 5px}
-.ft{margin-top:10px;font-size:9px;color:#5c6470;display:flex;justify-content:space-between;border-top:1px solid #dde1e7;padding-top:4px}
-.pb{position:fixed;top:10px;right:10px;padding:10px 20px;background:#0d7a5f;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer}
+body{font-family:'Sarabun',sans-serif;font-size:11px;line-height:1.35;color:#1a2130;background:#fff}
+@page{size:A4 portrait;margin:10mm 12mm}
+@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.no-print{display:none!important}thead{display:table-header-group}.it,.keep,.nc tr{page-break-inside:avoid;break-inside:avoid}}
+.hd{display:grid;grid-template-columns:1.25fr 1.5fr 1fr;border:1.2px solid #0f2744;margin:0 0 8px}
+.hd>div{padding:8px 10px;display:flex;align-items:center}
+.hd>div+div{border-left:1.2px solid #0f2744}
+.hd-co{gap:9px}.hd-co img{width:44px;height:44px;object-fit:contain;flex-shrink:0}
+.co{font-size:13px;font-weight:700;color:#0f2744;line-height:1.25}.co small{display:block;font-size:9.5px;font-weight:400;color:#5c6470;margin-top:1px}
+.hd-title{flex-direction:column;justify-content:center;text-align:center}
+.hd-title h1{font-size:14px;font-weight:700;color:#0f2744;line-height:1.25}
+.hd-title p{font-size:9.5px;letter-spacing:.5px;color:#5c6470;margin-top:2px}
+.hd-ref{padding:0!important;display:block!important}
+.hd-ref div{display:flex;justify-content:space-between;gap:6px;padding:4px 9px;font-size:10px;color:#5c6470}
+.hd-ref div+div{border-top:1px solid #c5ccd6}
+.hd-ref b{color:#0f2744;font-weight:700;text-align:right}
+.scope{border:1px solid #9aa5b1;padding:5px 10px;font-size:11.5px;margin-bottom:6px}
+.sum{display:grid;grid-template-columns:repeat(6,1fr);border:1px solid #9aa5b1;margin-bottom:10px}
+.sum div{padding:4px 6px 5px;text-align:center;font-size:9.5px;color:#5c6470}
+.sum div+div{border-left:1px solid #9aa5b1}
+.sum b{display:block;font-size:16px;line-height:1.2;color:#0f2744}
+table{width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:9px}
+th{background:#e9edf2;color:#0f2744;padding:4px 4px;font-size:9.5px;font-weight:700;border:1px solid #9aa5b1;line-height:1.25}
+td{padding:4px 5px;border:1px solid #9aa5b1;vertical-align:middle;overflow-wrap:anywhere}
+.c{text-align:center}.doc .c{white-space:nowrap;font-size:10px;padding-left:2px;padding-right:2px}.mono{font-family:monospace;font-size:10px}
+.dh{background:#0f2744;color:#fff;border-color:#0f2744;padding:5px 8px}
+.dh1{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:11.5px}
+.dh1 .mono{font-size:11.5px}
+.dh1 span+span{background:#fff;padding:0 8px;border-radius:3px;font-size:10px}
+.dh2{display:flex;flex-wrap:wrap;gap:1px 14px;font-size:9.5px;color:#c9d3e0;margin-top:2px}
+.dh2 b{color:#fff;font-weight:600}
+.det{font-size:9.5px;color:#3d4654;background:#fafbfc;padding:3px 6px}
+.det b{color:#0f2744;font-weight:600}
+.sec{font-size:11.5px;font-weight:700;color:#0f2744;border-bottom:1.5px solid #0f2744;padding:0 0 2px;margin:10px 0 5px}
+.sg{display:grid;grid-template-columns:1fr 1fr;border:1px solid #9aa5b1;margin-top:12px}
+.sg>div{padding:6px 12px 7px;text-align:center;font-size:10px;color:#5c6470}
+.sg>div+div{border-left:1px solid #9aa5b1}
+.sg b{display:block;font-size:10.5px;color:#0f2744}
+.sg .ln{border-bottom:1px dotted #5c6470;height:32px;margin:0 18px 4px}
+.ft{margin-top:8px;font-size:9px;color:#5c6470;display:flex;justify-content:space-between;border-top:1px solid #0f2744;padding-top:4px}
 </style></head><body>
-<button class="pb no-print" onclick="window.print()">🖨 พิมพ์ / บันทึก PDF</button>
-<div class="hd"><img src="${LOGO_B64}"><div class="co">บริษัท พระจันทร์ ๕๐ จำกัด<small>Puisabpak — Quality Control (QC)</small></div>
-<div class="ref">รหัสเอกสาร: FM-QC-001<br>อ้างอิง: SD-QC-001<br>พิมพ์: ${stamp}</div></div>
-<h1>รายงานการตรวจรับและตรวจสอบวัตถุดิบ — ${day?'รายวัน':'ราย Supplier'}</h1>
+<div class="hd">
+  <div class="hd-co"><img src="${LOGO_B64}"><div class="co">บริษัท พระจันทร์ ๕๐ จำกัด<small>Puisabpak — Quality Control (QC)</small></div></div>
+  <div class="hd-title"><h1>รายงานการตรวจรับวัตถุดิบ</h1><p>${day?'DAILY RECEIVING INSPECTION REPORT':'RECEIVING INSPECTION REPORT BY SUPPLIER'}</p></div>
+  <div class="hd-ref"><div>รหัสแบบฟอร์ม <b>FM-QC-001</b></div><div>เอกสารอ้างอิง <b>SD-QC-001</b></div><div>ประเภทรายงาน <b>${day?'รายวัน':'ราย Supplier'}</b></div></div>
+</div>
 <div class="scope">${scope}</div>
-<div class="sum"><div><b>${rs.length}</b>ใบรับ</div><div><b>${no}</b>รายการวัตถุดิบ</div><div style="color:#2e7d32"><b>${cP}</b>PASS</div><div style="color:#b35c00"><b>${cH}</b>HOLD</div><div style="color:#c0392b"><b>${cR}</b>REJECT</div><div><b>${ncs.filter(n=>n.status==='Open').length}</b>NC ที่ยังเปิด</div></div>
-<table><thead><tr><th>#</th><th>เลขที่เอกสาร</th><th>${day?'เวลา':'วันที่ / เวลา'}</th>${day?'<th>Supplier</th>':''}<th>ทะเบียนรถ /<br>อุณหภูมิรถ</th><th>รหัส</th><th>วัตถุดิบ</th><th>Lot No</th><th>จำนวน</th><th>วันผลิต /<br>วันหมดอายุ</th><th>อุณหภูมิ<br>(°C)</th><th>ผลการสุ่มตรวจ</th><th>ผล</th><th>ผู้ตรวจรับ QC</th><th>หมายเหตุ</th></tr></thead>
-<tbody>${body}</tbody></table>
+<div class="sum"><div><b>${rs.length}</b>ใบตรวจรับ</div><div><b>${no}</b>รายการวัตถุดิบ</div><div><b style="color:#2e7d32">${cP}</b>PASS</div><div><b style="color:#b35c00">${cH}</b>HOLD</div><div><b style="color:#c0392b">${cR}</b>REJECT</div><div><b>${ncs.filter(n=>n.status==='Open').length}</b>NC ที่ยังเปิด</div></div>
+${body}
 ${ncHtml}
-<div class="sg"><div><div class="ln"></div>จัดทำโดย (QC Officer)<br>วันที่ ____/____/______</div><div><div class="ln"></div>ทบทวนโดย (QC Supervisor)<br>วันที่ ____/____/______</div></div>
-<div class="ft"><span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) | FM-QC-001 | SD-QC-001</span><span>พิมพ์: ${stamp}</span></div>
-<script>window.onload=function(){setTimeout(()=>{if(document.fonts)document.fonts.ready.then(()=>window.print());else window.print();},800);};<\/script>
+<div class="keep">
+<div class="sg"><div><b>จัดทำโดย (QC Officer)</b><div class="ln"></div>(................................................)<br>วันที่ ........ / ........ / ............</div><div><b>ทบทวนโดย (QC Supervisor)</b><div class="ln"></div>(................................................)<br>วันที่ ........ / ........ / ............</div></div>
+<div class="ft"><span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) · FM-QC-001 · รายงาน${day?'รายวัน':'ราย Supplier'}</span><span>พิมพ์เมื่อ ${stamp}</span></div>
+</div>
 </body></html>`;
   showPrint(html);
 }
