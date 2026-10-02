@@ -1083,253 +1083,165 @@ function cPork(){
 // ═══════════════════════════════════════════════════════════════
 
 function generatePDF(rec){
+  // พิมพ์ตามแบบฟอร์มควบคุม FM-QC-001: หน้า 1 บันทึกการตรวจรับ, หน้า 2 บันทึกการสุ่มตรวจ (เมื่อมี), แนบรูปถ่าย (เมื่อมี)
   const sp=(typeof SUPPLIERS!=='undefined')?SUPPLIERS.find(s=>s.id===rec.supplier)||{name:rec.supplier}:{name:rec.supplier};
   const mats=rec.mats||rec.materials||[];
   const sig=rec.sig||{};
-  const now=new Date();
-  const stampTH=`${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()+543} ${now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}`;
-  const allPass=mats.every(m=>m.result==='PASS');
-  const hasRej=mats.some(m=>m.result==='REJECT');
-  const overall=allPass?'PASS — ผ่านการตรวจรับ':hasRej?'REJECT — ไม่ผ่านการตรวจรับ':'HOLD — รอการตรวจสอบเพิ่มเติม';
-  const overallColor=allPass?'#2e7d32':hasRej?'#c0392b':'#e8900a';
-  const overallBg=allPass?'#e8f5e9':hasRej?'#ffebee':'#fff3e0';
+  const E=escH,dash=v=>(v===''||v===null||v===undefined)?'':E(v);
+  const cb=(on,t)=>'<span class="ck"><span class="cb'+(on?' on':'')+'"></span>'+t+'</span>';
+  const pf=v=>cb(v==='PASS','ผ่าน')+cb(v==='FAIL','ไม่ผ่าน');
+  const nm=m=>{const mi=MATERIALS.find(x=>x.code===m.code)||{};return m.name||mi.name||'';};
+  const pad=(rows,n,blank)=>{const o=rows.slice();for(let i=o.length;i<n;i++)o.push(blank(i+1));return o.join('');};
+  const aqlMats=mats.filter(m=>m.aql),porkMats=mats.filter(m=>isPork(m)),photoMats=mats.filter(m=>m.photo1||m.photo2);
+  const pages=1+((aqlMats.length||porkMats.length)?1:0)+(photoMats.length?1:0);
+  let pageNo=0;
+  const head=(title,third)=>{pageNo++;return `<div class="hd">
+    <img src="${LOGO_B64}" class="logo">
+    <div><div class="co">บริษัท พระจันทร์ ๕๐ จำกัด</div><div class="co2">Puisabpak — Quality Control (QC)</div></div>
+    <div class="ref">รหัสเอกสาร: FM-QC-001<br>อ้างอิง: SD-QC-001<br>หน้า ${pageNo} / ${pages}</div></div>
+    <h1>${title}</h1>
+    <div class="fl"><div><b>เลขที่เอกสาร:</b> <span class="mono">${E(rec.docNo)}</span></div><div><b>วันที่รับ:</b> ${fmtD(rec.date)}</div><div>${third}</div></div>`;};
+  const foot=()=>`<div class="keep"><div class="sg">
+      <div><div class="sgi">${sig.sigBase64?`<img src="${sig.sigBase64}">`:''}</div><div class="ln"></div>ผู้ตรวจรับ (QC Inspector)<br><span class="sm">${E(sig.signerName||rec.inspector||'')}${sig.signedAt?' · ลงนามอิเล็กทรอนิกส์ '+E(sig.signedAt):''}</span></div>
+      <div><div class="sgi"></div><div class="ln"></div>ทบทวนโดย (QC Supervisor)<br><span class="sm">วันที่ ........ / ........ / ............</span></div></div>
+    <div class="ft"><span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) | FM-QC-001 | SD-QC-001 | ${E(rec.docNo)}</span><span>หน้า ${pageNo} / ${pages}</span></div></div>`;
 
-  const matRows=mats.map((m,i)=>{
-    const mi=(typeof MATERIALS!=='undefined')?MATERIALS.find(x=>x.code===m.code)||{}:{};
-    const ts=[m.t1,m.t2,m.t3].filter(t=>t!==''&&t!==null&&t!==undefined).map(Number).filter(t=>!isNaN(t));
-    const avgT=ts.length?parseFloat((ts.reduce((a,b)=>a+b,0)/ts.length).toFixed(1))+'°C':'—';
-    const mn=mi.minTemp??mi.minT; const mx=mi.maxTemp??mi.maxT;
-    let tColor='#333',tBg='transparent';
-    if(ts.length&&mn!=null){if(ts.every(t=>t>=mn&&t<=mx)){tColor='#2e7d32';tBg='#e8f5e9';}else{tColor='#c0392b';tBg='#ffebee';}}
-    const resColor=m.result==='PASS'?'#2e7d32':m.result==='REJECT'?'#c0392b':'#e8900a';
-    const resBg=m.result==='PASS'?'#e8f5e9':m.result==='REJECT'?'#ffebee':'#fff3e0';
-    const tempDisp=[m.t1,m.t2,m.t3].filter(t=>t!==''&&t!==null&&t!==undefined).join(' / ')||'—';
-    const bg=i%2===0?'#ffffff':'#f8fafc';
-    return `<tr style="background:${bg}">
-      <td style="text-align:center">${i+1}</td>
-      <td style="font-family:monospace;font-size:11px">${m.code||'—'}</td>
-      <td>${m.name||mi.name||'—'}</td>
-      <td style="text-align:center">${m.type||mi.type||'—'}</td>
-      <td>${m.lot||'—'}</td>
-      <td style="text-align:center">${m.qty?m.qty+' '+(m.unit||''):'—'}</td>
-      <td style="text-align:center;background:${tBg};color:${tColor};font-weight:600">${avgT}</td>
-      <td style="text-align:center">${m.visual||'—'}</td>
-      <td style="font-size:10px;${m.doc==='FAIL'?'color:#c0392b;font-weight:700':''}">${escH(docSummary(m))||m.doc||'—'}</td>
-      <td style="text-align:center;background:${resBg};color:${resColor};font-weight:700">${m.result||'—'}</td>
-      <td style="font-size:11px">${m.note||''}</td>
-    </tr>`;
-  }).join('');
+  // ── 1. รายการวัตถุดิบ และการตรวจสภาพ
+  const s1=pad(mats.map((m,i)=>`<tr><td class="c">${i+1}</td><td class="c mono">${E(m.code||'')}</td><td>${E(nm(m))}</td><td>${E(m.lot||'')}</td>
+    <td class="c">${m.qty!==''&&m.qty!=null?E(m.qty)+' '+E(m.unit||''):''}</td><td class="c">${m.mfg?fmtD(m.mfg):''}</td><td class="c">${m.exp?fmtD(m.exp):''}</td>
+    <td class="c">${dash(m.t1)}</td><td class="c">${dash(m.t2)}</td><td class="c">${dash(m.t3)}</td>
+    <td class="c">${m.visual==='PASS'?'ผ่าน':m.visual==='FAIL'?'<b class="bad">ไม่ผ่าน</b>':'—'}</td><td class="c">${m.leak==='PASS'?'ผ่าน':m.leak==='FAIL'?'<b class="bad">ไม่ผ่าน</b>':'—'}</td></tr>`),
+    6,i=>`<tr><td class="c">${i}</td>${'<td></td>'.repeat(11)}</tr>`);
+  // ── 2. การตรวจเอกสาร
+  const s2=pad(mats.map((m,i)=>`<tr><td class="c">${i+1}</td><td class="c">${pf(m.docDo||(m.coa===undefined?m.doc:''))}</td>
+    <td class="c">${cb(m.coa==='Y','มี')+cb(m.coa==='N','ไม่มี')+cb(m.coa==='NA','ไม่กำหนด')}</td><td class="c">${E(m.coaNo||'')}</td>
+    <td class="c">${pf(m.coa==='Y'?m.coaOk:'')}</td><td class="c">${pf(m.docLabel||'')}</td></tr>`),
+    6,i=>`<tr><td class="c">${i}</td><td class="c">${pf('')}</td><td class="c">${cb(0,'มี')+cb(0,'ไม่มี')+cb(0,'ไม่กำหนด')}</td><td></td><td class="c">${pf('')}</td><td class="c">${pf('')}</td></tr>`);
+  // ── 3. การสุ่มชั่งน้ำหนัก (เกิน 6 ตัวอย่างขึ้นแถวต่อ)
+  const wOk=v=>cb(v==='PASS','ครบ')+cb(v==='HOLD','ไม่ครบ');
+  const s3=pad(mats.map((m,i)=>{
+    const w=wtCalc(m);if(!w||!w.N)return `<tr><td class="c">${i+1}</td><td class="c">—</td><td class="c">—</td><td class="c">—</td>${'<td class="c">—</td>'.repeat(6)}<td class="c">${wOk('')}</td></tr>`;
+    const cell=v=>{const x=pkNum(v);return '<td class="c">'+(x!==null&&w.lab!==null&&x<w.lab?'<b class="bad">'+E(v)+'</b>':dash(v))+'</td>';};
+    let out='';
+    for(let k=0;k<Math.max(1,Math.ceil(w.vals.length/6));k++){
+      const part=w.vals.slice(k*6,k*6+6);while(part.length<6)part.push('');
+      out+=k===0?`<tr><td class="c">${i+1}</td><td class="c">${w.N}</td><td class="c">${w.n}<br><span class="sm">${E(w.rule)}</span></td><td class="c">${w.lab??'—'}</td>${part.map(cell).join('')}<td class="c">${wOk(w.verdict)}</td></tr>`
+        :`<tr><td class="c"></td><td class="c sm" colspan="3">ตัวอย่างที่ ${k*6+1}–${k*6+6}</td>${part.map(cell).join('')}<td></td></tr>`;
+    }
+    return out;}),
+    6,i=>`<tr><td class="c">${i}</td>${'<td></td>'.repeat(9)}<td class="c">${wOk('')}</td></tr>`);
+  // ── 4. ผลการตรวจรับ
+  const ncOf=m=>ncLogs.filter(n=>n.docNo===rec.docNo&&(n.matIdx===m.idx||(n.matIdx==null&&mats.filter(x=>x.result!=='PASS').length===1&&m.result!=='PASS'))).map(n=>E(n.id)+(n.ncrId?'<br>'+E(n.ncrId):'')).join('<br>');
+  const res=v=>cb(v==='PASS','PASS')+cb(v==='HOLD','HOLD')+cb(v==='REJECT','REJECT');
+  const s4=pad(mats.map((m,i)=>`<tr><td class="c">${i+1}</td><td class="c${m.result==='REJECT'?' rj':m.result==='HOLD'?' hd2':''}">${res(m.result)}</td><td>${E(m.note||'')}</td><td class="c mono">${ncOf(m)}</td></tr>`),
+    6,i=>`<tr><td class="c">${i}</td><td class="c">${res('')}</td><td></td><td></td></tr>`);
 
-  const aqlMats=mats.filter(m=>m.aql);
-  const aqlHTML=aqlMats.length?`<div class="sec">ผลการสุ่มตรวจตาม OPL — หอม / พริก / กระเทียม (MIL-STD-105E) | Critical 0% · Major ≤ ${AQL_LIMIT.major}% · Minor ≤ ${AQL_LIMIT.minor}%</div>
-<table><thead><tr><th>#</th><th>วัตถุดิบ</th><th>Lot (ถุง)</th><th>แผนสุ่ม</th><th>สุ่มจริง</th><th>3 ตำแหน่ง</th><th>Critical (ชิ้น)</th><th>Major</th><th>Minor</th><th>ผล AQL</th></tr></thead><tbody>${aqlMats.map(m=>{
-    const c=aqlCalc(m);const mi=MATERIALS.find(x=>x.code===m.code)||{};
-    const det=k=>AQL_DEF[k].filter(d=>aqlN(m[d[0]])>0).map(d=>d[1]+' '+aqlN(m[d[0]])).join(', ');
-    const col=c.verdict==='PASS'?'#2e7d32':c.verdict==='REJECT'?'#c0392b':'#e8900a';
-    const bgc=c.verdict==='PASS'?'#e8f5e9':c.verdict==='REJECT'?'#ffebee':'#fff3e0';
-    const bad=(v,lim)=>v!=null&&v>lim?'color:#c0392b;font-weight:700':'';
-    return `<tr><td style="text-align:center">${mats.indexOf(m)+1}</td>
-      <td>${AQL_CROPS[m.crop]||'—'} — ${m.name||mi.name||m.code||''}${m.bagKg!==''&&m.bagKg!=null?'<br><span style="font-size:10px;color:#5c6470">นน.ถุงที่ชั่งได้ '+m.bagKg+' kg</span>':''}</td>
-      <td style="text-align:center">${c.bags||'—'}</td>
-      <td style="text-align:center">${c.plan?c.plan.n+' ถุง × '+aqlFmtG(c.plan.g):'นอกตาราง'}</td>
-      <td style="text-align:center">${c.sBags} ถุง / ${c.totG} g</td>
-      <td style="text-align:center">${m.pos==='Y'?'ครบ':m.pos==='N'?'ไม่ครบ':'—'}</td>
-      <td style="text-align:center;${c.cr>0?'color:#c0392b;font-weight:700':''}">${c.cr}${det('cr')?'<br><span style="font-size:10px">'+det('cr')+'</span>':''}</td>
-      <td style="text-align:center;${bad(c.maPct,AQL_LIMIT.major)}">${c.maG} g = ${aqlPct(c.maPct)}${det('ma')?'<br><span style="font-size:10px">'+det('ma')+'</span>':''}</td>
-      <td style="text-align:center;${bad(c.miPct,AQL_LIMIT.minor)}">${c.miG} g = ${aqlPct(c.miPct)}${det('mi')?'<br><span style="font-size:10px">'+det('mi')+'</span>':''}</td>
-      <td style="text-align:center;background:${bgc};color:${col};font-weight:700">${aqlVerdictTxt(c.verdict)}</td></tr>`;}).join('')}</tbody></table>`:'';
+  let body=`<div class="pg">${head('บันทึกการตรวจรับและตรวจสอบวัตถุดิบ','<b>เวลา:</b> '+E(rec.time||''))}
+    <div class="fl"><div style="flex:2"><b>Supplier:</b> ${E(sp.name||'')}</div><div><b>PO / DO No.:</b> ${E(rec.poNo||'')}</div></div>
+    <div class="fl"><div><b>ทะเบียนรถ:</b> ${E(rec.carReg||'')}</div><div><b>อุณหภูมิรถ (เฉพาะของสด):</b> ${rec.carTemp!=null?rec.carTemp:'—'} °C</div><div><b>ผู้ตรวจรับ QC:</b> ${E(rec.inspector||'')}</div></div>
+    <div class="sec">1. รายการวัตถุดิบ และการตรวจสภาพ</div>
+    <table><colgroup><col style="width:4%"><col style="width:8.5%"><col style="width:19.5%"><col style="width:11%"><col style="width:9.5%"><col style="width:9.5%"><col style="width:9.5%"><col style="width:5%"><col style="width:5%"><col style="width:5%"><col style="width:6.75%"><col style="width:6.75%"></colgroup>
+      <thead><tr><th rowspan="2">#</th><th rowspan="2">รหัส</th><th rowspan="2">ชื่อวัตถุดิบ</th><th rowspan="2">Lot No</th><th rowspan="2">จำนวน / หน่วย</th><th rowspan="2">วันผลิต</th><th rowspan="2">วันหมดอายุ</th><th colspan="3">อุณหภูมิ °C (เฉพาะของสด)</th><th rowspan="2">Visual<br>ผ่าน/ไม่ผ่าน</th><th rowspan="2">Leak<br>ผ่าน/ไม่ผ่าน</th></tr>
+      <tr><th>1</th><th>2</th><th>3</th></tr></thead><tbody>${s1}</tbody></table>
+    <div class="nt">เกณฑ์อุณหภูมิ: หอม / กระเทียม / พริกสด 1–4°C | หมูบดแช่เย็น 0–4°C | ปลาแช่แข็ง ≤ -18°C | รายการที่ไม่ใช่ของสดไม่ต้องวัด</div>
+    <div class="sec">2. การตรวจเอกสาร</div>
+    <table><colgroup><col style="width:4%"><col style="width:19%"><col style="width:25%"><col style="width:14%"><col style="width:19%"><col style="width:19%"></colgroup>
+      <thead><tr><th>#</th><th>ใบส่งของ / Invoice ตรงกับ PO</th><th>COA</th><th>เลขที่ COA / วันที่ออก</th><th>COA ตรง Lot และผ่าน Spec</th><th>ฉลาก / ชื่อ / Lot ตรงเอกสาร</th></tr></thead><tbody>${s2}</tbody></table>
+    <div class="sec">3. การสุ่มชั่งน้ำหนักตามจำนวนตัวอย่าง (น้ำหนักสุทธิ kg)</div>
+    <table><colgroup><col style="width:4%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:15%"></colgroup>
+      <thead><tr><th>#</th><th>ภาชนะที่รับ</th><th>จำนวนตัวอย่าง</th><th>น้ำหนักตามฉลาก</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>ครบ / ไม่ครบ</th></tr></thead><tbody>${s3}</tbody></table>
+    <div class="nt">จำนวนตัวอย่าง: หอม / พริก / กระเทียม และหมูบด ตามตารางจำนวนถุง (หน้า 2) | ปลาแช่แข็ง 10% ของจำนวนภาชนะ (อย่างน้อย 1) | วัตถุดิบอื่น √N+1 (N = จำนวนภาชนะที่รับ)</div>
+    <div class="sec">4. ผลการตรวจรับ</div>
+    <table><colgroup><col style="width:4%"><col style="width:34%"><col style="width:46%"><col style="width:16%"></colgroup>
+      <thead><tr><th>#</th><th>ผลการตรวจรับ</th><th>หมายเหตุ / ข้อบกพร่องที่พบ</th><th>NC No. (ถ้ามี)</th></tr></thead><tbody>${s4}</tbody></table>
+    <div class="nt">HOLD / REJECT ต้องแยกเก็บ ติดป้ายสถานะ ห้ามนำไปใช้ และออกรายงาน NC</div>
+    ${foot()}</div>`;
 
-  const porkMats=mats.filter(m=>isPork(m)&&Array.isArray(m.pk));
-  const porkHTML=porkMats.length?`<div class="sec">ผลการสุ่มตรวจรับหมูบด (IQC) — อุณหภูมิใจกลาง ${PORK.tMin}–${PORK.tMax}°C · pH ${PORK.phMin}–${PORK.phMax} · น้ำหนักสุทธิครบตามหน้าถุง</div>
-<table><thead><tr><th>#</th><th>Lot (ถุง)</th><th>สุ่ม (ถุง)</th><th>น้ำหนักสุทธิ (kg)</th><th>อุณหภูมิใจกลาง (°C)</th><th>pH</th><th>บรรจุภัณฑ์</th><th>ฉลาก</th><th>สี</th><th>กลิ่น</th><th>สิ่งเจือปน</th><th>หัววัด pH</th><th>ผล IQC</th></tr></thead><tbody>${porkMats.map(m=>{
-    const c=porkCalc(m);const col=c.verdict==='PASS'?'#2e7d32':c.verdict==='REJECT'?'#c0392b':'#e8900a';
-    const bgc=c.verdict==='PASS'?'#e8f5e9':c.verdict==='REJECT'?'#ffebee':'#fff3e0';
-    const j=f=>c.rows.map(r=>{const s=porkCellSt(r,c.lab)[f];return '<span style="'+(s==='pass'||!s?'':'color:#c0392b;font-weight:700')+'">'+(r[f]===''?'—':r[f])+'</span>';}).join(' / ');
-    const s=k=>m[k]==='PASS'?'ผ่าน':m[k]==='FAIL'?'<span style="color:#c0392b;font-weight:700">ไม่ผ่าน</span>':'—';
-    return `<tr><td style="text-align:center">${mats.indexOf(m)+1}</td><td style="text-align:center">${c.bags}</td><td style="text-align:center">${c.n}</td>
-      <td style="text-align:center">${j('w')}<br><span style="font-size:10px;color:#5c6470">หน้าถุง ${c.lab} kg</span></td><td style="text-align:center">${j('t')}</td><td style="text-align:center">${j('ph')}</td>
-      <td style="text-align:center">${s('pkSeal')}</td><td style="text-align:center">${s('pkLabel')}</td><td style="text-align:center">${s('pkColor')}</td><td style="text-align:center">${s('pkOdor')}</td><td style="text-align:center">${s('pkFm')}</td>
-      <td style="text-align:center">${m.pkProbe==='Y'?'ทำความสะอาดแล้ว':'—'}</td>
-      <td style="text-align:center;background:${bgc};color:${col};font-weight:700">${aqlVerdictTxt(c.verdict)}</td></tr>${c.rej.concat(c.hold).length?`<tr><td colspan="13" style="font-size:11px;color:#c0392b">${c.rej.concat(c.hold).join(' ; ')}</td></tr>`:''}`;}).join('')}</tbody></table>`:'';
-
-  const photoHTML=mats.filter(m=>m.photo1||m.photo2).map((m,i)=>{
-    const mi=(typeof MATERIALS!=='undefined')?MATERIALS.find(x=>x.code===m.code)||{}:{};
-    const photos=[m.photo1,m.photo2].filter(Boolean).map((p,pi)=>`
-      <div style="display:inline-block;margin:4px 6px 4px 0;vertical-align:top">
-        <img src="${p}" style="width:146px;height:104px;object-fit:cover;border:1px solid #9aa5b1;display:block">
-        <div style="font-size:10px;color:#9aa0ab;text-align:center;margin-top:3px">รูปที่ ${pi+1}</div>
-      </div>`).join('');
-    return `<div class="keep" style="padding:6px 8px;border:1px solid #9aa5b1">
-      <div style="font-size:12px;font-weight:700;color:#0f2744;margin-bottom:6px">${mats.indexOf(m)+1}. ${m.code} — ${mi.name||m.name||'—'} | Lot: ${m.lot||'—'}</div>
-      ${photos}
-    </div>`;
-  }).join('');
-
-  const sigImg=sig.sigBase64?`<img src="${sig.sigBase64}" style="max-height:50px;max-width:160px;display:block;margin:6px auto">`:
-    `<div style="height:50px;border-bottom:1px solid #ccc;margin:0 16px"></div>`;
+  // ── หน้า 2: บันทึกการสุ่มตรวจ
+  if(aqlMats.length||porkMats.length){
+    const planRows=u=>AQL_PLAN.map(p=>`<tr${u===p?' class="hl"':''}><td class="c">${p.min}–${p.max}</td><td class="c">${p.n}</td><td class="c">${aqlFmtG(p.g)}</td></tr>`).join('');
+    const aqlBlk=aqlMats.map(m=>{const c=aqlCalc(m);const q=k=>aqlN(m[k])>0?aqlN(m[k]):'0';
+      const grp=(key,label,unit,total,pct,lim)=>AQL_DEF[key].map((d,j)=>`<tr>${j===0?`<td class="c" rowspan="3"><b>${label}</b><br>(${unit})</td>`:''}<td>${d[1]}</td><td class="c">${q(d[0])}</td>${j===0?`<td class="c" rowspan="3"><b>${total}</b></td><td class="c" rowspan="3">${pct}</td><td class="c" rowspan="3">${lim}</td>`:''}</tr>`).join('');
+      return `<div class="keep"><div class="sec">5. แผนสุ่มตัวอย่าง OPL — หอม / พริก / กระเทียม (MIL-STD-105E)</div>
+      <div class="two"><div style="flex:0 0 36%">
+        <table><thead><tr><th>ถุงที่รับเข้า</th><th>ถุงที่สุ่ม</th><th>น้ำหนักตรวจ/ถุง</th></tr></thead><tbody>${planRows(c.plan)}</tbody></table>
+        <div class="nt">ตักจาก 3 ตำแหน่ง บน / กลาง / ล่าง<br>% ข้อบกพร่อง = น้ำหนักข้อบกพร่อง ÷ น้ำหนักตัวอย่างรวม × 100</div></div>
+      <div style="flex:1">
+        <div class="fl"><div><b>รายการที่ #:</b> ${mats.indexOf(m)+1} — ${E(nm(m))}</div><div><b>ชนิด:</b> ${cb(m.crop==='shallot','หอม')+cb(m.crop==='chili','พริก')+cb(m.crop==='garlic','กระเทียม')}</div></div>
+        <div class="fl"><div><b>ถุงที่รับเข้า:</b> ${c.bags||''}</div><div><b>ถุงที่สุ่มจริง:</b> ${c.sBags||''}</div><div><b>ตัวอย่างรวม (g):</b> ${c.totG||''}</div></div>
+        <div class="fl"><div><b>ตักครบ 3 ตำแหน่ง:</b> ${cb(m.pos==='Y'||m.pos==='PASS','ครบ')+cb(m.pos==='N'||m.pos==='FAIL','ไม่ครบ')}</div></div>
+        <table><thead><tr><th style="width:19%">ระดับ</th><th>ข้อบกพร่อง</th><th style="width:13%">ปริมาณ</th><th style="width:11%">รวม</th><th style="width:13%">%</th><th style="width:15%">เกณฑ์</th></tr></thead><tbody>
+          ${grp('cr','CRITICAL','ชิ้น',c.cr,'—','0 ชิ้น<br>พบ 1 = Reject')}${grp('ma','MAJOR','g',c.maG,aqlPct(c.maPct),'≤ '+AQL_LIMIT.major+'%')}${grp('mi','MINOR','g',c.miG,aqlPct(c.miPct),'≤ '+AQL_LIMIT.minor+'%')}</tbody></table></div></div>
+      <div class="vd"><b>ผล AQL:</b> ${cb(c.verdict==='PASS','ACCEPT')+cb(c.verdict==='HOLD','CAR / HOLD')+cb(c.verdict==='REJECT','REJECT ทั้งลอต')}${c.why.length?'<span class="sm bad" style="margin-left:auto">'+E(c.why.join(' ; '))+'</span>':''}</div></div>`;}).join('');
+    const porkBlk=porkMats.map(m=>{const c=porkCalc(m);const rows=[];
+      for(let i=0;i<Math.max(5,c.rows.length);i++){const r=c.rows[i]||{};rows.push(`<tr><td class="c">${i+1}</td><td class="c">${dash(r.w)}</td><td class="c">${dash(r.t)}</td><td class="c">${dash(r.ph)}</td></tr>`);}
+      return `<div class="keep"><div class="sec">6. IQC หมูบด (แช่เย็น ถุงละ ${PORK.bagKg} kg)</div>
+      <div class="fl"><div><b>รายการที่ #:</b> ${mats.indexOf(m)+1}</div><div><b>ถุงที่รับเข้า:</b> ${c.bags||''}</div><div><b>ถุงที่สุ่ม:</b> ${c.n||''}</div><div><b>น้ำหนักหน้าถุง (kg):</b> ${c.lab}</div></div>
+      <div class="two"><div style="flex:1">
+        <table><thead><tr><th>ถุงสุ่มที่</th><th>น้ำหนักสุทธิ (kg)</th><th>อุณหภูมิใจกลาง (°C)</th><th>pH กึ่งกลางถุง</th></tr></thead><tbody>${rows.join('')}</tbody></table>
+        <div class="nt"><b>เกณฑ์:</b> น้ำหนักสุทธิครบตามหน้าถุง | อุณหภูมิใจกลาง ${PORK.tMin}–${PORK.tMax}°C<br><b>pH:</b> ต่ำกว่า 5.4 Reject (PSE) | 5.5–6.2 Accept | 6.3–6.4 Reject (DFD) | 6.5 ขึ้นไป Reject (เริ่มเน่าเสีย)</div></div>
+      <div style="flex:1">
+        <table><thead><tr><th>รายการตรวจ</th><th style="width:34%">ผล</th></tr></thead><tbody>
+          ${PORK_CHK.map(k=>`<tr><td>${k[1]}</td><td class="c">${pf(m[k[0]])}</td></tr>`).join('')}
+          <tr><td>ทำความสะอาดหัววัด pH และเช็ดแอลกอฮอล์ (Food Grade) ทุกครั้งก่อนวัดถุงต่อไป</td><td class="c">${cb(m.pkProbe==='Y','ทำแล้วทุกครั้ง')}</td></tr></tbody></table></div></div>
+      <div class="vd"><b>ผล IQC หมูบด:</b> ${cb(c.verdict==='PASS','ACCEPT')+cb(c.verdict==='HOLD','HOLD')+cb(c.verdict==='REJECT','REJECT')}${c.rej.concat(c.hold).length?'<span class="sm bad" style="margin-left:auto">'+E(c.rej.concat(c.hold).join(' ; '))+'</span>':''}</div></div>`;}).join('');
+    body+=`<div class="pg brk">${head('บันทึกการสุ่มตรวจ — หอม / พริก / กระเทียม และหมูบด','<b>Supplier:</b> '+E(sp.name||''))}
+      ${aqlBlk}${porkBlk}
+      <div class="keep"><div class="sec">7. หมายเหตุ / การดำเนินการ</div><div class="box">${E(rec.note||'')}</div></div>
+      ${foot()}</div>`;
+  }
+  // ── เอกสารแนบ: รูปถ่าย
+  if(photoMats.length){
+    body+=`<div class="pg brk">${head('เอกสารแนบ — รูปถ่ายประกอบการตรวจรับ','<b>Supplier:</b> '+E(sp.name||''))}
+      <div class="ph">${photoMats.map(m=>`<div class="keep phb"><div class="pht">${mats.indexOf(m)+1}. ${E(m.code||'')} — ${E(nm(m))} | Lot: ${E(m.lot||'—')}</div>
+        <div class="phr">${[m.photo1,m.photo2].filter(Boolean).map((p,i)=>`<div><img src="${p}"><span class="sm">รูปที่ ${i+1}</span></div>`).join('')}</div></div>`).join('')}</div>
+      <div class="ft"><span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) | FM-QC-001 | SD-QC-001 | ${E(rec.docNo)}</span><span>หน้า ${pageNo} / ${pages}</span></div></div>`;
+  }
 
   const html=`<!DOCTYPE html>
-<html lang="th">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FM-QC-001 — ${rec.docNo}</title>
+<html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FM-QC-001 — ${E(rec.docNo)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Sarabun',sans-serif;font-size:12px;line-height:1.35;color:#1a2130;background:#fff;padding:0}
+body{font-family:'Sarabun',sans-serif;font-size:10.5px;line-height:1.35;color:#1a2130;background:#fff}
 @page{size:A4 portrait;margin:10mm 12mm}
-@media print{
-  body{print-color-adjust:exact;-webkit-print-color-adjust:exact}
-  .no-print{display:none!important}
-  thead{display:table-header-group}
-  tr,.keep{page-break-inside:avoid;break-inside:avoid}
-}
-@media screen{body{max-width:186mm;margin:0 auto;padding:14px 10px 70px}}
-.hd{display:grid;grid-template-columns:1.25fr 1.5fr 1fr;border:1.2px solid #0f2744;margin:0 0 8px}
-.hd>div{padding:8px 10px;display:flex;align-items:center}
-.hd>div+div{border-left:1.2px solid #0f2744}
-.hd-co{gap:9px}
-.logo{width:44px;height:44px;object-fit:contain;flex-shrink:0}
-.brand-name{font-size:13px;font-weight:700;color:#0f2744;line-height:1.25}
-.brand-sub{font-size:9.5px;color:#5c6470;margin-top:1px}
-.hd-title{flex-direction:column;justify-content:center;text-align:center}
-.hd-title h1{font-size:15px;font-weight:700;color:#0f2744;line-height:1.25}
-.hd-title p{font-size:9.5px;letter-spacing:.6px;color:#5c6470;margin-top:2px}
-.hd-ref{padding:0!important;display:block!important}
-.hd-ref div{display:flex;justify-content:space-between;gap:6px;padding:4px 9px;font-size:10px;color:#5c6470}
-.hd-ref div+div{border-top:1px solid #c5ccd6}
-.hd-ref b{color:#0f2744;font-weight:700;text-align:right}
-.info{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #9aa5b1;border-bottom:none;border-right:none;margin:0 0 8px}
-.info>div{padding:4px 8px 5px;border-right:1px solid #9aa5b1;border-bottom:1px solid #9aa5b1;min-height:36px}
-.info .w2{grid-column:span 2}
-.info .w4{grid-column:span 4}
-.info span{display:block;font-size:9.5px;color:#5c6470;font-weight:600}
-.info b{display:block;font-size:12.5px;font-weight:600;color:#1a2130;word-break:break-word}
-.sampling-bar{border:1px solid #c5ccd6;background:#f4f6f8;padding:4px 10px;margin:0 0 8px;font-size:9.5px;color:#5c6470;text-align:center}
-.sec{font-size:11.5px;font-weight:700;color:#0f2744;border-bottom:1.5px solid #0f2744;padding:0 0 2px;margin:10px 0 5px}
-table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px}
-th{background:#e9edf2;color:#0f2744;padding:5px 5px;font-weight:700;text-align:center;font-size:10px;border:1px solid #9aa5b1;line-height:1.25}
-td{padding:4px 6px;border:1px solid #9aa5b1;vertical-align:middle}
-.result-box{display:flex;align-items:center;justify-content:center;padding:7px 14px;font-size:13.5px;font-weight:700;margin:8px 0;border:1.5px solid}
-.sig-section{display:grid;grid-template-columns:1fr 1fr;border:1px solid #9aa5b1;margin-top:10px}
-.sig-box{padding:8px 12px 9px;text-align:center}
-.sig-box+.sig-box{border-left:1px solid #9aa5b1}
-.sig-title{font-size:10.5px;font-weight:700;color:#0f2744;margin-bottom:4px}
-.sig-area{height:54px;display:flex;align-items:flex-end;justify-content:center;border-bottom:1px dotted #5c6470;margin:0 18px 5px}
-.sig-area img{max-height:52px;max-width:170px}
-.sig-name{font-size:12px;color:#1a2130;font-weight:600}
-.sig-role{font-size:10px;color:#5c6470}
-.sig-stamp{font-size:9.5px;color:#0d7a5f;margin-top:2px}
-.footer{border-top:1px solid #0f2744;color:#5c6470;padding:4px 0 0;font-size:9px;display:flex;justify-content:space-between;margin-top:8px}
-.print-btn{position:fixed;bottom:14px;right:14px;padding:11px 22px;background:#0d7a5f;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:Sarabun,sans-serif;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.25)}
-</style>
-</head>
-<body>
-
-<button class="print-btn no-print" onclick="window.print()">🖨 พิมพ์ / บันทึก PDF</button>
-
-<div class="hd">
-  <div class="hd-co">
-    <img src="${(typeof LOGO_B64!=='undefined')?LOGO_B64:''}" class="logo" onerror="this.style.display='none'">
-    <div>
-      <div class="brand-name">บริษัท พระจันทร์ ๕๐ จำกัด</div>
-      <div class="brand-sub">Puisabpak — Quality Control (QC)</div>
-    </div>
-  </div>
-  <div class="hd-title">
-    <h1>ใบบันทึกการรับวัตถุดิบหน้างาน</h1>
-    <p>MATERIAL RECEIVING INSPECTION RECORD</p>
-  </div>
-  <div class="hd-ref">
-    <div>รหัสแบบฟอร์ม <b>FM-QC-001</b></div>
-    <div>เอกสารอ้างอิง <b>SD-QC-001</b></div>
-    <div style="display:block">เลขที่เอกสาร<b style="display:block;text-align:left;font-family:monospace;font-size:11px;white-space:nowrap">${escH(rec.docNo)}</b></div>
-  </div>
-</div>
-
-<div class="info">
-  <div class="w2"><span>ผู้ส่งมอบ (Supplier)</span><b>${escH(sp.name)}</b></div>
-  <div><span>วันที่รับ</span><b>${fmtD(rec.date)}</b></div>
-  <div><span>เวลา</span><b>${escH(rec.time||'—')}</b></div>
-  <div><span>PO / DO No.</span><b>${escH(rec.poNo||'—')}</b></div>
-  <div><span>ทะเบียนรถ</span><b>${escH(rec.carReg||'—')}</b></div>
-  <div><span>อุณหภูมิรถ</span><b>${rec.carTemp!=null?rec.carTemp+' °C':'—'}</b></div>
-  <div><span>ผู้ตรวจรับ QC</span><b>${escH(rec.inspector)}</b></div>
-  ${rec.note?`<div class="w4"><span>หมายเหตุ</span><b style="font-weight:400">${escH(rec.note)}</b></div>`:''}
-</div>
-
-<div class="sampling-bar">แผนการสุ่มตัวอย่าง SD-QC-001: เนื้อสัตว์ 10% &nbsp;|&nbsp; ไม้เสียบ 5% &nbsp;|&nbsp; ของแห้ง √N+1 &nbsp;|&nbsp; หอม/พริก/กระเทียม OPL MIL-STD-105E &nbsp;|&nbsp; หมูบด IQC (pH + อุณหภูมิ) &nbsp;|&nbsp; บรรจุภัณฑ์ AQL</div>
-
-<div class="sec" style="margin-top:0">รายการตรวจรับ</div>
-<table>
-  <thead>
-    <tr>
-      <th style="width:4%">#</th>
-      <th style="width:9%">รหัส</th>
-      <th style="width:15%">ชื่อวัตถุดิบ</th>
-      <th style="width:6%">ประเภท</th>
-      <th style="width:12%">Lot No</th>
-      <th style="width:10%">จำนวน</th>
-      <th style="width:11%">Temp (°C)</th>
-      <th style="width:7%">Visual</th>
-      <th style="width:17%">เอกสาร / COA</th>
-      <th style="width:7%">ผล</th>
-      <th>หมายเหตุ</th>
-    </tr>
-  </thead>
-  <tbody>${matRows}</tbody>
-</table>
-
-${aqlHTML}
-${porkHTML}
-${mats.some(m=>wtSummary(m))?`<div class="sec">ผลการสุ่มชั่งน้ำหนักตามจำนวนตัวอย่าง (น้ำหนักสุทธิ kg)</div>
-<table><thead><tr><th>#</th><th>วัตถุดิบ</th><th>ภาชนะที่รับ</th><th>จำนวนตัวอย่าง</th><th>น้ำหนักตามฉลาก (kg)</th><th>น้ำหนักที่ชั่งได้ (kg)</th><th>ผล</th></tr></thead><tbody>${mats.filter(m=>wtSummary(m)).map(m=>{const w=wtCalc(m);const mi=MATERIALS.find(x=>x.code===m.code)||{};
-    return `<tr><td style="text-align:center">${mats.indexOf(m)+1}</td><td>${escH(m.name||mi.name||m.code)}</td><td style="text-align:center">${w.N}</td><td style="text-align:center">${w.n} (${w.rule})</td><td style="text-align:center">${w.lab??'—'}</td>
-      <td style="text-align:center">${w.vals.map(v=>'<span style="'+(wtSt(v,w.lab)==='fail'?'color:#c0392b;font-weight:700':'')+'">'+escH(v===''?'—':v)+'</span>').join(' / ')}</td>
-      <td style="text-align:center;font-weight:700;color:${w.verdict==='HOLD'?'#c0392b':'#2e7d32'}">${w.verdict==='HOLD'?'ไม่ครบ':w.lab!==null?'ครบ':'บันทึก'}</td></tr>`;}).join('')}</tbody></table>`:''}
-
-<div class="result-box" style="color:${overallColor};background:${overallBg};border-color:${overallColor}">
-  ผลการตรวจรับโดยรวม: ${overall}
-</div>
-
-${photoHTML?`<div>
-<div class="sec">รูปถ่ายประกอบการตรวจรับ (Photo Evidence)</div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">${photoHTML}</div></div>`:''}
-
-<div class="keep">
-<div class="sig-section">
-  <div class="sig-box">
-    <div class="sig-title">ผู้ตรวจรับ (QC Inspector)</div>
-    <div class="sig-area">${sig.sigBase64?`<img src="${sig.sigBase64}">`:''}</div>
-    <div class="sig-name">${escH(sig.signerName||rec.inspector||'—')}</div>
-    ${sig.signedAt?`<div class="sig-stamp">ลงนามอิเล็กทรอนิกส์ ${escH(sig.signedAt)}</div>`:'<div class="sig-role">วันที่ ........ / ........ / ............</div>'}
-  </div>
-  <div class="sig-box">
-    <div class="sig-title">ผู้ทบทวน (QC Supervisor)</div>
-    <div class="sig-area"></div>
-    <div class="sig-name">(................................................)</div>
-    <div class="sig-role">วันที่ ........ / ........ / ............</div>
-  </div>
-</div>
-<div class="footer">
-  <span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) · FM-QC-001 · ${escH(rec.docNo)}</span>
-  <span>พิมพ์เมื่อ ${stampTH}</span>
-</div>
-</div>
-
-<script>
-window.onload = function(){
-  // Auto open print dialog after fonts load
-  setTimeout(()=>{ if(document.fonts) document.fonts.ready.then(()=>window.print()); else window.print(); }, 800);
-};
-<\/script>
-</body>
-</html>`;
-
+@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.no-print{display:none!important}thead{display:table-header-group}tr,.keep{page-break-inside:avoid;break-inside:avoid}.brk{page-break-before:always;break-before:page}}
+@media screen{.brk{margin-top:28px;padding-top:28px;border-top:2px dashed #c5ccd6}}
+.hd{display:flex;align-items:center;gap:10px;border-bottom:2px solid #0f2744;padding-bottom:7px}
+.logo{width:46px;height:46px;object-fit:contain}
+.co{font-size:15.5px;font-weight:700;color:#0f2744;line-height:1.2}.co2{font-size:10px;color:#5c6470}
+.ref{margin-left:auto;text-align:right;font-size:10px;line-height:1.6;color:#1a2130}
+h1{font-size:14px;text-align:center;color:#0f2744;margin:8px 0 5px}
+.fl{display:flex;gap:10px;margin-bottom:4px}
+.fl>div{flex:1;border-bottom:1px dotted #5c6470;padding:2px 0 3px;font-size:10.5px;min-height:20px}
+.fl b{color:#1a2130}
+.sec{background:#eef1f6;border-left:3px solid #0f2744;color:#0f2744;font-weight:700;font-size:11.5px;padding:3px 8px;margin:7px 0 4px}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+th{background:#e9edf2;color:#1a2130;font-weight:700;font-size:9.5px;line-height:1.25;padding:4px 3px;border:1px solid #1a2130;text-align:center}
+td{border:1px solid #1a2130;padding:1.5px 4px;font-size:10px;line-height:1.25;height:15.5px;vertical-align:middle;overflow-wrap:anywhere}
+.c{text-align:center}.mono{font-family:monospace;font-size:9.5px}.sm{font-size:8.5px;color:#5c6470}
+.bad{color:#c0392b}.rj{background:#ffebee}.hd2{background:#fff3e0}.hl td{background:#fff3c4;font-weight:700}
+.nt{font-size:8.5px;color:#3d4654;margin-top:3px;line-height:1.4}
+.ck{display:inline-flex;align-items:center;gap:3px;margin:0 4px;white-space:nowrap}
+.cb{display:inline-block;width:9px;height:9px;border:1px solid #1a2130;position:relative;flex-shrink:0;background:#fff}
+.cb.on{background:#0f2744;border-color:#0f2744}
+.cb.on::after{content:'';position:absolute;left:2.4px;top:0.2px;width:2.6px;height:5.4px;border:solid #fff;border-width:0 1.4px 1.4px 0;transform:rotate(45deg)}
+.two{display:flex;gap:10px;align-items:flex-start}
+.vd{display:flex;align-items:center;gap:14px;border:1px solid #1a2130;padding:6px 10px;margin:6px 0 2px;font-size:11.5px;font-weight:700}
+.vd .ck{font-size:11.5px;margin:0 8px}.vd .sm{font-weight:400}
+.box{border:1px solid #1a2130;min-height:54px;padding:5px 7px;white-space:pre-wrap}
+.sg{display:flex;gap:60px;margin-top:6px;padding:0 20px}
+.sg>div{flex:1;text-align:center;font-size:10.5px}
+.sgi{height:34px;display:flex;align-items:flex-end;justify-content:center}.sgi img{max-height:34px;max-width:150px}
+.ln{border-top:1.5px solid #1a2130;margin-bottom:4px}
+.ft{display:flex;justify-content:space-between;border-top:1px solid #c5ccd6;margin-top:7px;padding-top:4px;font-size:8.5px;color:#5c6470}
+.ph{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.phb{border:1px solid #1a2130;padding:6px 8px}.pht{font-weight:700;color:#0f2744;font-size:10.5px;margin-bottom:5px}
+.phr{display:flex;gap:6px}.phr>div{flex:0 0 calc(50% - 3px);text-align:center}.phr img{width:100%;height:118px;object-fit:cover;border:1px solid #9aa5b1;display:block;margin-bottom:2px}
+</style></head><body>${body}</body></html>`;
   showPrint(html);
 }
-
 
 let records=[],ncLogs=[],curMats=[],matIdx=0,_lastRec=null;
 const sigState={empty:true,drawing:false};

@@ -13,3 +13,7 @@ ENVIRONMENT = "production"
 ALLOWED_ORIGINS = "https://puisabpak-ncr.pages.dev,https://puisabpak-receiving.rapuisabpak.workers.dev"
 
 # Secret (set from the GitHub secret SETUP_KEY by the deploy workflow): SETUP_KEY
+
+# Keep request logs so problems can be traced in the Cloudflare dashboard.
+[observability]
+enabled = true
