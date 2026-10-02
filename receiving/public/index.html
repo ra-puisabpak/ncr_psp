@@ -1099,7 +1099,7 @@ function generatePDF(rec){
   }).join('');
 
   const aqlMats=mats.filter(m=>m.aql);
-  const aqlHTML=aqlMats.length?`<div style="font-size:12px;font-weight:700;color:#0f2744;margin:8px 0 4px;padding:5px 10px;background:#e1f5ee;border-radius:6px;border-left:3px solid #0d7a5f">ผลการสุ่มตรวจตาม OPL — หอม / พริก / กระเทียม (MIL-STD-105E) | Critical 0% · Major ≤ ${AQL_LIMIT.major}% · Minor ≤ ${AQL_LIMIT.minor}%</div>
+  const aqlHTML=aqlMats.length?`<div class="sec">ผลการสุ่มตรวจตาม OPL — หอม / พริก / กระเทียม (MIL-STD-105E) | Critical 0% · Major ≤ ${AQL_LIMIT.major}% · Minor ≤ ${AQL_LIMIT.minor}%</div>
 <table><thead><tr><th>#</th><th>วัตถุดิบ</th><th>Lot (ถุง)</th><th>แผนสุ่ม</th><th>สุ่มจริง</th><th>3 ตำแหน่ง</th><th>Critical (ชิ้น)</th><th>Major</th><th>Minor</th><th>ผล AQL</th></tr></thead><tbody>${aqlMats.map(m=>{
     const c=aqlCalc(m);const mi=MATERIALS.find(x=>x.code===m.code)||{};
     const det=k=>AQL_DEF[k].filter(d=>aqlN(m[d[0]])>0).map(d=>d[1]+' '+aqlN(m[d[0]])).join(', ');
@@ -1118,7 +1118,7 @@ function generatePDF(rec){
       <td style="text-align:center;background:${bgc};color:${col};font-weight:700">${aqlVerdictTxt(c.verdict)}</td></tr>`;}).join('')}</tbody></table>`:'';
 
   const porkMats=mats.filter(m=>isPork(m)&&Array.isArray(m.pk));
-  const porkHTML=porkMats.length?`<div style="font-size:12px;font-weight:700;color:#0f2744;margin:8px 0 4px;padding:5px 10px;background:#e1f5ee;border-radius:6px;border-left:3px solid #0d7a5f">ผลการสุ่มตรวจรับหมูบด (IQC) — อุณหภูมิใจกลาง ${PORK.tMin}–${PORK.tMax}°C · pH ${PORK.phMin}–${PORK.phMax} · น้ำหนักสุทธิครบตามหน้าถุง</div>
+  const porkHTML=porkMats.length?`<div class="sec">ผลการสุ่มตรวจรับหมูบด (IQC) — อุณหภูมิใจกลาง ${PORK.tMin}–${PORK.tMax}°C · pH ${PORK.phMin}–${PORK.phMax} · น้ำหนักสุทธิครบตามหน้าถุง</div>
 <table><thead><tr><th>#</th><th>Lot (ถุง)</th><th>สุ่ม (ถุง)</th><th>น้ำหนักสุทธิ (kg)</th><th>อุณหภูมิใจกลาง (°C)</th><th>pH</th><th>บรรจุภัณฑ์</th><th>ฉลาก</th><th>สี</th><th>กลิ่น</th><th>สิ่งเจือปน</th><th>หัววัด pH</th><th>ผล IQC</th></tr></thead><tbody>${porkMats.map(m=>{
     const c=porkCalc(m);const col=c.verdict==='PASS'?'#2e7d32':c.verdict==='REJECT'?'#c0392b':'#e8900a';
     const bgc=c.verdict==='PASS'?'#e8f5e9':c.verdict==='REJECT'?'#ffebee':'#fff3e0';
@@ -1134,10 +1134,10 @@ function generatePDF(rec){
     const mi=(typeof MATERIALS!=='undefined')?MATERIALS.find(x=>x.code===m.code)||{}:{};
     const photos=[m.photo1,m.photo2].filter(Boolean).map((p,pi)=>`
       <div style="display:inline-block;margin:4px 6px 4px 0;vertical-align:top">
-        <img src="${p}" style="width:146px;height:104px;object-fit:cover;border-radius:6px;border:1px solid #dde1e7;display:block">
+        <img src="${p}" style="width:146px;height:104px;object-fit:cover;border:1px solid #9aa5b1;display:block">
         <div style="font-size:10px;color:#9aa0ab;text-align:center;margin-top:3px">รูปที่ ${pi+1}</div>
       </div>`).join('');
-    return `<div class="keep" style="padding:8px 10px;background:#f8fafc;border-radius:8px;border:1px solid #e8eaed">
+    return `<div class="keep" style="padding:6px 8px;border:1px solid #9aa5b1">
       <div style="font-size:12px;font-weight:700;color:#0f2744;margin-bottom:6px">${mats.indexOf(m)+1}. ${m.code} — ${mi.name||m.name||'—'} | Lot: ${m.lot||'—'}</div>
       ${photos}
     </div>`;
@@ -1155,82 +1155,91 @@ function generatePDF(rec){
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Sarabun',sans-serif;font-size:13px;color:#1a2130;background:#fff;padding:0}
+body{font-family:'Sarabun',sans-serif;font-size:12px;line-height:1.35;color:#1a2130;background:#fff;padding:0}
 @page{size:A4;margin:10mm 12mm}
 @media print{
   body{print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .no-print{display:none!important}
+  thead{display:table-header-group}
   tr,.keep{page-break-inside:avoid;break-inside:avoid}
 }
-.header{background:#0f2744;color:#fff;padding:10px 14px;display:flex;align-items:center;gap:12px}
-.logo{width:42px;height:42px;border-radius:8px;object-fit:contain;background:#fff;padding:3px}
-.brand-name{font-size:16px;font-weight:700}
-.brand-sub{font-size:10px;color:rgba(255,255,255,.7);margin-top:1px}
-.doc-ref{margin-left:auto;text-align:right;font-size:10px;color:rgba(255,255,255,.8);line-height:1.8}
-.title-bar{background:#1d9e75;padding:7px 14px;text-align:center}
-.title-bar h1{font-size:14px;font-weight:700;color:#fff}
-.title-bar p{font-size:10px;color:rgba(255,255,255,.9);margin-top:2px}
-.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #dde1e7;margin:8px 0;border-radius:6px;overflow:hidden}
-.info-row{display:flex;padding:5px 10px;border-bottom:1px solid #f0f2f5;font-size:12px}
-.info-row:last-child{border-bottom:none}
-.info-label{color:#5c6470;font-weight:600;min-width:100px;flex-shrink:0}
-.info-value{color:#1a2130;flex:1}
-.sampling-bar{background:#e1f5ee;border:1px solid #9fe1cb;border-radius:6px;padding:5px 12px;margin:0 0 8px;font-size:11px;font-weight:600;color:#0d7a5f;text-align:center}
-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px}
-th{background:#0f2744;color:#fff;padding:6px 8px;font-weight:600;text-align:center;font-size:11px;white-space:nowrap}
-td{padding:5px 8px;border-bottom:1px solid #f0f2f5;vertical-align:middle}
-.result-box{display:flex;align-items:center;justify-content:center;padding:8px 14px;border-radius:8px;font-size:14px;font-weight:700;margin:8px 0;border:2px solid}
-.sig-section{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
-.sig-box{border:1px solid #dde1e7;border-radius:8px;padding:10px;text-align:center;background:#f8fafc}
-.sig-title{font-size:11px;font-weight:700;color:#5c6470;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
-.sig-name{font-size:12px;color:#1a2130;margin-top:6px;border-top:1px solid #dde1e7;padding-top:5px}
-.sig-role{font-size:10px;color:#9aa0ab}
-.sig-stamp{font-size:10px;color:#0d7a5f;margin-top:4px}
-.footer{background:#0f2744;color:rgba(255,255,255,.7);padding:5px 14px;font-size:10px;display:flex;justify-content:space-between;margin-top:8px}
-.print-btn{position:fixed;top:12px;right:12px;padding:10px 22px;background:#0d7a5f;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:Sarabun,sans-serif;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-.print-btn:hover{background:#0a6b52}
+@media screen{body{max-width:186mm;margin:0 auto;padding:14px 10px 70px}}
+.hd{display:grid;grid-template-columns:1.25fr 1.5fr 1fr;border:1.2px solid #0f2744;margin:0 0 8px}
+.hd>div{padding:8px 10px;display:flex;align-items:center}
+.hd>div+div{border-left:1.2px solid #0f2744}
+.hd-co{gap:9px}
+.logo{width:44px;height:44px;object-fit:contain;flex-shrink:0}
+.brand-name{font-size:13px;font-weight:700;color:#0f2744;line-height:1.25}
+.brand-sub{font-size:9.5px;color:#5c6470;margin-top:1px}
+.hd-title{flex-direction:column;justify-content:center;text-align:center}
+.hd-title h1{font-size:15px;font-weight:700;color:#0f2744;line-height:1.25}
+.hd-title p{font-size:9.5px;letter-spacing:.6px;color:#5c6470;margin-top:2px}
+.hd-ref{padding:0!important;display:block!important}
+.hd-ref div{display:flex;justify-content:space-between;gap:6px;padding:4px 9px;font-size:10px;color:#5c6470}
+.hd-ref div+div{border-top:1px solid #c5ccd6}
+.hd-ref b{color:#0f2744;font-weight:700;text-align:right}
+.info{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #9aa5b1;border-bottom:none;border-right:none;margin:0 0 8px}
+.info>div{padding:4px 8px 5px;border-right:1px solid #9aa5b1;border-bottom:1px solid #9aa5b1;min-height:36px}
+.info .w2{grid-column:span 2}
+.info .w4{grid-column:span 4}
+.info span{display:block;font-size:9.5px;color:#5c6470;font-weight:600}
+.info b{display:block;font-size:12.5px;font-weight:600;color:#1a2130;word-break:break-word}
+.sampling-bar{border:1px solid #c5ccd6;background:#f4f6f8;padding:4px 10px;margin:0 0 8px;font-size:9.5px;color:#5c6470;text-align:center}
+.sec{font-size:11.5px;font-weight:700;color:#0f2744;border-bottom:1.5px solid #0f2744;padding:0 0 2px;margin:10px 0 5px}
+table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px}
+th{background:#e9edf2;color:#0f2744;padding:5px 5px;font-weight:700;text-align:center;font-size:10px;border:1px solid #9aa5b1;line-height:1.25}
+td{padding:4px 6px;border:1px solid #9aa5b1;vertical-align:middle}
+.result-box{display:flex;align-items:center;justify-content:center;padding:7px 14px;font-size:13.5px;font-weight:700;margin:8px 0;border:1.5px solid}
+.sig-section{display:grid;grid-template-columns:1fr 1fr;border:1px solid #9aa5b1;margin-top:10px}
+.sig-box{padding:8px 12px 9px;text-align:center}
+.sig-box+.sig-box{border-left:1px solid #9aa5b1}
+.sig-title{font-size:10.5px;font-weight:700;color:#0f2744;margin-bottom:4px}
+.sig-area{height:54px;display:flex;align-items:flex-end;justify-content:center;border-bottom:1px dotted #5c6470;margin:0 18px 5px}
+.sig-area img{max-height:52px;max-width:170px}
+.sig-name{font-size:12px;color:#1a2130;font-weight:600}
+.sig-role{font-size:10px;color:#5c6470}
+.sig-stamp{font-size:9.5px;color:#0d7a5f;margin-top:2px}
+.footer{border-top:1px solid #0f2744;color:#5c6470;padding:4px 0 0;font-size:9px;display:flex;justify-content:space-between;margin-top:8px}
+.print-btn{position:fixed;bottom:14px;right:14px;padding:11px 22px;background:#0d7a5f;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:Sarabun,sans-serif;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.25)}
 </style>
 </head>
 <body>
 
 <button class="print-btn no-print" onclick="window.print()">🖨 พิมพ์ / บันทึก PDF</button>
 
-<div class="header">
-  <img src="${(typeof LOGO_B64!=='undefined')?LOGO_B64:''}" class="logo" onerror="this.style.display='none'">
-  <div>
-    <div class="brand-name">บริษัท พระจันทร์ ๕๐ จำกัด</div>
-    <div class="brand-sub">Puisabpak — Quality Control (QC)</div>
+<div class="hd">
+  <div class="hd-co">
+    <img src="${(typeof LOGO_B64!=='undefined')?LOGO_B64:''}" class="logo" onerror="this.style.display='none'">
+    <div>
+      <div class="brand-name">บริษัท พระจันทร์ ๕๐ จำกัด</div>
+      <div class="brand-sub">Puisabpak — Quality Control (QC)</div>
+    </div>
   </div>
-  <div class="doc-ref">
-    FM-QC-001 | SD-QC-001<br>
-    พิมพ์วันที่: ${stampTH}
+  <div class="hd-title">
+    <h1>ใบบันทึกการรับวัตถุดิบหน้างาน</h1>
+    <p>MATERIAL RECEIVING INSPECTION RECORD</p>
+  </div>
+  <div class="hd-ref">
+    <div>รหัสแบบฟอร์ม <b>FM-QC-001</b></div>
+    <div>เอกสารอ้างอิง <b>SD-QC-001</b></div>
+    <div style="display:block">เลขที่เอกสาร<b style="display:block;text-align:left;font-family:monospace;font-size:11px;white-space:nowrap">${escH(rec.docNo)}</b></div>
   </div>
 </div>
 
-<div class="title-bar">
-  <h1>ใบบันทึกการรับวัตถุดิบหน้างาน</h1>
-  <p>MATERIAL RECEIVING INSPECTION RECORD</p>
-</div>
-
-<div class="info-grid">
-  <div>
-    <div class="info-row"><span class="info-label">เลขที่เอกสาร</span><span class="info-value" style="font-family:monospace;font-weight:700">${rec.docNo}</span></div>
-    <div class="info-row"><span class="info-label">Supplier</span><span class="info-value">${sp.name}</span></div>
-    <div class="info-row"><span class="info-label">ทะเบียนรถ</span><span class="info-value">${rec.carReg||'—'}</span></div>
-    <div class="info-row"><span class="info-label">PO / DO No.</span><span class="info-value">${escH(rec.poNo||'—')}</span></div>
-    <div class="info-row"><span class="info-label">ผู้ตรวจรับ QC</span><span class="info-value" style="font-weight:600">${rec.inspector}</span></div>
-  </div>
-  <div>
-    <div class="info-row"><span class="info-label">วันที่รับ</span><span class="info-value">${rec.date}</span></div>
-    <div class="info-row"><span class="info-label">เวลา</span><span class="info-value">${rec.time||'—'}</span></div>
-    <div class="info-row"><span class="info-label">อุณหภูมิรถ</span><span class="info-value">
-      ${rec.carTemp!=null?rec.carTemp+'°C':'—'}</span></div>
-    <div class="info-row"><span class="info-label">หมายเหตุ</span><span class="info-value">${rec.note||'—'}</span></div>
-  </div>
+<div class="info">
+  <div class="w2"><span>ผู้ส่งมอบ (Supplier)</span><b>${escH(sp.name)}</b></div>
+  <div><span>วันที่รับ</span><b>${fmtD(rec.date)}</b></div>
+  <div><span>เวลา</span><b>${escH(rec.time||'—')}</b></div>
+  <div><span>PO / DO No.</span><b>${escH(rec.poNo||'—')}</b></div>
+  <div><span>ทะเบียนรถ</span><b>${escH(rec.carReg||'—')}</b></div>
+  <div><span>อุณหภูมิรถ</span><b>${rec.carTemp!=null?rec.carTemp+' °C':'—'}</b></div>
+  <div><span>ผู้ตรวจรับ QC</span><b>${escH(rec.inspector)}</b></div>
+  ${rec.note?`<div class="w4"><span>หมายเหตุ</span><b style="font-weight:400">${escH(rec.note)}</b></div>`:''}
 </div>
 
 <div class="sampling-bar">แผนการสุ่มตัวอย่าง SD-QC-001: เนื้อสัตว์ 10% &nbsp;|&nbsp; ไม้เสียบ 5% &nbsp;|&nbsp; ของแห้ง √N+1 &nbsp;|&nbsp; หอม/พริก/กระเทียม OPL MIL-STD-105E &nbsp;|&nbsp; หมูบด IQC (pH + อุณหภูมิ) &nbsp;|&nbsp; บรรจุภัณฑ์ AQL</div>
 
+<div class="sec" style="margin-top:0">รายการตรวจรับ</div>
 <table>
   <thead>
     <tr>
@@ -1252,7 +1261,7 @@ td{padding:5px 8px;border-bottom:1px solid #f0f2f5;vertical-align:middle}
 
 ${aqlHTML}
 ${porkHTML}
-${mats.some(m=>wtSummary(m))?`<div style="font-size:12px;font-weight:700;color:#0f2744;margin:8px 0 4px;padding:5px 10px;background:#e1f5ee;border-radius:6px;border-left:3px solid #0d7a5f">ผลการสุ่มชั่งน้ำหนักตามจำนวนตัวอย่าง (น้ำหนักสุทธิ kg)</div>
+${mats.some(m=>wtSummary(m))?`<div class="sec">ผลการสุ่มชั่งน้ำหนักตามจำนวนตัวอย่าง (น้ำหนักสุทธิ kg)</div>
 <table><thead><tr><th>#</th><th>วัตถุดิบ</th><th>ภาชนะที่รับ</th><th>จำนวนตัวอย่าง</th><th>น้ำหนักตามฉลาก (kg)</th><th>น้ำหนักที่ชั่งได้ (kg)</th><th>ผล</th></tr></thead><tbody>${mats.filter(m=>wtSummary(m)).map(m=>{const w=wtCalc(m);const mi=MATERIALS.find(x=>x.code===m.code)||{};
     return `<tr><td style="text-align:center">${mats.indexOf(m)+1}</td><td>${escH(m.name||mi.name||m.code)}</td><td style="text-align:center">${w.N}</td><td style="text-align:center">${w.n} (${w.rule})</td><td style="text-align:center">${w.lab??'—'}</td>
       <td style="text-align:center">${w.vals.map(v=>'<span style="'+(wtSt(v,w.lab)==='fail'?'color:#c0392b;font-weight:700':'')+'">'+escH(v===''?'—':v)+'</span>').join(' / ')}</td>
@@ -1263,30 +1272,27 @@ ${mats.some(m=>wtSummary(m))?`<div style="font-size:12px;font-weight:700;color:#
 </div>
 
 ${photoHTML?`<div>
-<div style="font-size:13px;font-weight:700;color:#0f2744;margin:8px 0 6px;padding:6px 12px;background:#f4f5f7;border-radius:6px;border-left:3px solid #0d7a5f">📷 รูปถ่ายสินค้า — Photo Evidence</div>
+<div class="sec">รูปถ่ายประกอบการตรวจรับ (Photo Evidence)</div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">${photoHTML}</div></div>`:''}
 
 <div class="keep">
 <div class="sig-section">
   <div class="sig-box">
-    <div class="sig-title">ลายเซ็นผู้ตรวจรับ</div>
-    ${sigImg}
-    <div class="sig-name" style="font-weight:700">${sig.signerName||rec.inspector||'—'}</div>
-    <div class="sig-role">QC Inspector</div>
-    ${sig.signedAt?`<div class="sig-stamp">✓ Electronically Signed: ${sig.signedAt}</div>`:''}
+    <div class="sig-title">ผู้ตรวจรับ (QC Inspector)</div>
+    <div class="sig-area">${sig.sigBase64?`<img src="${sig.sigBase64}">`:''}</div>
+    <div class="sig-name">${escH(sig.signerName||rec.inspector||'—')}</div>
+    ${sig.signedAt?`<div class="sig-stamp">ลงนามอิเล็กทรอนิกส์ ${escH(sig.signedAt)}</div>`:'<div class="sig-role">วันที่ ........ / ........ / ............</div>'}
   </div>
   <div class="sig-box">
-    <div class="sig-title">ทบทวน / QC Supervisor</div>
-    <div style="height:50px;border-bottom:1px solid #ccc;margin:0 16px 6px"></div>
-    <div class="sig-name">................................................</div>
-    <div class="sig-role">QC Supervisor</div>
-    <div style="font-size:11px;color:#9aa0ab;margin-top:4px">วันที่: _____ / _____ / _______</div>
+    <div class="sig-title">ผู้ทบทวน (QC Supervisor)</div>
+    <div class="sig-area"></div>
+    <div class="sig-name">(................................................)</div>
+    <div class="sig-role">วันที่ ........ / ........ / ............</div>
   </div>
 </div>
-
 <div class="footer">
-  <span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) | FM-QC-001 | SD-QC-001</span>
-  <span>พิมพ์: ${stampTH}</span>
+  <span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) · FM-QC-001 · ${escH(rec.docNo)}</span>
+  <span>พิมพ์เมื่อ ${stampTH}</span>
 </div>
 </div>
 
