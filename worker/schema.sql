@@ -159,3 +159,46 @@ CREATE TABLE IF NOT EXISTS audit_log (
   changes     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity, entity_id);
+
+-- Receiving inspection records (FM-QC-001). `data` is the app's own JSON without the photos.
+CREATE TABLE IF NOT EXISTS recv_records (
+  doc_no      TEXT PRIMARY KEY,
+  uid         TEXT NOT NULL UNIQUE,
+  recv_date   TEXT NOT NULL,
+  supplier    TEXT NOT NULL,
+  inspector   TEXT NOT NULL,
+  result      TEXT NOT NULL CHECK(result IN ('PASS','HOLD','REJECT')),
+  data        TEXT NOT NULL,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recv_date ON recv_records(recv_date);
+
+CREATE TABLE IF NOT EXISTS recv_photos (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  doc_no       TEXT NOT NULL,
+  mat_idx      INTEGER NOT NULL,
+  slot         INTEGER NOT NULL,
+  content_type TEXT NOT NULL,
+  size         INTEGER NOT NULL,
+  data         TEXT NOT NULL,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  UNIQUE(doc_no, mat_idx, slot)
+);
+
+-- NC log of the receiving app. `ncr_id` is the NCR opened for it in the NCR e-Form.
+CREATE TABLE IF NOT EXISTS recv_nc (
+  nc_id       TEXT PRIMARY KEY,
+  uid         TEXT NOT NULL UNIQUE,
+  doc_no      TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'Open' CHECK(status IN ('Open','Closed')),
+  ncr_id      TEXT,
+  closed_date TEXT,
+  data        TEXT NOT NULL,
+  created_by  TEXT NOT NULL,
+  created_at  TEXT NOT NULL,
+  updated_by  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recv_nc_doc ON recv_nc(doc_no);

@@ -695,6 +695,156 @@ export default {
         }
       }
 
+      // ===== Receiving inspection (FM-QC-001) =====
+      // Records are kept as the app's own JSON; photos sit in their own rows so one record never outgrows a D1 row.
+      if (path === '/api/recv' && method === 'GET') {
+        const recs = await DB.prepare(
+          'SELECT doc_no, uid, data, created_by, created_at FROM recv_records ORDER BY recv_date DESC, doc_no DESC LIMIT 1000').all();
+        const ncs = await DB.prepare(
+          'SELECT nc_id, uid, doc_no, status, ncr_id, closed_date, data FROM recv_nc ORDER BY created_at DESC, nc_id DESC LIMIT 1000').all();
+        return json({
+          records: recs.results.map((r) => ({ ...JSON.parse(r.data), docNo: r.doc_no, uid: r.uid, savedBy: r.created_by, savedAt: r.created_at })),
+          ncLogs: ncs.results.map((n) => ({ ...JSON.parse(n.data), id: n.nc_id, uid: n.uid, docNo: n.doc_no, status: n.status, ncrId: n.ncr_id || '', closedDate: n.closed_date || '' })),
+        });
+      }
+
+      const recvUid = (v) => { const u = String(v || ''); if (!/^[A-Za-z0-9-]{8,64}$/.test(u)) fail(400, 'รหัสอ้างอิงรายการไม่ถูกต้อง'); return u; };
+      // Keeps the number the device proposed when it is free, otherwise gives the next one for that day.
+      const recvDocNo = async (proposed) => {
+        const m = /^FM-QC-001-(\d{8})-(\d{3})$/.exec(String(proposed || ''));
+        if (m && !(await DB.prepare('SELECT 1 FROM recv_records WHERE doc_no=?').bind(proposed).first())) return proposed;
+        const day = m ? m[1] : today().replace(/-/g, '');
+        const last = await DB.prepare('SELECT doc_no FROM recv_records WHERE doc_no LIKE ? ORDER BY doc_no DESC LIMIT 1').bind(`FM-QC-001-${day}-%`).first();
+        return `FM-QC-001-${day}-${String((last ? parseInt(last.doc_no.slice(-3), 10) : 0) + 1).padStart(3, '0')}`;
+      };
+      const recvNcIds = async (list) => {
+        const last = await DB.prepare("SELECT nc_id FROM recv_nc ORDER BY CAST(SUBSTR(nc_id,3) AS INTEGER) DESC LIMIT 1").first();
+        let n = last ? parseInt(last.nc_id.slice(2), 10) : 0;
+        const taken = new Set();
+        const out = [];
+        for (const nc of list) {
+          let id = String(nc.id || '');
+          if (!/^NC\d{3,6}$/.test(id) || taken.has(id) || await DB.prepare('SELECT 1 FROM recv_nc WHERE nc_id=?').bind(id).first()) {
+            do { n += 1; id = 'NC' + String(n).padStart(3, '0'); } while (taken.has(id));
+          }
+          taken.add(id); out.push(id);
+        }
+        return out;
+      };
+      const ncInsert = (id, uid, docNo, nc) => {
+        const ncrId = /^NCR-\d{4}-\d{3,}$/.test(String(nc.ncrId || '')) ? nc.ncrId : null;
+        const status = nc.status === 'Closed' ? 'Closed' : 'Open';
+        const { id: _i, uid: _u, docNo: _d, status: _s, ncrId: _n, closedDate: _c, synced: _y, dirty: _t, ...rest } = nc;
+        const data = JSON.stringify(rest);
+        if (data.length > 20000) fail(413, 'ข้อมูล NC ยาวเกินไป');
+        return DB.prepare(
+          'INSERT INTO recv_nc (nc_id,uid,doc_no,status,ncr_id,closed_date,data,created_by,created_at,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+        ).bind(id, uid, docNo, status, ncrId, status === 'Closed' ? nz(nc.closedDate) || today() : null, data, user.username, nowIso(), user.username, nowIso());
+      };
+
+      if (path === '/api/recv' && method === 'POST') {
+        need(user, WRITERS);
+        const b = await body();
+        const uid = recvUid(b.uid);
+        const rec = b.record;
+        if (!rec || typeof rec !== 'object' || !Array.isArray(rec.mats) || !rec.mats.length) fail(400, 'ข้อมูลใบตรวจรับไม่ครบ');
+        if (rec.mats.length > 60) fail(400, 'รายการวัตถุดิบมากเกินไป');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(rec.date || '')) || blank(rec.supplier) || blank(rec.inspector)) fail(400, 'กรุณาระบุวันที่ ผู้ส่งมอบ และผู้ตรวจรับ');
+        const ncList = Array.isArray(b.ncs) ? b.ncs.slice(0, 60) : [];
+        for (let attempt = 0; ; attempt++) {
+          const done = await DB.prepare('SELECT doc_no FROM recv_records WHERE uid=?').bind(uid).first();
+          if (done) { // the same save arriving twice (a retry after a lost reply)
+            const ncs = await DB.prepare('SELECT nc_id, uid FROM recv_nc WHERE doc_no=?').bind(done.doc_no).all();
+            return json({ docNo: done.doc_no, ncs: ncs.results.map((n) => ({ uid: n.uid, id: n.nc_id })) });
+          }
+          const docNo = await recvDocNo(rec.docNo);
+          const photos = [];
+          const mats = rec.mats.map((m, i) => {
+            const o = { ...m };
+            for (const slot of [1, 2]) {
+              const src = o['photo' + slot];
+              o['photo' + slot] = null;
+              if (typeof src === 'string' && src.startsWith('data:')) {
+                const ph = decodePhoto({ content_type: (/^data:([^;,]+)/.exec(src) || [])[1], data: src });
+                photos.push({ idx: Number.isInteger(o.idx) ? o.idx : i + 1, slot, ph });
+                o['hasPhoto' + slot] = 1;
+              }
+            }
+            return o;
+          });
+          const { materials: _m, docNo: _d, uid: _u, synced: _s, savedBy: _b, savedAt: _a, ...rest } = rec;
+          // The signature image travels with the photos, so the list of records stays small.
+          const sig = rec.sig && typeof rec.sig === 'object' ? { ...rec.sig } : null;
+          if (sig && typeof sig.sigBase64 === 'string' && sig.sigBase64.startsWith('data:')) {
+            photos.push({ idx: 0, slot: 0, ph: decodePhoto({ content_type: (/^data:([^;,]+)/.exec(sig.sigBase64) || [])[1], data: sig.sigBase64 }) });
+            sig.hasSig = 1;
+          }
+          if (sig) sig.sigBase64 = null;
+          const data = JSON.stringify({ ...rest, sig, mats });
+          if (data.length > 1500000) fail(413, 'ข้อมูลใบตรวจรับใหญ่เกินไป');
+          const worst = mats.some((m) => m.result === 'REJECT') ? 'REJECT' : mats.some((m) => m.result === 'HOLD') ? 'HOLD' : 'PASS';
+          const ncIds = await recvNcIds(ncList);
+          const stmts = [DB.prepare(
+            'INSERT INTO recv_records (doc_no,uid,recv_date,supplier,inspector,result,data,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?)'
+          ).bind(docNo, uid, rec.date, String(rec.supplier).trim(), String(rec.inspector).trim(), worst, data, user.username, nowIso())];
+          for (const p of photos) stmts.push(DB.prepare(
+            'INSERT INTO recv_photos (doc_no,mat_idx,slot,content_type,size,data,created_by,created_at) VALUES (?,?,?,?,?,?,?,?)'
+          ).bind(docNo, p.idx, p.slot, p.ph.type, p.ph.size, p.ph.b64, user.username, nowIso()));
+          ncList.forEach((nc, i) => stmts.push(ncInsert(ncIds[i], recvUid(nc.uid), docNo, nc)));
+          try { await DB.batch(stmts); } catch (e) {
+            if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) continue; // another phone took the number first
+            throw e;
+          }
+          await audit(DB, user.username, 'user', 'create', 'recv', docNo, { supplier: rec.supplier, result: worst, items: mats.length, photos: photos.filter((p) => p.slot).length, nc: ncIds });
+          return json({ docNo, ncs: ncList.map((nc, i) => ({ uid: nc.uid, id: ncIds[i] })) }, 201);
+        }
+      }
+
+      const rp = path.match(/^\/api\/recv\/(FM-QC-001-\d{8}-\d{3})\/photos$/);
+      if (rp && method === 'GET') {
+        const { results } = await DB.prepare('SELECT mat_idx, slot, content_type, data FROM recv_photos WHERE doc_no=? ORDER BY mat_idx, slot').bind(rp[1]).all();
+        return json(results.map((r) => ({ idx: r.mat_idx, slot: r.slot, data: `data:${r.content_type};base64,${r.data}` })));
+      }
+
+      if (path === '/api/recv-nc' && method === 'POST') {
+        need(user, WRITERS);
+        const nc = await body();
+        const uid = recvUid(nc.uid);
+        if (blank(nc.docNo) || blank(nc.failType)) fail(400, 'กรุณาระบุเลขที่ใบตรวจรับและประเภทปัญหา');
+        for (let attempt = 0; ; attempt++) {
+          const done = await DB.prepare('SELECT nc_id FROM recv_nc WHERE uid=?').bind(uid).first();
+          if (done) return json({ id: done.nc_id });
+          const [id] = await recvNcIds([nc]);
+          try { await ncInsert(id, uid, String(nc.docNo), nc).run(); } catch (e) {
+            if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) continue;
+            throw e;
+          }
+          await audit(DB, user.username, 'user', 'create', 'recv_nc', id, { doc_no: nc.docNo, fail_type: nc.failType });
+          return json({ id }, 201);
+        }
+      }
+      const rn = path.match(/^\/api\/recv-nc\/(NC\d{3,6})$/);
+      if (rn && method === 'PATCH') {
+        need(user, WRITERS);
+        const b = await body();
+        const row = await DB.prepare('SELECT status, ncr_id, closed_date FROM recv_nc WHERE nc_id=?').bind(rn[1]).first();
+        if (!row) fail(404, 'ไม่พบ NC นี้');
+        const next = { ...row };
+        if ('ncrId' in b) {
+          if (!blank(b.ncrId) && !/^NCR-\d{4}-\d{3,}$/.test(String(b.ncrId))) fail(400, 'รูปแบบเลข NCR ไม่ถูกต้อง');
+          next.ncr_id = nz(b.ncrId);
+        }
+        if (b.status === 'Closed' && row.status !== 'Closed') { next.status = 'Closed'; next.closed_date = today(); }
+        const changes = diff(row, next, ['status', 'ncr_id', 'closed_date']);
+        if (Object.keys(changes).length) {
+          await DB.prepare('UPDATE recv_nc SET status=?, ncr_id=?, closed_date=?, updated_by=?, updated_at=? WHERE nc_id=?')
+            .bind(next.status, next.ncr_id, next.closed_date, user.username, nowIso(), rn[1]).run();
+          await audit(DB, user.username, 'user', next.status !== row.status ? 'close' : 'update', 'recv_nc', rn[1], changes);
+        }
+        return json({ success: true, status: next.status, closedDate: next.closed_date || '', ncrId: next.ncr_id || '' });
+      }
+
+
       fail(404, `Not found: ${method} ${path}`);
     } catch (e) {
       if (e instanceof HttpError) return json({ error: e.message }, e.status);

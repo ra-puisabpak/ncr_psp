@@ -8,10 +8,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 
-// ════ เก็บข้อมูลในเครื่อง (ไม่เชื่อมต่อ Google Sheets) ════
-const LS_KEY='fmqc001_data_v1';
+// ════ ฐานข้อมูลกลาง (Cloudflare D1 ผ่าน API ของระบบ NCR e-Form) + สำเนาในเครื่อง ════
+const API='https://puisabpak-ncr-api.rapuisabpak.workers.dev';
+const LS_KEY='fmqc001_data_v1',SS_KEY='fmqc001_session';
+let session=null;try{session=JSON.parse(localStorage.getItem(SS_KEY)||'null');}catch(e){}
+function newUid(){return (window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12)+'-'+Math.random().toString(36).slice(2,12);}
 function saveLocal(){
-  const pack=noPhoto=>JSON.stringify({records:records.map(r=>{const o={...r,mats:(r.mats||r.materials||[]).map(m=>noPhoto?{...m,photo1:null,photo2:null}:m)};delete o.materials;return o;}),ncLogs});
+  // ใบที่ส่งขึ้นฐานข้อมูลแล้วไม่ต้องเก็บรูปในเครื่อง (ดึงจากฐานข้อมูลเมื่อใช้) — ใบที่ยังไม่ส่งเก็บรูปไว้ด้วย
+  const pack=noPhoto=>JSON.stringify({records:records.map(r=>{const o={...r,mats:(r.mats||r.materials||[]).map(m=>(noPhoto||r.synced)?{...m,photo1:null,photo2:null}:m)};if(r.synced&&o.sig)o.sig={...o.sig,sigBase64:null};delete o.materials;return o;}),ncLogs});
   try{localStorage.setItem(LS_KEY,pack(false));return true;}
   catch(e){
     try{localStorage.setItem(LS_KEY,pack(true));showCloudStatus('⚠ พื้นที่เก็บเต็ม — บันทึกโดยไม่เก็บรูปถ่าย','warn');return true;}
@@ -20,16 +24,163 @@ function saveLocal(){
 }
 function loadLocal(){
   try{const d=JSON.parse(localStorage.getItem(LS_KEY)||'null');
-    if(d){records=(d.records||[]).map(r=>({...r,materials:r.mats}));ncLogs=d.ncLogs||[];}}catch(e){}
+    if(d){records=(d.records||[]).map(r=>({...r,uid:r.uid||newUid(),synced:!!r.synced,materials:r.mats}));
+      ncLogs=(d.ncLogs||[]).map(n=>({...n,uid:n.uid||newUid(),synced:!!n.synced}));}}catch(e){}
 }
-async function cloudSaveRecord(rec){const ok=saveLocal();if(ok)showCloudStatus('✅ บันทึกลงเครื่องแล้ว','ok');return ok;}
-async function cloudSaveNC(nc){return saveLocal();}
-async function cloudCloseNC(id,body){return saveLocal();}
-function syncFromCloud(){
-  loadLocal();
+async function api(method,path,body){
+  if(!session)throw Object.assign(new Error('กรุณาเข้าสู่ระบบ'),{status:401});
+  const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),45000);
+  try{
+    const r=await fetch(API+path,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.token},body:body?JSON.stringify(body):undefined,signal:ctl.signal});
+    const j=await r.json().catch(()=>({}));
+    if(r.status===401){session=null;try{localStorage.removeItem(SS_KEY);}catch(e){}showLogin('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');}
+    if(!r.ok)throw Object.assign(new Error(j.error||('HTTP '+r.status)),{status:r.status});
+    return j;
+  }finally{clearTimeout(t);}
+}
+function pendingCount(){return records.filter(r=>!r.synced).length+ncLogs.filter(n=>!n.synced||n.dirty).length;}
+let _syncing=null;
+function syncAll(){if(!_syncing)_syncing=_syncRun().finally(()=>{_syncing=null;});return _syncing;}
+async function _syncRun(){
+  await null;
+  if(!session)return {ok:false,err:'ยังไม่ได้เข้าสู่ระบบ'};
+  let err='';
+  for(const rec of records.filter(r=>!r.synced).reverse()){
+    const ncs=ncLogs.filter(n=>!n.synced&&(n.recUid===rec.uid||(!n.recUid&&n.docNo===rec.docNo)));
+    try{
+      const o={...rec};delete o.materials;
+      const res=await api('POST','/api/recv',{uid:rec.uid,record:o,ncs});
+      rec.docNo=res.docNo;rec.synced=true;
+      (rec.mats||[]).forEach(m=>{if(m.photo1)m.hasPhoto1=1;if(m.photo2)m.hasPhoto2=1;});
+      if(rec.sig&&rec.sig.sigBase64)rec.sig.hasSig=1;
+      ncs.forEach(n=>{const x=(res.ncs||[]).find(y=>y.uid===n.uid);if(x)n.id=x.id;n.docNo=res.docNo;n.synced=true;});
+    }catch(e){err=e.message||'เชื่อมต่อไม่ได้';if(e.status!==400&&e.status!==413)break;}
+  }
+  if(!err||records.every(r=>r.synced)){
+    for(const n of ncLogs.filter(x=>!x.synced).reverse()){
+      const r=records.find(x=>x.docNo===n.docNo);if(r&&!r.synced)continue;
+      try{const res=await api('POST','/api/recv-nc',n);n.id=res.id;n.synced=true;}catch(e){err=e.message||'เชื่อมต่อไม่ได้';if(e.status!==400)break;}
+    }
+    for(const n of ncLogs.filter(x=>x.synced&&x.dirty)){
+      try{const res=await api('PATCH','/api/recv-nc/'+encodeURIComponent(n.id),{ncrId:n.ncrId||'',status:n.status});
+        n.status=res.status;n.closedDate=res.closedDate;n.ncrId=res.ncrId;n.dirty=false;}catch(e){err=e.message||'เชื่อมต่อไม่ได้';if(e.status!==400)break;}
+    }
+  }
+  saveLocal();renderAll();
+  return {ok:!err,err};
+}
+async function pullAll(){
+  const d=await api('GET','/api/recv');
+  const mem=new Map(records.filter(r=>r.synced).map(r=>[r.docNo,r]));
+  const dirty=new Map(ncLogs.filter(n=>n.synced&&n.dirty).map(n=>[n.id,n]));
+  records=[...records.filter(r=>!r.synced),...d.records.map(r=>{
+    const old=mem.get(r.docNo);
+    if(old){r.mats.forEach(m=>{const om=(old.mats||[]).find(x=>x.idx===m.idx);if(om){m.photo1=om.photo1||null;m.photo2=om.photo2||null;}});
+      if(r.sig&&old.sig&&old.sig.sigBase64)r.sig.sigBase64=old.sig.sigBase64;}
+    return {...r,materials:r.mats,synced:true};})];
+  ncLogs=[...ncLogs.filter(n=>!n.synced),...d.ncLogs.map(n=>dirty.get(n.id)||{...n,synced:true})];
+  saveLocal();renderAll();
+  if(typeof curMats!=='undefined'&&!curMats.length){const f=document.getElementById('f-docno');if(f)f.value=genDoc();}
+}
+async function ensurePhotos(rec){
+  if(!rec||!rec.synced)return;
+  const mats=rec.mats||rec.materials||[];
+  if(!mats.some(m=>(m.hasPhoto1&&!m.photo1)||(m.hasPhoto2&&!m.photo2))&&!(rec.sig&&rec.sig.hasSig&&!rec.sig.sigBase64))return;
+  const list=await api('GET','/api/recv/'+encodeURIComponent(rec.docNo)+'/photos');
+  list.forEach(p=>{if(p.slot===0){if(rec.sig)rec.sig.sigBase64=p.data;return;}const m=mats.find(x=>x.idx===p.idx);if(m)m['photo'+p.slot]=p.data;});
+}
+async function refreshAll(manual){
+  if(!session){showLogin();return;}
+  if(manual)showCloudStatus('กำลังซิงก์กับฐานข้อมูล...');
+  try{
+    const r=await syncAll();
+    await pullAll();
+    if(r.ok)showCloudStatus('✅ ข้อมูลตรงกับฐานข้อมูลแล้ว','ok');
+    else showCloudStatus('⚠ ยังส่งไม่ครบ: '+r.err,'warn');
+  }catch(e){if(e.status!==401)showCloudStatus('⚠ เชื่อมต่อฐานข้อมูลไม่ได้ — แสดงข้อมูลในเครื่อง','warn');}
+}
+function renderAll(){
   if(typeof renderHist==='function')renderHist();
   if(typeof renderNC==='function')renderNC();
   if(typeof renderHome==='function')renderHome();
+  renderWho();
+}
+function renderWho(){
+  let el=document.getElementById('_who');
+  if(!el){const sub=document.querySelector('.home-hero .home-sub');if(!sub)return;el=document.createElement('div');el.id='_who';
+    el.style.cssText='margin-top:10px;font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap';sub.insertAdjacentElement('afterend',el);}
+  const p=pendingCount();const b='padding:5px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.5);background:transparent;color:inherit;font:inherit;font-weight:600;cursor:pointer';
+  el.innerHTML=session?`<span>&#x1F464; ${escH(session.user.display_name)}</span>
+    <span style="padding:3px 8px;border-radius:10px;background:${p?'#e8900a':'#0d7a5f'};color:#fff;font-weight:600">${p?'รอส่ง '+p+' รายการ':'ฐานข้อมูล D1 ✓'}</span>
+    <button style="${b}" onclick="refreshAll(true)">&#x21BB; ซิงก์</button><button style="${b}" onclick="doLogout()">ออกจากระบบ</button>`
+    :`<button style="${b}" onclick="showLogin()">เข้าสู่ระบบ</button>`;
+}
+function showLogin(msg){
+  let ov=document.getElementById('_login');
+  if(!ov){ov=document.createElement('div');ov.id='_login';
+    ov.style.cssText='position:fixed;inset:0;z-index:9500;background:#0f2744;display:flex;align-items:center;justify-content:center;padding:20px';
+    const i='width:100%;padding:12px;border:1px solid #cfd8e3;border-radius:10px;font-size:16px;font-family:inherit;margin-bottom:12px';
+    ov.innerHTML=`<form id="_lf" style="background:#fff;border-radius:16px;padding:22px;width:100%;max-width:360px">
+      <div style="font-size:17px;font-weight:700;color:#0f2744">ตรวจรับวัตถุดิบ FM-QC-001</div>
+      <div style="font-size:12px;color:#6b7a8d;margin:4px 0 16px">เข้าสู่ระบบด้วยบัญชีเดียวกับระบบ NCR e-Form</div>
+      <div id="_lm" style="display:none;font-size:13px;color:#b3261e;background:#fdecea;border-radius:8px;padding:8px;margin-bottom:12px"></div>
+      <input id="_lu" style="${i}" placeholder="ชื่อผู้ใช้" autocomplete="username" autocapitalize="none">
+      <input id="_lp" style="${i}" type="password" placeholder="รหัสผ่าน" autocomplete="current-password">
+      <button id="_lb" type="submit" style="width:100%;padding:13px;border:none;border-radius:10px;background:#0d7a5f;color:#fff;font-size:15px;font-weight:700;font-family:inherit">เข้าสู่ระบบ</button>
+    </form>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#_lf').addEventListener('submit',doLogin);}
+  const m=ov.querySelector('#_lm');m.textContent=msg||'';m.style.display=msg?'block':'none';
+  ov.style.display='flex';
+}
+async function doLogin(e){
+  e.preventDefault();
+  const m=document.getElementById('_lm'),b=document.getElementById('_lb');
+  b.disabled=true;b.textContent='กำลังเข้าสู่ระบบ...';
+  try{
+    const r=await fetch(API+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('_lu').value.trim(),password:document.getElementById('_lp').value})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.error||'เข้าสู่ระบบไม่สำเร็จ');
+    session={token:j.token,user:j.user};try{localStorage.setItem(SS_KEY,JSON.stringify(session));}catch(e2){}
+    document.getElementById('_lp').value='';document.getElementById('_login').style.display='none';
+    const fi=document.getElementById('f-inspector');if(fi&&!fi.value)fi.value=session.user.display_name;
+    renderWho();refreshAll(true);
+  }catch(err){m.textContent=err.message==='Failed to fetch'?'เชื่อมต่อฐานข้อมูลไม่ได้ ตรวจสอบอินเทอร์เน็ต':err.message;m.style.display='block';}
+  finally{b.disabled=false;b.textContent='เข้าสู่ระบบ';}
+}
+async function doLogout(){
+  const p=records.filter(r=>!r.synced).length+ncLogs.filter(n=>!n.synced||n.dirty).length;
+  if(!confirm(p?'มี '+p+' รายการที่ยังไม่ได้ส่งขึ้นฐานข้อมูล (จะเก็บไว้ในเครื่องนี้)\nออกจากระบบหรือไม่?':'ออกจากระบบหรือไม่?'))return;
+  try{await api('POST','/api/logout');}catch(e){}
+  session=null;try{localStorage.removeItem(SS_KEY);}catch(e){}
+  records=records.filter(r=>!r.synced);ncLogs=ncLogs.filter(n=>!n.synced||n.dirty);   // ไม่ทิ้งข้อมูลของฐานข้อมูลไว้ในเครื่อง
+  saveLocal();renderAll();showLogin();
+}
+async function cloudSaveRecord(rec){const ok=saveLocal();return ok;}
+async function cloudSaveNC(nc){return saveLocal();}
+async function cloudCloseNC(id,body){return saveLocal();}
+function syncFromCloud(){
+  loadLocal();renderAll();
+  if(session){const fi=document.getElementById('f-inspector');if(fi&&!fi.value)fi.value=session.user.display_name;refreshAll(false);}
+  else showLogin();
+}
+window.addEventListener('online',()=>{if(session&&pendingCount())refreshAll(false);});
+// ════ แสดงเอกสารสำหรับพิมพ์ในหน้าเดียวกัน (ไม่ใช้ pop-up ซึ่งมือถือมักบล็อก) ════
+function showPrint(html){
+  const old=document.getElementById('_pv');if(old)old.remove();
+  const url=URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'}));
+  const ov=document.createElement('div');ov.id='_pv';
+  ov.style.cssText='position:fixed;inset:0;z-index:10000;background:#fff;display:flex;flex-direction:column';
+  const b='flex:1;padding:11px 6px;border-radius:10px;border:none;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;text-align:center;text-decoration:none';
+  ov.innerHTML=`<div style="display:flex;gap:8px;padding:10px;background:#0f2744">
+    <button id="_pvp" style="${b};background:#0d7a5f;color:#fff">&#x1F5A8; พิมพ์ / PDF</button>
+    <a id="_pvo" href="${url}" target="_blank" rel="noopener" style="${b};background:#fff;color:#0f2744">เปิดแท็บใหม่</a>
+    <button id="_pvc" style="${b};background:#e2e8f0;color:#0f2744">ปิด</button></div>
+    <iframe id="_pvf" title="เอกสารสำหรับพิมพ์" style="flex:1;border:0;width:100%;background:#fff"></iframe>`;
+  document.body.appendChild(ov);
+  const f=ov.querySelector('#_pvf');f.src=url;
+  ov.querySelector('#_pvp').onclick=()=>{try{f.contentWindow.focus();f.contentWindow.print();}catch(e){window.open(url,'_blank');}};
+  ov.querySelector('#_pvc').onclick=()=>{ov.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 }
 function exportExcelCloud(){exportExcel();}
 function todayStr(){const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');}
@@ -435,7 +586,7 @@ textarea{resize:none;min-height:80px}
       <div class="ssub" id="save-sub"></div>
       <div class="srows">
         <div style="font-size:11px;font-weight:700;color:var(--gray3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">ข้อมูลที่บันทึก</div>
-        <div class="srow"><div class="sric" style="background:#c8e6c9;color:#1b5e20">&#x1F4BE;</div><div style="font-size:13px"><strong>เก็บในเครื่องนี้</strong> — ใบรับ + NC Log + ลายเซ็น</div></div>
+        <div class="srow"><div class="sric" style="background:#c8e6c9;color:#1b5e20">&#x1F4BE;</div><div style="font-size:13px"><strong>ฐานข้อมูลกลาง (D1)</strong> — ใบรับ + NC Log + ลายเซ็น + รูปถ่าย</div></div>
       </div>
       <img id="sig-prev-img" style="max-height:48px;border:1px solid var(--border);border-radius:8px;background:#fafbfc;padding:4px;margin-bottom:12px;display:none">
       <button class="bm bt" style="width:100%;margin-bottom:10px" onclick="dlExcel()">&#x1F4E5; ดาวน์โหลด Excel</button>
@@ -1136,23 +1287,18 @@ window.onload = function(){
 </body>
 </html>`;
 
-  const w=window.open('','_blank','width=950,height=750');
-  if(!w){showToast&&showToast('กรุณาอนุญาต Popup','err');return;}
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
+  showPrint(html);
 }
 
 
 let records=[],ncLogs=[],curMats=[],matIdx=0,_lastRec=null;
 const sigState={empty:true,drawing:false};
 
-function genDoc(){
+function genDoc(){   // เลขถัดไปของวันนี้จากรายการที่มีอยู่ — ถ้าเครื่องอื่นใช้เลขนี้ไปก่อน ฐานข้อมูลจะออกเลขถัดไปให้ตอนบันทึก
   const n=new Date();
   const d=n.getFullYear()+String(n.getMonth()+1).padStart(2,'0')+String(n.getDate()).padStart(2,'0');
-  const seq=String((parseInt(localStorage.getItem('fmqa31_'+d)||'0')+1)).padStart(3,'0');
-  try{localStorage.setItem('fmqa31_'+d,parseInt(seq));}catch(e){}
-  return 'FM-QC-001-'+d+'-'+seq;
+  const used=records.filter(r=>String(r.docNo||'').startsWith('FM-QC-001-'+d+'-')).map(r=>parseInt(r.docNo.slice(-3))||0);
+  return 'FM-QC-001-'+d+'-'+String(Math.max(0,...used)+1).padStart(3,'0');
 }
 
 function init(){
@@ -1353,7 +1499,7 @@ function saveRecord(){
   const rec={docNo,date,time:document.getElementById('f-time').value,supplier:sup,
     carReg:document.getElementById('f-car').value,
     carTemp:document.getElementById('f-ctemp').value!==''?parseFloat(document.getElementById('f-ctemp').value):null,
-    inspector:insp,note:document.getElementById('f-note').value,poNo:document.getElementById('f-po').value.trim(),
+    uid:newUid(),synced:false,inspector:insp,note:document.getElementById('f-note').value,poNo:document.getElementById('f-po').value.trim(),
     mats:curMats.map(m=>({...m})),materials:curMats.map(m=>({...m})),
     sig:{signerName:sigName,signedAt:sigDt,sigBase64:sigB64}};
   records.unshift(rec);_lastRec=rec;
@@ -1361,14 +1507,20 @@ function saveRecord(){
   let ncCreated=false;
   rec.mats.forEach(m=>{
     if(m.result==='HOLD'||m.result==='REJECT'){
-      const _nc={id:'NC'+String(ncLogs.length+1).padStart(3,'0'),docNo,supplier:sup,
+      const _nc={id:nextNcId(),uid:newUid(),recUid:rec.uid,synced:false,docNo,supplier:sup,
         failType:m.result==='REJECT'?'Rejected Material':'Hold — Pending Investigation',
         corrective:'—',qa:insp,status:'Open',closedDate:'',ncrId:'',date,result:m.result,matIdx:m.idx,mat:{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit},note:[m.note||m.code,inspSummary(m),m.doc==='FAIL'?'เอกสาร: '+docSummary(m):'',m.wtV==='HOLD'?wtSummary(m):''].filter(Boolean).join(' | ')};
       ncLogs.unshift(_nc);cloudSaveNC(_nc).catch(()=>{});ncCreated=true;
     }
   });
   const spInfo=SUPPLIERS.find(s=>s.id===sup)||{name:sup};
-  document.getElementById('save-sub').innerHTML=`Doc: <strong>${docNo}</strong><br>${rec.mats.length} รายการ | ${spInfo.name}${ncCreated?'<br>&#x26A0; สร้าง NC อัตโนมัติ<br><button class="bm" style="margin-top:10px;padding:10px;font-size:13px;background:#1e3a8a;color:#fff;width:100%" onclick="closeSaveModal();goS(\'sc-nc\')">&#x1F4DD; ไปหน้า NC Log เพื่อเปิด NCR</button>':''}`;
+  const subHtml=st=>`Doc: <strong>${escH(rec.docNo)}</strong><br>${rec.mats.length} รายการ | ${escH(spInfo.name)}<br>${st}${ncCreated?'<br>&#x26A0; สร้าง NC อัตโนมัติ<br><button class="bm" style="margin-top:10px;padding:10px;font-size:13px;background:#1e3a8a;color:#fff;width:100%" onclick="closeSaveModal();goS(\'sc-nc\')">&#x1F4DD; ไปหน้า NC Log เพื่อเปิด NCR</button>':''}`;
+  const setSub=st=>{if(_lastRec===rec)document.getElementById('save-sub').innerHTML=subHtml(st);};
+  setSub('<span style="color:#e8900a">&#x23F3; กำลังส่งขึ้นฐานข้อมูล...</span>');
+  syncAll().then(r=>{
+    if(rec.synced)setSub('<span style="color:#0d7a5f">&#x2705; บันทึกลงฐานข้อมูล D1 แล้ว</span>');
+    else setSub('<span style="color:#b3261e">&#x26A0; ยังไม่ได้ส่งขึ้นฐานข้อมูล ('+escH(r.err||'ไม่มีอินเทอร์เน็ต')+')<br>เก็บไว้ในเครื่องนี้ก่อน กด "ซิงก์" ที่หน้าหลักเพื่อส่งอีกครั้ง</span>');
+  });
   const prev=document.getElementById('sig-prev-img');
   if(sigB64){prev.src=sigB64;prev.style.display='block';}else{prev.style.display='none';}
   document.getElementById('save-modal').classList.add('open');
@@ -1382,7 +1534,7 @@ function resetForm(){
 }
 function closeSaveModal(){document.getElementById('save-modal').classList.remove('open');}
 function dlExcel(){exportExcel();closeSaveModal();}
-function dlPDF(){if(_lastRec)generatePDF(_lastRec);closeSaveModal();}
+function dlPDF(){closeSaveModal();printRec(_lastRec);}
 function supNames(){return [...new Set(records.map(r=>r.supplier).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'));}
 function renderHome(){
   const dl=document.getElementById('sup-list');if(dl)dl.innerHTML=supNames().map(n=>`<option value="${escH(n)}">`).join('');
@@ -1400,7 +1552,7 @@ function renderHome(){
     const mats=r.mats||r.materials||[];
     const aP=mats.every(m=>m.result==='PASS');const rc=aP?'pass':mats.some(m=>m.result==='REJECT')?'fail':'hold';
     const hasNC=ncLogs.some(nc=>nc.docNo===r.docNo);
-    return `<div class="ri"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="rdoc">${r.docNo}</span><span style="font-size:12px;color:var(--gray3)">${r.date}</span></div>
+    return `<div class="ri"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="rdoc">${r.docNo}${r.synced?'':' <span style="color:#e8900a">(รอส่ง)</span>'}</span><span style="font-size:12px;color:var(--gray3)">${r.date}</span></div>
       <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;margin-right:8px">${sp.name}</span>
         <div style="display:flex;gap:6px;flex-shrink:0">${hasNC?'<span class="pill pill-open">NC</span>':''}<span class="pill pill-${rc}">${aP?'PASS':mats.some(m=>m.result==='REJECT')?'REJECT':'HOLD'}</span></div></div>
       <div style="font-size:12px;color:var(--gray3);margin-top:4px">${mats.length} รายการ — ${r.inspector}</div></div>`;
@@ -1414,7 +1566,7 @@ function renderHist(){
   list.innerHTML=filtered.map(r=>{
     const sp=SUPPLIERS.find(s=>s.id===r.supplier)||{name:r.supplier};
     const mats=r.mats||r.materials||[];const aP=mats.every(m=>m.result==='PASS');const rc=aP?'pass':mats.some(m=>m.result==='REJECT')?'fail':'hold';
-    return `<div class="hi"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="rdoc">${r.docNo}</span><span style="font-size:12px;color:var(--gray3)">${r.date} ${r.time||''}</span></div>
+    return `<div class="hi"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="rdoc">${r.docNo}${r.synced?'':' <span style="color:#e8900a">(รอส่ง)</span>'}</span><span style="font-size:12px;color:var(--gray3)">${r.date} ${r.time||''}</span></div>
       <div style="font-size:14px;font-weight:600;margin-bottom:6px">${sp.name}</div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--gray3)">&#x1F321; ${r.carTemp!=null?r.carTemp+'°C':'—'}</span>
@@ -1434,7 +1586,7 @@ function renderNC(){
     const sp=SUPPLIERS.find(s=>s.id===nc.supplier)||{name:nc.supplier||'—'};
     return `<div class="nc-item ${nc.status.toLowerCase()}">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-family:monospace;font-size:12px;font-weight:700;color:var(--navy)">${nc.id}</span>
+        <span style="font-family:monospace;font-size:12px;font-weight:700;color:var(--navy)">${nc.id}${nc.synced&&!nc.dirty?'':' <span style="color:#e8900a;font-family:inherit">(รอส่ง)</span>'}</span>
         <span class="pill ${nc.status==='Closed'?'pill-closed':'pill-open'}">${nc.status}</span>
       </div>
       <div style="font-size:14px;font-weight:600;margin-bottom:4px">${nc.failType}</div>
@@ -1449,6 +1601,7 @@ function renderNC(){
 // ════ เชื่อมกับระบบ NCR e-Form (FM-QA-001) ════
 const NCR_APP_URL='https://puisabpak-ncr.pages.dev';
 let _ncrWin=null,_ncrFor=null;
+function nextNcId(){return 'NC'+String(Math.max(0,...ncLogs.map(n=>parseInt(String(n.id).slice(2))||0))+1).padStart(3,'0');}
 function matName(code){const m=MATERIALS.find(x=>x.code===code);return m?m.name:(code||'');}
 function ncrRef(nc){return nc.docNo+' / '+nc.id;}
 function ncrBox(nc){
@@ -1471,6 +1624,7 @@ function ncrMat(nc){
 }
 function openNCR(id){
   const nc=ncLogs.find(n=>n.id===id);if(!nc)return;
+  if(!nc.synced){showToast('NC นี้ยังไม่ได้ส่งขึ้นฐานข้อมูล — กำลังส่ง ลองอีกครั้ง','err');syncAll();return;}
   const {rec,m}=ncrMat(nc);
   const mat=nc.mat||(m?{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit}:null);
   const result=nc.result||(m?m.result:'')||(/reject/i.test(nc.failType)?'REJECT':/hold/i.test(nc.failType)?'HOLD':'');
@@ -1500,23 +1654,26 @@ function setNCRId(id){
   const v=prompt('เลขที่ NCR จากระบบ NCR e-Form (เช่น NCR-2610-001)\nเว้นว่างเพื่อลบเลขที่บันทึกไว้',nc.ncrId||'');
   if(v===null)return;const t=v.trim().toUpperCase();
   if(t&&!/^NCR-\d{4}-\d{3,}$/.test(t)){showToast('รูปแบบเลข NCR ไม่ถูกต้อง','err');return;}
-  nc.ncrId=t;saveLocal();renderNC();showToast(t?'บันทึกเลข NCR แล้ว':'ลบเลข NCR แล้ว','ok');
+  nc.ncrId=t;nc.dirty=true;saveLocal();renderNC();syncAll();showToast(t?'บันทึกเลข NCR แล้ว':'ลบเลข NCR แล้ว','ok');
 }
 window.addEventListener('message',e=>{
   if(e.origin!==NCR_APP_URL||!_ncrWin||e.source!==_ncrWin||!e.data)return;
   const nc=ncLogs.find(n=>n.id===_ncrFor);if(!nc)return;
   if(e.data.type==='ncr-eform-ready'){
-    const {m}=ncrMat(nc);const photos=m?[m.photo1,m.photo2].filter(Boolean):[];
-    if(photos.length)e.source.postMessage({type:'ncr-prefill',photos},NCR_APP_URL);
+    const {rec,m}=ncrMat(nc);const src=e.source;
+    ensurePhotos(rec).catch(()=>{}).then(()=>{
+      const photos=m?[m.photo1,m.photo2].filter(Boolean):[];
+      if(photos.length)src.postMessage({type:'ncr-prefill',photos},NCR_APP_URL);
+    });
   }else if(e.data.type==='ncr-created'&&/^NCR-\d{4}-\d{3,}$/.test(String(e.data.ncr_id||''))&&e.data.source_ref===ncrRef(nc)){
-    nc.ncrId=e.data.ncr_id;saveLocal();renderNC();showToast('ผูกกับ '+nc.ncrId+' แล้ว','ok');
+    nc.ncrId=e.data.ncr_id;nc.dirty=true;saveLocal();renderNC();syncAll();showToast('ผูกกับ '+nc.ncrId+' แล้ว','ok');
   }
 });
 function closeNC(id){
   const _n=ncLogs.find(n=>n.id===id);
   if(_n&&!_n.ncrId&&!confirm('NC นี้ยังไม่มีเลข NCR ในระบบ NCR e-Form\nต้องการปิดในแอปนี้เลยหรือไม่?'))return;
   const nc=ncLogs.find(n=>n.id===id);
-  if(nc){nc.status='Closed';nc.closedDate=todayStr();cloudCloseNC(id,{status:'Closed',closed_date:nc.closedDate}).catch(()=>{});}
+  if(nc){nc.status='Closed';nc.closedDate=todayStr();nc.dirty=true;syncAll();cloudCloseNC(id,{status:'Closed',closed_date:nc.closedDate}).catch(()=>{});}
   renderNC();renderHome();showToast('ปิด NC เรียบร้อย','ok');
 }
 function openNCModal(){
@@ -1532,11 +1689,11 @@ function closeNCM(){document.getElementById('nc-modal').classList.remove('open')
 function saveNC(){
   const docNo=document.getElementById('nm-doc').value;const failType=document.getElementById('nm-ft').value;
   if(!docNo){showToast('เลือก Doc No ก่อน','err');return;}if(!failType){showToast('เลือกประเภทปัญหา','err');return;}
-  const _nc={id:'NC'+String(ncLogs.length+1).padStart(3,'0'),docNo,supplier:document._ncSp||'',failType,
+  const _nc={id:nextNcId(),uid:newUid(),synced:false,docNo,supplier:document._ncSp||'',failType,
     corrective:document.getElementById('nm-ca').value||'—',qa:document.getElementById('nm-qa').value||'',
     status:'Open',closedDate:'',ncrId:'',date:todayStr(),note:document.getElementById('nm-nt').value||''};
   ncLogs.unshift(_nc);cloudSaveNC(_nc).catch(()=>{});
-  closeNCM();renderNC();renderHome();showToast('สร้าง NC เรียบร้อย ✓','ok');
+  closeNCM();renderNC();renderHome();showToast('สร้าง NC เรียบร้อย ✓','ok');syncAll();
 }
 function cMeat(){if(!document.getElementById('c-mt'))return;const bag=parseInt(document.getElementById('c-mt').value);const wt=parseFloat(document.getElementById('c-mw').value);const res=document.getElementById('cr-m');if(isNaN(wt)||wt<=0){res.style.display='none';return;}const bags=Math.ceil(wt/bag);const n=Math.max(1,Math.ceil(bags*0.1));document.getElementById('crn-m').textContent=n;document.getElementById('crd-m').textContent='= '+bags+' ถุง × 10% = '+n+' ถุง';res.style.display='block';}
 function cWood(){const p=parseInt(document.getElementById('c-wq').value);const res=document.getElementById('cr-w');if(isNaN(p)||p<=0){res.style.display='none';return;}let n=p<=20?1:p<=40?2:p<=60?3:p<=80?4:5;document.getElementById('crn-w').textContent=n;res.style.display='block';}
@@ -1565,7 +1722,12 @@ function exportExcel(){
 // ════ รายงาน A4 — รายวัน / ราย Supplier ════
 let repMode='day';
 function fmtD(d){if(!d)return'—';const p=String(d).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+(parseInt(p[0])+543):d;}
-function printDoc(docNo){const r=records.find(x=>x.docNo===docNo);if(r)generatePDF(r);}
+async function printRec(r){
+  if(!r)return;
+  try{await ensurePhotos(r);}catch(e){showToast('โหลดรูปถ่ายไม่ได้ — พิมพ์โดยไม่มีรูป','err');}
+  generatePDF(r);
+}
+function printDoc(docNo){printRec(records.find(x=>x.docNo===docNo));}
 function goRep(){
   goS('sc-rep');
   const d=document.getElementById('rp-date');if(!d.value)d.value=todayStr();
@@ -1665,9 +1827,7 @@ ${ncHtml}
 <div class="ft"><span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) | FM-QC-001 | SD-QC-001</span><span>พิมพ์: ${stamp}</span></div>
 <script>window.onload=function(){setTimeout(()=>{if(document.fonts)document.fonts.ready.then(()=>window.print());else window.print();},800);};<\/script>
 </body></html>`;
-  const w=window.open('','_blank','width=1150,height=800');
-  if(!w){showToast('กรุณาอนุญาต Popup','err');return;}
-  w.document.open();w.document.write(html);w.document.close();
+  showPrint(html);
 }
 
 // ════ การตรวจเอกสาร (PO/DO, ใบส่งของ, COA, ฉลาก) — ตาม FM-QC-001 ════

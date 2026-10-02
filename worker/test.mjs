@@ -211,6 +211,37 @@ check('photo can be removed while NCR is open', r.status === 200, r);
 r = await call('GET', `/api/supplier/${ptok}/photos/${pid}`);
 check('removed photo is no longer served', r.status === 404, r);
 
+// receiving inspection records (FM-QC-001)
+const jpg = 'data:image/jpeg;base64,' + Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5, 6, 7, 8]).toString('base64');
+const recvBody = (uid, docNo, ncs = []) => ({ uid, ncs, record: { docNo, date: '2026-10-03', time: '09:00', supplier: 'ABC Supply', inspector: 'QC One',
+  mats: [{ idx: 1, code: 'RM-001', lot: 'L1', qty: '10', result: 'REJECT', photo1: jpg, photo2: null }, { idx: 2, code: 'RM-002', result: 'PASS', photo1: null, photo2: null }],
+  sig: { signerName: 'QC One', sigBase64: 'data:image/png;base64,' + Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4, 5, 6, 7, 8]).toString('base64') } } });
+r = await call('GET', '/api/recv');
+check('receiving records need a login', r.status === 401, r);
+r = await call('POST', '/api/recv', { token: qc, body: recvBody('uid-aaaa-0001', 'FM-QC-001-20261003-001', [{ uid: 'uid-nc-00001', id: 'NC001', failType: 'Rejected Material', supplier: 'ABC Supply', matIdx: 1, note: 'x' }]) });
+check('receiving record saved with the proposed number and its NC', r.status === 201 && r.j.docNo === 'FM-QC-001-20261003-001' && r.j.ncs[0].id === 'NC001', r);
+r = await call('POST', '/api/recv', { token: qc, body: recvBody('uid-aaaa-0001', 'FM-QC-001-20261003-001') });
+check('the same save sent twice is stored once', r.status === 200 && r.j.docNo === 'FM-QC-001-20261003-001', r);
+r = await call('POST', '/api/recv', { token: qc, body: recvBody('uid-bbbb-0002', 'FM-QC-001-20261003-001', [{ uid: 'uid-nc-00002', id: 'NC001', failType: 'Hold', matIdx: 1 }]) });
+check('a second phone with the same number gets the next one', r.status === 201 && r.j.docNo === 'FM-QC-001-20261003-002' && r.j.ncs[0].id === 'NC002', r);
+r = await call('POST', '/api/recv', { token: qc, body: { uid: 'uid-cccc-0003', record: { date: '2026-10-03', supplier: '', inspector: 'x', mats: [{}] } } });
+check('receiving record without supplier is refused', r.status === 400, r);
+r = await call('POST', '/api/recv', { token: qc, body: { ...recvBody('uid-dddd-0004', ''), record: { ...recvBody('x', '').record, mats: [{ idx: 1, result: 'PASS', photo1: 'data:image/jpeg;base64,' + Buffer.from('<script>').toString('base64') }] } } });
+check('a file that is not a picture is refused', r.status === 400, r);
+r = await call('GET', '/api/recv', { token: qc });
+check('receiving list returns records without photo data and the NC log', r.status === 200 && r.j.records.length === 2 && r.j.ncLogs.length === 2
+  && r.j.records.every((x) => x.mats[0].photo1 === null && x.mats[0].hasPhoto1 === 1 && x.sig.hasSig === 1 && x.sig.sigBase64 === null && x.savedBy === 'qc1') && !JSON.stringify(r.j).includes('base64,/9j'), r.j);
+r = await call('GET', '/api/recv/FM-QC-001-20261003-001/photos', { token: qc });
+check('photos of a receiving record come back on request', r.status === 200 && r.j.length === 2 && r.j[0].slot === 0 && r.j[0].data.startsWith('data:image/png') && r.j[1].idx === 1 && r.j[1].slot === 1 && r.j[1].data === jpg, r.j);
+r = await call('POST', '/api/recv-nc', { token: qc, body: { uid: 'uid-nc-00003', id: 'NC001', docNo: 'FM-QC-001-20261003-001', failType: 'Other', note: 'manual' } });
+check('manual NC gets the next free number', r.status === 201 && r.j.id === 'NC003', r);
+r = await call('PATCH', '/api/recv-nc/NC001', { token: qc, body: { ncrId: 'bad' } });
+check('bad NCR number on an NC is refused', r.status === 400, r);
+r = await call('PATCH', '/api/recv-nc/NC001', { token: qc, body: { ncrId: id, status: 'Closed' } });
+check('NC linked to its NCR and closed', r.status === 200 && r.j.ncrId === id && r.j.status === 'Closed' && r.j.closedDate, r);
+r = await call('GET', '/api/audit?entity_id=NC001', { token: qa });
+check('receiving changes are in the audit log', r.status === 200 && r.j.some((x) => x.entity === 'recv_nc' && x.action === 'close'), r.j);
+
 // audit, paging, lockout, CORS, logout
 r = await call('GET', `/api/audit?entity_id=${id}`, { token: qa });
 check('audit trail has full history', r.status === 200 && r.j.some((a) => a.action === 'supplier_reply' && a.actor_type === 'supplier') && r.j.some((a) => a.action === 'close') && r.j.some((a) => a.action === 'reopen'), r.j.map((a) => a.action));
