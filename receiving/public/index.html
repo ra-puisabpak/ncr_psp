@@ -1313,6 +1313,21 @@ function addMat(){
 }
 function delMat(idx){curMats=curMats.filter(m=>m.idx!==idx);renderMats();}
 function togMat(idx){document.getElementById('mb-'+idx)?.classList.toggle('open');}
+// ช่องอุณหภูมิ: ระหว่างพิมพ์ไม่วาดรายการใหม่ทั้งหมด (เดิมทำให้พิมพ์จุดทศนิยมหรือเครื่องหมายลบไม่ได้) — อัปเดตเฉพาะป้าย Pass/Fail
+function setTemp(idx,n,el){
+  let v=el.value.replace(/,/g,'.').replace(/[^0-9.\-]/g,'').replace(/(?!^)-/g,'');
+  const d=v.indexOf('.');if(d>=0)v=v.slice(0,d+1)+v.slice(d+1).replace(/\./g,'');
+  if(v!==el.value)el.value=v;
+  const m=curMats.find(x=>x.idx===idx);if(!m)return;m['t'+n]=v;
+  const mi=MATERIALS.find(x=>x.code===m.code)||{};const mn=mi.minTemp??mi.minT,mx=mi.maxTemp??mi.maxT;
+  const box=document.getElementById('tst-'+idx+'-'+n);if(!box)return;
+  const x=parseFloat(v);
+  box.innerHTML=(v===''||isNaN(x)||mn==null)?'':(x>=mn&&x<=mx?'<div class="tst pass">✓ Pass</div>':'<div class="tst fail">✗ Fail</div>');
+}
+function negTemp(idx,n){   // แป้นตัวเลขของมือถือไม่มีเครื่องหมายลบ — ใช้ปุ่มนี้สลับค่าบวก/ลบ (ของแช่แข็ง)
+  const el=document.getElementById('ti-'+idx+'-'+n);if(!el)return;
+  el.value=el.value.startsWith('-')?el.value.slice(1):'-'+el.value;setTemp(idx,n,el);
+}
 function setMat(idx,f,v){const m=curMats.find(m=>m.idx===idx);if(m)m[f]=v;if(['t1','t2','t3'].includes(f))renderMats();if(f==='qty'){porkRefresh(idx);wtRefresh(idx,true);}}
 function onMC(idx,code){const m=curMats.find(m=>m.idx===idx);const mi=MATERIALS.find(x=>x.code===code)||{};if(m){m.code=code;if(mi.unit)m.unit=mi.unit;aqlInit(m,code);if(m.aql)aqlApply(m);if(isPork(m)){porkDefaults(m);porkApply(m);}m.wt=[];m.wtN='';m.wtLab=undefined;wtApply(m);}renderMats();}
 function getSamp(code,qty){
@@ -1335,7 +1350,7 @@ function renderMats(){
     const mn=mi.minTemp??mi.minT;const mx=mi.maxTemp??mi.maxT;
     const tHtml=`<div style="margin-bottom:12px">
       <label style="font-size:12px;font-weight:600;color:var(--gray4);display:block;margin-bottom:6px">&#x1F321; อุณหภูมิ${showT?' (Spec: '+(mi.tLabel||mn+'–'+mx+'°C')+')':''}</label>
-      <div class="tgrid">${[1,2,3].map(n2=>{const v=m['t'+n2];const vn=parseFloat(v);let tst='';if(v!==''&&v!==null&&v!==undefined&&mn!=null)tst=vn>=mn&&vn<=mx?'pass':'fail';return`<div><label style="font-size:11px;font-weight:600;color:var(--gray3);display:block;margin-bottom:4px">ครั้งที่ ${n2}</label><input type="number" step="0.1" inputmode="decimal" value="${v??''}" placeholder="°C" oninput="setMat(${m.idx},'t${n2}',this.value)" style="text-align:center;padding:10px 4px">${tst?`<div class="tst ${tst}">${tst==='pass'?'✓ Pass':'✗ Fail'}</div>`:''} </div>`;}).join('')}</div></div>`;
+      <div class="tgrid">${[1,2,3].map(n2=>{const v=m['t'+n2];const vn=parseFloat(v);let tst='';if(v!==''&&v!==null&&v!==undefined&&mn!=null)tst=vn>=mn&&vn<=mx?'pass':'fail';return`<div><label style="font-size:11px;font-weight:600;color:var(--gray3);display:block;margin-bottom:4px">ครั้งที่ ${n2}</label><input type="text" inputmode="decimal" autocomplete="off" value="${v??''}" placeholder="°C" id="ti-${m.idx}-${n2}" oninput="setTemp(${m.idx},${n2},this)" style="text-align:center;padding:10px 4px">${mn!=null&&mn<0?`<button type="button" onclick="negTemp(${m.idx},${n2})" style="margin-top:4px;width:100%;padding:5px;border:1px solid var(--border);border-radius:8px;background:var(--white);font:inherit;font-size:12px;font-weight:600;color:var(--navy)">+ / −</button>`:''}<div id="tst-${m.idx}-${n2}">${tst?`<div class="tst ${tst}">${tst==='pass'?'✓ Pass':'✗ Fail'}</div>`:''}</div></div>`;}).join('')}</div></div>`;
     const sampHtml=samp?`<div class="sbox"><div class="sn">${samp.n}</div><div><div class="sl">สุ่มตรวจ (${samp.unit})</div><div class="sd">${samp.method}</div></div></div>`:'';
     const photoHtml=`<div style="margin-top:14px">
       <div style="font-size:11px;font-weight:700;color:var(--gray4);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">&#x1F4F7; รูปถ่ายสินค้า</div>
