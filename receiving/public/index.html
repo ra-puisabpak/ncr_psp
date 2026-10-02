@@ -216,9 +216,10 @@ async function showPrint(html,opt){
       designW=Math.min(1400,Math.ceil(designW*Math.sqrt(ratio/1.44)*1.02));
     }
   };
-  if(opt&&opt.onePage){fitOne();await new Promise(r=>setTimeout(r,350));fitOne();}
+  if(opt&&opt.onePage)fitOne();
   ov.querySelector('#_pvc').onclick=()=>ov.remove();
   ov.querySelector('#_pvp').onclick=()=>window.print();
+  if(opt&&opt.onePage){await new Promise(r=>setTimeout(r,350));fitOne();}   // วัดซ้ำหลังรูปและฟอนต์โหลดเสร็จ
   // ทางสำรอง: ฝากเอกสารไว้ที่เซิร์ฟเวอร์ 30 นาที แล้วเปิดด้วยเบราว์เซอร์ของเครื่อง เผื่อเครื่องที่สั่งพิมพ์จากแอปไม่ได้
   if(session){
     const full='<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escH(doc.title||'FM-QC-001')+'</title>'+
