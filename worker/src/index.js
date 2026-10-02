@@ -430,8 +430,8 @@ export default {
         const where = ['1=1'], p = [];
         for (const k of ['status', 'severity', 'source_type']) if (sp.get(k)) { where.push(`${k}=?`); p.push(sp.get(k)); }
         if (sp.get('q')) {
-          where.push('(ncr_id LIKE ? OR nc_description LIKE ? OR lot_no LIKE ? OR product_lot_no LIKE ? OR supplier_name LIKE ? OR material_name LIKE ?)');
-          const like = `%${sp.get('q')}%`; p.push(like, like, like, like, like, like);
+          where.push('(ncr_id LIKE ? OR nc_description LIKE ? OR lot_no LIKE ? OR product_lot_no LIKE ? OR supplier_name LIKE ? OR material_name LIKE ? OR source_ref LIKE ?)');
+          const like = `%${sp.get('q')}%`; p.push(like, like, like, like, like, like, like);
         }
         const limit = Math.min(parseInt(sp.get('limit') || '50', 10) || 50, 200);
         const offset = Math.max(parseInt(sp.get('offset') || '0', 10) || 0, 0);

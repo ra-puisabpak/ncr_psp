@@ -33,7 +33,7 @@ export default function NCRListPage() {
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('q') || '')
   const { user } = useAuth()
   const writer = canWrite(user)
 
@@ -55,6 +55,8 @@ export default function NCRListPage() {
     (r.ncr_id || '').toLowerCase().includes(search.toLowerCase()) ||
     (r.nc_description || '').toLowerCase().includes(search.toLowerCase()) ||
     (r.product_lot_no || '').toLowerCase().includes(search.toLowerCase()) ||
+    (r.source_ref || '').toLowerCase().includes(search.toLowerCase()) ||
+    (r.supplier_name || '').toLowerCase().includes(search.toLowerCase()) ||
     (r.reported_by || '').toLowerCase().includes(search.toLowerCase())
   )
 

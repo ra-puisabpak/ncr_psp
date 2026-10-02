@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ncrApi, capaApi } from '../api/d1Api'
 import {
   PROCESSES, PARAMETERS, SUPPLIERS, MATERIALS, ALLERGENS, SOURCE_OPTIONS, DISPOSITION_OPTIONS, codeOf,
@@ -8,7 +8,7 @@ import { FORM_CODE_NCR } from '../config'
 import { useAuth, isQA, canWrite } from '../auth'
 import SupplierLinkBox from '../components/SupplierLinkBox'
 import AuditTrail from '../components/AuditTrail'
-import PhotoSection from '../components/Photos'
+import PhotoSection, { compressImage } from '../components/Photos'
 import { Save, ArrowLeft, Printer, Plus, ClipboardList, Lock, RotateCcw } from 'lucide-react'
 
 const SEVERITY_OPTIONS = ['Critical', 'Major', 'Minor']
@@ -29,7 +29,7 @@ const CAPA_STATUS_CLS = {
 
 // Editable fields. Anything not listed here (NCR number, issue date, who verified/closed) is set by the server.
 const EMPTY_FORM = {
-  source_type: 'IN_PROCESS', found_date: '', lot_no: '', product_lot_no: '', process_ref: '',
+  source_type: 'IN_PROCESS', source_ref: '', found_date: '', lot_no: '', product_lot_no: '', process_ref: '',
   material_name: '', supplier_name: '', parameter_name: '', critical_limit: '', actual_result: '',
   visual_check: '', defect_qty: '', defect_unit: '', hold_location: '', severity: 'Major',
   allergen: '', shipped_status: 'NOT_SHIPPED', shipped_qty: '', shipped_customer: '',
@@ -40,6 +40,27 @@ const EMPTY_FORM = {
 }
 const QA_FIELDS = ['severity', 'disposition', 'disposition_reason', 'recall_required',
   'verification_result', 'verification_note', 'status', 'status_reason']
+
+// Fields another app (the receiving inspection form) may fill in through the link that opens a new NCR.
+const PREFILL = {
+  source_ref: 120, supplier_name: 200, lot_no: 100, defect_qty: 20, defect_unit: 30, found_date: 10,
+  nc_description: 2000, immediate_action: 1000, hold_location: 200, actual_result: 300, critical_limit: 300, reported_by: 100,
+}
+const prefillFrom = (sp) => {
+  const out = {}
+  for (const [k, max] of Object.entries(PREFILL)) {
+    const v = (sp.get(k) || '').trim()
+    if (v) out[k] = v.slice(0, max)
+  }
+  if (out.found_date && !/^\d{4}-\d{2}-\d{2}$/.test(out.found_date)) delete out.found_date
+  if (out.defect_qty && !/^\d+(\.\d+)?$/.test(out.defect_qty)) delete out.defect_qty
+  if (SOURCE_OPTIONS.some((o) => o.value === sp.get('source_type'))) out.source_type = sp.get('source_type')
+  const code = (sp.get('material_code') || '').trim()
+  const m = code && MATERIALS.find((x) => x.code === code)
+  if (m) { out.material_name = m.label; if (!out.defect_unit && m.unit) out.defect_unit = m.unit }
+  else if (sp.get('material_name')) out.material_name = sp.get('material_name').trim().slice(0, 200)
+  return out
+}
 
 const toForm = (d) => {
   const f = {}
@@ -80,7 +101,11 @@ export default function NCRDetailPage() {
   const writer = canWrite(user)
 
   const [record, setRecord] = useState(null) // as stored on the server
-  const [form, setForm] = useState({ ...EMPTY_FORM, reported_by: user?.display_name || '' })
+  const [searchParams] = useSearchParams()
+  const [prefill] = useState(() => (isNew ? prefillFrom(searchParams) : {}))
+  const fromOtherApp = isNew && Object.keys(prefill).length > 0
+  const [form, setForm] = useState({ ...EMPTY_FORM, reported_by: user?.display_name || '', ...prefill })
+  const [sameRef, setSameRef] = useState([]) // NCRs already opened for the same reference document
   const [capas, setCapas] = useState([])
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
@@ -102,6 +127,30 @@ export default function NCRDetailPage() {
     setLoading(true)
     load().catch((e) => setError(e.message)).finally(() => setLoading(false))
   }, [isNew, load])
+
+  // Opened from the receiving form: warn if this inspection already has an NCR, and take over its photos.
+  useEffect(() => {
+    if (!fromOtherApp || !prefill.source_ref) return
+    ncrApi.list().then((all) => setSameRef((Array.isArray(all) ? all : []).filter((r) => r.source_ref === prefill.source_ref))).catch(() => {})
+  }, [])
+  useEffect(() => {
+    const opener = window.opener
+    if (!fromOtherApp || !opener) return
+    const onMessage = async (e) => {
+      if (e.source !== opener || !e.data || e.data.type !== 'ncr-prefill' || !Array.isArray(e.data.photos)) return
+      window.removeEventListener('message', onMessage)
+      for (const src of e.data.photos.slice(0, 8)) {
+        if (typeof src !== 'string' || !/^data:image\/(jpeg|png|webp);base64,/.test(src)) continue
+        try {
+          const img = await compressImage(await (await fetch(src)).blob()) // re-encoded here, never used as sent
+          setPendingPhotos((list) => (list.length >= 8 ? list : [...list, img]))
+        } catch { /* a photo that cannot be read is skipped; the user can attach it by hand */ }
+      }
+    }
+    window.addEventListener('message', onMessage)
+    try { opener.postMessage({ type: 'ncr-eform-ready' }, '*') } catch { /* opener closed */ }
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
 
   const locked = !!record && (record.status === 'Closed' || record.status === 'Cancelled')
   const readOnly = !writer || locked
@@ -141,6 +190,10 @@ export default function NCRDetailPage() {
           catch (e) { photoError = e.message }
         }
         if (photoError) window.alert(`บันทึก NCR ${res.ncr_id} แล้ว แต่อัปโหลดภาพบางภาพไม่สำเร็จ: ${photoError}`)
+        // Tell the form that opened this page which NCR number its inspection got.
+        if (fromOtherApp && window.opener) {
+          try { window.opener.postMessage({ type: 'ncr-created', ncr_id: res.ncr_id, source_ref: form.source_ref }, '*') } catch { /* opener closed */ }
+        }
         navigate(`/ncr/${res.ncr_id}`, { replace: true })
         return
       }
@@ -239,6 +292,20 @@ export default function NCRDetailPage() {
               </div>
             )}
 
+            {fromOtherApp && (
+              <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-900">
+                <div className="font-semibold">ข้อมูลถูกดึงมาจากใบตรวจรับ{prefill.source_ref ? ` ${prefill.source_ref}` : ''}</div>
+                <div className="text-xs mt-1">ตรวจสอบและแก้ไขให้ถูกต้องก่อนกดบันทึก ระบบยังไม่ได้บันทึก NCR นี้</div>
+                {sameRef.length > 0 && (
+                  <div className="mt-2 bg-amber-50 border border-amber-300 text-amber-900 rounded-lg p-2 text-xs">
+                    เอกสารอ้างอิงนี้มี NCR อยู่แล้ว:{' '}
+                    {sameRef.map((r) => <Link key={r.ncr_id} to={`/ncr/${r.ncr_id}`} className="font-mono font-semibold underline mr-2">{r.ncr_id}</Link>)}
+                    หากเป็นเรื่องเดียวกันไม่ต้องเปิดซ้ำ
+                  </div>
+                )}
+              </div>
+            )}
+
             {!isNew && !locked && writer && (
               <SupplierLinkBox
                 label="ลิงก์ตอบกลับสำหรับผู้ส่งมอบ"
@@ -261,6 +328,9 @@ export default function NCRDetailPage() {
                   <select className={selectCls} value={form.source_type} onChange={set('source_type')} disabled={readOnly}>
                     {SOURCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
+                </FieldRow>
+                <FieldRow label="เอกสารอ้างอิง (เช่น เลขที่ใบตรวจรับ)">
+                  <input type="text" className={inputCls + ' font-mono'} value={form.source_ref} onChange={set('source_ref')} disabled={readOnly} maxLength={120} />
                 </FieldRow>
                 <FieldRow label="วันที่พบ (Found Date)">
                   <input type="date" className={inputCls} value={form.found_date} onChange={set('found_date')} disabled={readOnly} />

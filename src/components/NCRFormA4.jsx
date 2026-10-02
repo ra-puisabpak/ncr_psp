@@ -145,7 +145,7 @@ export default function NCRFormA4({ data, capa, photos = [] }) {
           </tr>
           <tr>
             <td className="label-cell" style={{ width: '20%' }}>แหล่งที่มา / Source</td>
-            <td className="value-cell" style={{ width: '30%' }}>{SOURCE_TH_ALL[d.source_type] || d.source_type || '-'}</td>
+            <td className="value-cell" style={{ width: '30%' }}>{SOURCE_TH_ALL[d.source_type] || d.source_type || '-'}{d.source_ref ? ` (อ้างอิง ${d.source_ref})` : ''}</td>
             <td className="label-cell" style={{ width: '20%' }}>วันที่พบ / Found Date</td>
             <td className="value-cell" style={{ width: '30%' }}>{fmt(d.found_date || d.issue_date)}</td>
           </tr>
