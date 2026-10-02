@@ -813,7 +813,8 @@ export default {
           if (sig) sig.sigBase64 = null;
           const data = JSON.stringify({ ...rest, sig, mats });
           if (data.length > 1500000) fail(413, 'ข้อมูลใบตรวจรับใหญ่เกินไป');
-          const worst = mats.some((m) => m.result === 'REJECT') ? 'REJECT' : mats.some((m) => m.result === 'HOLD') ? 'HOLD' : 'PASS';
+          // COND (accepted with conditions) is a deviation, so the record as a whole counts as not clean: it is filed under HOLD here.
+          const worst = mats.some((m) => m.result === 'REJECT') ? 'REJECT' : mats.some((m) => m.result === 'HOLD' || m.result === 'COND') ? 'HOLD' : 'PASS';
           const ncIds = await recvNcIds(ncList);
           const stmts = [DB.prepare(
             'INSERT INTO recv_records (doc_no,uid,recv_date,supplier,inspector,result,data,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?)'

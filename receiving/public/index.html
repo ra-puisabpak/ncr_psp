@@ -814,7 +814,9 @@ const AQL_DEF={
   ma:[['ma1','เปลือกติดมาก'],['ma2','ขั้วติดอยู่'],['ma3','ช้ำ / เป็นรอยบุบ']],
   mi:[['mi1','ขนาดเล็กกว่าเกณฑ์'],['mi2','สีแดงปนเขียว'],['mi3','รอยถลอกเล็กน้อย']]};
 const AQL_KEYS=['crop','bags','sBags','sG','bagKg','pos','cr1','cr2','cr3','ma1','ma2','ma3','mi1','mi2','mi3'];
-const RES_RANK={PASS:0,HOLD:1,REJECT:2};
+const RES_RANK={PASS:0,COND:1,HOLD:1,REJECT:2};   // COND = รับแบบมีเงื่อนไข (ยอมรับโดยมีข้อเบี่ยงเบน) — ใช้แทน HOLD ได้ แต่ใช้แทน REJECT ไม่ได้
+const RES_TXT={PASS:'PASS',COND:'รับแบบมีเงื่อนไข',HOLD:'HOLD',REJECT:'REJECT'};
+function worstRes(mats){return mats.some(m=>m.result==='REJECT')?'REJECT':mats.some(m=>m.result==='HOLD')?'HOLD':mats.some(m=>m.result==='COND')?'COND':'PASS';}
 
 function aqlN(v){const n=parseFloat(v);return isNaN(n)||n<0?0:n;}
 function aqlPlan(bags){const b=Math.floor(aqlN(bags));return AQL_PLAN.find(p=>b>=p.min&&b<=p.max)||null;}
@@ -890,7 +892,7 @@ function setAql(idx,f,v){
   const re=document.getElementById('rs-'+idx);if(re)re.innerHTML=resPills(idx);
 }
 function setAqlPill(idx,f,v){const m=curMats.find(x=>x.idx===idx);if(m)m[f]=v;renderMats();}
-function resPills(idx){return pill(idx,'result',[{v:'PASS',c:'pass',l:'✓ PASS'},{v:'HOLD',c:'hold',l:'⏸ HOLD'},{v:'REJECT',c:'fail',l:'✗ REJECT'}]);}
+function resPills(idx){return pill(idx,'result',[{v:'PASS',c:'pass',l:'✓ PASS'},{v:'COND',c:'hold',l:'◐ รับแบบ<br>มีเงื่อนไข'},{v:'HOLD',c:'hold',l:'⏸ HOLD'},{v:'REJECT',c:'fail',l:'✗ REJECT'}]);}
 function aqlPlanHtml(c){
   if(!c.bags)return'กรอกจำนวนถุงที่รับเข้า เพื่อคำนวณจำนวนถุงที่ต้องสุ่ม';
   if(!c.plan)return'&#x26A0; จำนวน '+c.bags+' ถุง อยู่นอกตาราง OPL (2–150 ถุง)<br>ให้ QC Supervisor กำหนดจำนวนสุ่ม แล้วกรอกจำนวนถุงและน้ำหนักตัวอย่างเอง';
@@ -1146,8 +1148,8 @@ function generatePDF(rec){
     6,i=>`<tr><td class="c">${i}</td>${'<td></td>'.repeat(9)}<td class="c">${wOk('')}</td></tr>`);
   // ── 4. ผลการตรวจรับ
   const ncOf=m=>ncLogs.filter(n=>n.docNo===rec.docNo&&(n.matIdx===m.idx||(n.matIdx==null&&mats.filter(x=>x.result!=='PASS').length===1&&m.result!=='PASS'))).map(n=>E(n.id)+(n.ncrId?'<br>'+E(n.ncrId):'')).join('<br>');
-  const res=v=>cb(v==='PASS','PASS')+cb(v==='HOLD','HOLD')+cb(v==='REJECT','REJECT');
-  const s4=pad(mats.map((m,i)=>`<tr><td class="c">${i+1}</td><td class="c${m.result==='REJECT'?' rj':m.result==='HOLD'?' hd2':''}">${res(m.result)}</td><td>${E(m.note||'')}</td><td class="c mono">${ncOf(m)}</td></tr>`),
+  const res=v=>cb(v==='PASS','PASS')+cb(v==='COND','รับแบบมีเงื่อนไข')+cb(v==='HOLD','HOLD')+cb(v==='REJECT','REJECT');
+  const s4=pad(mats.map((m,i)=>`<tr><td class="c">${i+1}</td><td class="c${m.result==='REJECT'?' rj':m.result==='HOLD'||m.result==='COND'?' hd2':''}" style="white-space:nowrap">${res(m.result)}</td><td>${E(m.note||'')}</td><td class="c mono">${ncOf(m)}</td></tr>`),
     6,i=>`<tr><td class="c">${i}</td><td class="c">${res('')}</td><td></td><td></td></tr>`);
 
   let body=`<div class="pg">${head('บันทึกการตรวจรับและตรวจสอบวัตถุดิบ','<b>เวลา:</b> '+E(rec.time||''))}
@@ -1166,9 +1168,9 @@ function generatePDF(rec){
       <thead><tr><th>#</th><th>ภาชนะที่รับ</th><th>จำนวนตัวอย่าง</th><th>น้ำหนักตามฉลาก</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>ครบ / ไม่ครบ</th></tr></thead><tbody>${s3}</tbody></table>
     <div class="nt">จำนวนตัวอย่าง: หอม / พริก / กระเทียม และหมูบด ตามตารางจำนวนถุง (ข้อ 5) | ปลาแช่แข็ง 10% ของจำนวนภาชนะ (อย่างน้อย 1) | วัตถุดิบอื่น √N+1 (N = จำนวนภาชนะที่รับ)</div>
     <div class="sec">4. ผลการตรวจรับ</div>
-    <table><colgroup><col style="width:4%"><col style="width:34%"><col style="width:46%"><col style="width:16%"></colgroup>
-      <thead><tr><th>#</th><th>ผลการตรวจรับ</th><th>หมายเหตุ / ข้อบกพร่องที่พบ</th><th>NC No. (ถ้ามี)</th></tr></thead><tbody>${s4}</tbody></table>
-    <div class="nt">HOLD / REJECT ต้องแยกเก็บ ติดป้ายสถานะ ห้ามนำไปใช้ และออกรายงาน NC</div>`;
+    <table><colgroup><col style="width:4%"><col style="width:42%"><col style="width:39%"><col style="width:15%"></colgroup>
+      <thead><tr><th>#</th><th>ผลการตรวจรับ</th><th>หมายเหตุ / ข้อบกพร่องที่พบ / เงื่อนไขการรับ</th><th>NC No. (ถ้ามี)</th></tr></thead><tbody>${s4}</tbody></table>
+    <div class="nt">HOLD / REJECT ต้องแยกเก็บ ติดป้ายสถานะ ห้ามนำไปใช้ และออกรายงาน NC | รับแบบมีเงื่อนไข ต้องระบุเงื่อนไข ออกรายงาน NC และให้ QC Supervisor ทบทวน</div>`;
 
   // ── หน้า 2: บันทึกการสุ่มตรวจ
   if(aqlMats.length||porkMats.length){
@@ -1448,7 +1450,7 @@ function buildSumm(){
   const sp=SUPPLIERS.find(s=>s.id===document.getElementById('f-sup').value)||{name:'—'};
   const date=document.getElementById('f-date').value;
   const aP=curMats.every(m=>m.result==='PASS');const hR=curMats.some(m=>m.result==='REJECT');
-  const res=aP?'<span class="pill pill-pass">PASS ทั้งหมด</span>':hR?'<span class="pill pill-fail">REJECT</span>':'<span class="pill pill-hold">มี HOLD</span>';
+  const res=aP?'<span class="pill pill-pass">PASS ทั้งหมด</span>':hR?'<span class="pill pill-fail">REJECT</span>':'<span class="pill pill-hold">'+(curMats.some(m=>m.result==='HOLD')?'มี HOLD':'รับแบบมีเงื่อนไข')+'</span>';
   document.getElementById('summ').innerHTML=`<div style="display:flex;flex-direction:column;gap:10px">
     <div style="display:flex;justify-content:space-between"><span style="color:var(--gray3);font-size:13px">วันที่</span><span style="font-weight:600;font-size:13px">${date}</span></div>
     <div style="display:flex;justify-content:space-between"><span style="color:var(--gray3);font-size:13px">Supplier</span><span style="font-weight:600;font-size:13px;text-align:right;max-width:200px">${sp.name}</span></div>
@@ -1468,6 +1470,7 @@ function saveRecord(){
   if(!date||!sup||!insp){showToast('กรอกข้อมูลให้ครบ','err');return;}
   if(!curMats.length){showToast('เพิ่มรายการวัตถุดิบก่อน','err');return;}
   for(let i=0;i<curMats.length;i++){const er=docCheck(curMats[i],i+1)||aqlCheck(curMats[i],i+1)||porkCheck(curMats[i],i+1)||wtCheck(curMats[i],i+1);if(er){goFP(2);showToast(er,'err');return;}}
+  for(let i=0;i<curMats.length;i++){if(curMats[i].result==='COND'&&!String(curMats[i].note||'').trim()){goFP(2);showToast('รายการที่ '+(i+1)+': รับแบบมีเงื่อนไข ต้องระบุเงื่อนไขในช่องหมายเหตุ','err');return;}}
   if(sigState.empty){showToast('กรุณาเซ็นชื่อก่อนบันทึก','err');return;}
   const docNo=document.getElementById('f-docno').value||genDoc();
   const sigB64=getSigB64();
@@ -1483,9 +1486,9 @@ function saveRecord(){
   cloudSaveRecord(rec).catch(()=>{});
   let ncCreated=false;
   rec.mats.forEach(m=>{
-    if(m.result==='HOLD'||m.result==='REJECT'){
+    if(m.result==='HOLD'||m.result==='REJECT'||m.result==='COND'){
       const _nc={id:nextNcId(),uid:newUid(),recUid:rec.uid,synced:false,docNo,supplier:sup,
-        failType:m.result==='REJECT'?'Rejected Material':'Hold — Pending Investigation',
+        failType:m.result==='REJECT'?'Rejected Material':m.result==='COND'?'Conditional Acceptance — รับแบบมีเงื่อนไข':'Hold — Pending Investigation',
         corrective:'—',qa:insp,status:'Open',closedDate:'',ncrId:'',date,result:m.result,matIdx:m.idx,mat:{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit},note:[m.note||m.code,inspSummary(m),m.doc==='FAIL'?'เอกสาร: '+docSummary(m):'',m.wtV==='HOLD'?wtSummary(m):''].filter(Boolean).join(' | ')};
       ncLogs.unshift(_nc);cloudSaveNC(_nc).catch(()=>{});ncCreated=true;
     }
@@ -1531,7 +1534,7 @@ function renderHome(){
     const hasNC=ncLogs.some(nc=>nc.docNo===r.docNo);
     return `<div class="ri"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="rdoc">${r.docNo}${r.synced?'':' <span style="color:#e8900a">(รอส่ง)</span>'}</span><span style="font-size:12px;color:var(--gray3)">${r.date}</span></div>
       <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;margin-right:8px">${sp.name}</span>
-        <div style="display:flex;gap:6px;flex-shrink:0">${hasNC?'<span class="pill pill-open">NC</span>':''}<span class="pill pill-${rc}">${aP?'PASS':mats.some(m=>m.result==='REJECT')?'REJECT':'HOLD'}</span></div></div>
+        <div style="display:flex;gap:6px;flex-shrink:0">${hasNC?'<span class="pill pill-open">NC</span>':''}<span class="pill pill-${rc}">${RES_TXT[worstRes(mats)]}</span></div></div>
       <div style="font-size:12px;color:var(--gray3);margin-top:4px">${mats.length} รายการ — ${r.inspector}</div></div>`;
   }).join('');
 }
@@ -1549,7 +1552,7 @@ function renderHist(){
         <span style="font-size:12px;color:var(--gray3)">&#x1F321; ${r.carTemp!=null?r.carTemp+'°C':'—'}</span>
         <span style="font-size:12px;color:var(--gray3)">&#x1F4E6; ${mats.length} รายการ</span>
         <span style="font-size:12px;color:var(--gray3)">&#x1F464; ${r.inspector}</span>
-        <span class="pill pill-${rc}">${aP?'PASS':mats.some(m=>m.result==='REJECT')?'REJECT':'HOLD'}</span>
+        <span class="pill pill-${rc}">${RES_TXT[worstRes(mats)]}</span>
         <button onclick="printDoc('${r.docNo}')" style="margin-left:auto;padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--white);color:var(--teal);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer">&#x1F5A8; พิมพ์ใบรับ</button>
       </div></div>`;
   }).join('');
@@ -1596,7 +1599,7 @@ function ncrMat(nc){
   const rec=records.find(r=>r.docNo===nc.docNo);const mats=rec?(rec.mats||rec.materials||[]):[];
   let m=null;
   if(nc.matIdx!=null)m=mats.find(x=>x.idx===nc.matIdx)||null;
-  if(!m){const bad=mats.filter(x=>x.result==='HOLD'||x.result==='REJECT');if(bad.length===1)m=bad[0];}
+  if(!m){const bad=mats.filter(x=>x.result&&x.result!=='PASS');if(bad.length===1)m=bad[0];}
   return {rec,m};
 }
 function openNCR(id){
@@ -1606,7 +1609,7 @@ function openNCR(id){
   const mat=nc.mat||(m?{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit}:null);
   const result=nc.result||(m?m.result:'')||(/reject/i.test(nc.failType)?'REJECT':/hold/i.test(nc.failType)?'HOLD':'');
   const sp=SUPPLIERS.find(x=>x.id===nc.supplier)||{name:nc.supplier||''};
-  const lines=['ตรวจรับวัตถุดิบไม่ผ่านเกณฑ์ (ใบตรวจรับ '+nc.docNo+')'+(result?' — ผลการตรวจ: '+result:''),
+  const lines=['ตรวจรับวัตถุดิบไม่ผ่านเกณฑ์ (ใบตรวจรับ '+nc.docNo+')'+(result?' — ผลการตรวจ: '+(RES_TXT[result]||result):''),
     mat&&mat.name?'รายการ: '+[mat.code,mat.name].filter(Boolean).join(' '):'',
     'ประเภทปัญหา: '+nc.failType,nc.note?'รายละเอียด: '+nc.note:'',
     rec&&rec.carReg?'ทะเบียนรถ: '+rec.carReg+(rec.carTemp!=null?' | อุณหภูมิรถ '+rec.carTemp+'°C':''):'',
@@ -1618,6 +1621,7 @@ function openNCR(id){
   put('nc_description',lines.join('\n').slice(0,1500));
   if(mat){put('material_code',mat.code);put('material_name',mat.name);put('lot_no',mat.lot);
     if(mat.qty!==''&&!isNaN(parseFloat(mat.qty)))put('defect_qty',parseFloat(mat.qty));put('defect_unit',mat.unit);}
+  if(result==='COND')put('immediate_action','รับแบบมีเงื่อนไข: '+String((m&&m.note)||nc.note||'').slice(0,300));
   if(result==='HOLD')put('immediate_action','กักสินค้า (HOLD) ติดป้ายบ่งชี้ รอผลการพิจารณา');
   if(result==='REJECT')put('immediate_action','ปฏิเสธการรับ (REJECT) แยกสินค้าและแจ้งผู้ส่งมอบ');
   _ncrFor=id;
@@ -1741,15 +1745,15 @@ function printReport(){
   const f=document.getElementById('rp-from').value,t=document.getElementById('rp-to').value;
   const scope=day?'วันที่รับ: <b>'+fmtD(document.getElementById('rp-date').value)+'</b>'
     :'Supplier: <b>'+escH(document.getElementById('rp-sup').value)+'</b> &nbsp;|&nbsp; ช่วงวันที่: <b>'+fmtD(f||dates[0])+' – '+fmtD(t||dates[dates.length-1])+'</b>';
-  let no=0,cP=0,cH=0,cR=0;
+  let no=0,cP=0,cH=0,cR=0,cC=0;
   const resTd=v=>{const col=v==='PASS'?'#2e7d32':v==='REJECT'?'#c0392b':'#b35c00';const bg=v==='PASS'?'#e8f5e9':v==='REJECT'?'#ffebee':'#fff3e0';
-    return '<td class="c" style="background:'+bg+';color:'+col+';font-weight:700">'+escH(v||'—')+'</td>';};
+    return '<td class="c" style="background:'+bg+';color:'+col+';font-weight:700'+(v==='COND'?';white-space:normal;font-size:8.5px':'')+'">'+escH(v==='COND'?'รับมีเงื่อนไข':v||'—')+'</td>';};
   const body=rs.map(r=>{
     const mats=r.mats||r.materials||[];
-    const worst=mats.some(m=>m.result==='REJECT')?'REJECT':mats.some(m=>m.result==='HOLD')?'HOLD':'PASS';
+    const worst=worstRes(mats);
     const rows=mats.map(m=>{
       no++;const mi=MATERIALS.find(x=>x.code===m.code)||{};
-      if(m.result==='PASS')cP++;else if(m.result==='REJECT')cR++;else cH++;
+      if(m.result==='PASS')cP++;else if(m.result==='REJECT')cR++;else if(m.result==='COND')cC++;else cH++;
       const ts=[m.t1,m.t2,m.t3].filter(x=>x!==''&&x!==null&&x!==undefined).join(' / ')||'—';
       const insp=inspSummary(m)||('Visual '+(m.visual||'—')+' · Leak '+(m.leak||'—'));
       const det=['<b>ผลตรวจ:</b> '+escH(insp),docSummary(m)?'<b>เอกสาร:</b> '+escH(docSummary(m)):'<b>เอกสาร:</b> '+escH(m.doc||'—'),
@@ -1760,7 +1764,7 @@ function printReport(){
     }).join('');
     const col=worst==='PASS'?'#2e7d32':worst==='REJECT'?'#c0392b':'#b35c00';
     return '<table class="doc"><colgroup><col style="width:4%"><col style="width:9%"><col style="width:22%"><col style="width:13%"><col style="width:11%"><col style="width:10.5%"><col style="width:10.5%"><col style="width:11%"><col style="width:9%"></colgroup>'+
-      '<thead><tr><td colspan="9" class="dh"><div class="dh1"><span class="mono">'+escH(r.docNo)+'</span><span style="color:'+col+'">'+worst+'</span></div>'+
+      '<thead><tr><td colspan="9" class="dh"><div class="dh1"><span class="mono">'+escH(r.docNo)+'</span><span style="color:'+col+'">'+RES_TXT[worst]+'</span></div>'+
       '<div class="dh2">'+(day?'':'<span>วันที่รับ <b>'+fmtD(r.date)+'</b></span>')+'<span>เวลา <b>'+escH(r.time||'—')+'</b></span>'+(day?'<span>ผู้ส่งมอบ <b>'+escH(r.supplier)+'</b></span>':'')+
       '<span>ทะเบียนรถ <b>'+escH(r.carReg||'—')+'</b></span><span>อุณหภูมิรถ <b>'+(r.carTemp!=null?r.carTemp+' °C':'—')+'</b></span><span>PO/DO <b>'+escH(r.poNo||'—')+'</b></span><span>ผู้ตรวจรับ <b>'+escH(r.inspector||'—')+'</b></span></div></td></tr>'+
       '<tr><th>#</th><th>รหัส</th><th>วัตถุดิบ</th><th>Lot No</th><th>จำนวน</th><th>วันผลิต</th><th>วันหมดอายุ</th><th>อุณหภูมิ (°C)</th><th>ผล</th></tr></thead>'+rows+'</table>';
@@ -1788,7 +1792,7 @@ body{font-family:'Sarabun',sans-serif;font-size:11px;line-height:1.35;color:#1a2
 .hd-ref div+div{border-top:1px solid #c5ccd6}
 .hd-ref b{color:#0f2744;font-weight:700;text-align:right}
 .scope{border:1px solid #9aa5b1;padding:5px 10px;font-size:11.5px;margin-bottom:6px}
-.sum{display:grid;grid-template-columns:repeat(6,1fr);border:1px solid #9aa5b1;margin-bottom:10px}
+.sum{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid #9aa5b1;margin-bottom:10px}
 .sum div{padding:4px 6px 5px;text-align:center;font-size:9.5px;color:#5c6470}
 .sum div+div{border-left:1px solid #9aa5b1}
 .sum b{display:block;font-size:16px;line-height:1.2;color:#0f2744}
@@ -1818,7 +1822,7 @@ td{padding:4px 5px;border:1px solid #9aa5b1;vertical-align:middle;overflow-wrap:
   <div class="hd-ref"><div>รหัสแบบฟอร์ม <b>FM-QC-001</b></div><div>เอกสารอ้างอิง <b>SD-QC-001</b></div><div>ประเภทรายงาน <b>${day?'รายวัน':'ราย Supplier'}</b></div></div>
 </div>
 <div class="scope">${scope}</div>
-<div class="sum"><div><b>${rs.length}</b>ใบตรวจรับ</div><div><b>${no}</b>รายการวัตถุดิบ</div><div><b style="color:#2e7d32">${cP}</b>PASS</div><div><b style="color:#b35c00">${cH}</b>HOLD</div><div><b style="color:#c0392b">${cR}</b>REJECT</div><div><b>${ncs.filter(n=>n.status==='Open').length}</b>NC ที่ยังเปิด</div></div>
+<div class="sum"><div><b>${rs.length}</b>ใบตรวจรับ</div><div><b>${no}</b>รายการวัตถุดิบ</div><div><b style="color:#2e7d32">${cP}</b>PASS</div><div><b style="color:#b35c00">${cC}</b>รับมีเงื่อนไข</div><div><b style="color:#b35c00">${cH}</b>HOLD</div><div><b style="color:#c0392b">${cR}</b>REJECT</div><div><b>${ncs.filter(n=>n.status==='Open').length}</b>NC ที่ยังเปิด</div></div>
 ${body}
 ${ncHtml}
 <div class="keep">
