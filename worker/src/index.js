@@ -733,10 +733,17 @@ export default {
         const recs = await DB.prepare(
           'SELECT doc_no, uid, data, created_by, created_at FROM recv_records ORDER BY recv_date DESC, doc_no DESC LIMIT 1000').all();
         const ncs = await DB.prepare(
-          'SELECT nc_id, uid, doc_no, status, ncr_id, closed_date, data FROM recv_nc ORDER BY created_at DESC, nc_id DESC LIMIT 1000').all();
+          `SELECT n.nc_id, n.uid, n.doc_no, n.status, n.ncr_id, n.closed_date, n.data, r.status AS ncr_status, r.closed_date AS ncr_closed
+             FROM recv_nc n LEFT JOIN ncr_records r ON r.ncr_id = n.ncr_id ORDER BY n.created_at DESC, n.nc_id DESC LIMIT 1000`).all();
         return json({
           records: recs.results.map((r) => ({ ...JSON.parse(r.data), docNo: r.doc_no, uid: r.uid, savedBy: r.created_by, savedAt: r.created_at })),
-          ncLogs: ncs.results.map((n) => ({ ...JSON.parse(n.data), id: n.nc_id, uid: n.uid, docNo: n.doc_no, status: n.status, ncrId: n.ncr_id || '', closedDate: n.closed_date || '' })),
+          // An NC that is an NCR takes its status from the NCR: it is closed in the e-Form, not here.
+          ncLogs: ncs.results.map((n) => {
+            const linked = n.nc_id === n.ncr_id && n.ncr_status;
+            const closed = linked ? ['Closed', 'Cancelled'].includes(n.ncr_status) : n.status === 'Closed';
+            return { ...JSON.parse(n.data), id: n.nc_id, uid: n.uid, docNo: n.doc_no, status: closed ? 'Closed' : 'Open', ncrId: n.ncr_id || '',
+              ncrStatus: n.ncr_status || '', closedDate: (linked ? String(n.ncr_closed || '').slice(0, 10) : n.closed_date) || '' };
+          }),
         });
       }
 
@@ -749,22 +756,42 @@ export default {
         const last = await DB.prepare('SELECT doc_no FROM recv_records WHERE doc_no LIKE ? ORDER BY doc_no DESC LIMIT 1').bind(`FM-QC-001-${day}-%`).first();
         return `FM-QC-001-${day}-${String((last ? parseInt(last.doc_no.slice(-3), 10) : 0) + 1).padStart(3, '0')}`;
       };
-      const recvNcIds = async (list) => {
-        const last = await DB.prepare("SELECT nc_id FROM recv_nc ORDER BY CAST(SUBSTR(nc_id,3) AS INTEGER) DESC LIMIT 1").first();
-        let n = last ? parseInt(last.nc_id.slice(2), 10) : 0;
-        const taken = new Set();
-        const out = [];
-        for (const nc of list) {
-          let id = String(nc.id || '');
-          if (!/^NC\d{3,6}$/.test(id) || taken.has(id) || await DB.prepare('SELECT 1 FROM recv_nc WHERE nc_id=?').bind(id).first()) {
-            do { n += 1; id = 'NC' + String(n).padStart(3, '0'); } while (taken.has(id));
-          }
-          taken.add(id); out.push(id);
-        }
-        return out;
+      // Every NC raised at receiving is an NCR in the e-Form from the start, so both apps show one number.
+      const nextNcrIds = async (count) => {
+        const first = await nextId(DB, 'ncr_records', 'ncr_id', 'NCR');
+        const cut = first.lastIndexOf('-') + 1, n0 = parseInt(first.slice(cut), 10), stem = first.slice(0, cut);
+        return Array.from({ length: count }, (_, i) => stem + String(n0 + i).padStart(3, '0'));
+      };
+      const RES_TH = { REJECT: 'REJECT — ไม่ผ่านการตรวจรับ', HOLD: 'HOLD — กักรอการพิจารณา', COND: 'รับแบบมีเงื่อนไข' };
+      const ACTION_TH = { REJECT: 'ปฏิเสธการรับ (REJECT) แยกสินค้าและแจ้งผู้ส่งมอบ', HOLD: 'กักสินค้า (HOLD) ติดป้ายบ่งชี้ รอผลการพิจารณา' };
+      const ncrFromNc = (ncrId, docNo, nc, rec) => {
+        const mat = nc.mat && typeof nc.mat === 'object' ? nc.mat : {};
+        const qty = parseFloat(mat.qty);
+        const f = {
+          source_type: 'RM_RECEIVING', source_ref: docNo,
+          found_date: nz(rec?.date) || nz(nc.date) || today(), found_time: nz(rec?.time),
+          supplier_name: nz(rec?.supplier) || nz(nc.supplier), reported_by: nz(rec?.inspector) || nz(nc.qa) || user.display_name,
+          material_code: nz(mat.code), material_name: nz(mat.name), lot_no: nz(mat.lot),
+          defect_qty: Number.isFinite(qty) ? qty : null, defect_unit: nz(mat.unit),
+          nc_description: [
+            `ตรวจรับวัตถุดิบ (ใบตรวจรับ ${docNo})${RES_TH[nc.result] ? ' — ผล: ' + RES_TH[nc.result] : ''}`,
+            mat.name ? `รายการ: ${[mat.code, mat.name].filter(Boolean).join(' ')}` : '',
+            !RES_TH[nc.result] && nc.failType ? `ประเภทปัญหา: ${nc.failType}` : '',
+            nc.note ? `รายละเอียด: ${nc.note}` : '',
+            rec?.carReg ? `ทะเบียนรถ: ${rec.carReg}${rec.carTemp != null ? ' | อุณหภูมิรถ ' + rec.carTemp + '°C' : ''}` : '',
+            rec?.poNo ? `PO/DO: ${rec.poNo}` : '',
+          ].filter(Boolean).join('\n').slice(0, 2000),
+          immediate_action: nc.result === 'COND' ? `รับแบบมีเงื่อนไข: ${String(nc.brief || nc.note || '').slice(0, 300)}` : ACTION_TH[nc.result] || nz(nc.corrective === '—' ? '' : nc.corrective),
+          severity: nc.result === 'COND' ? 'Minor' : 'Major', shipped_status: 'NOT_SHIPPED',
+        };
+        const cols = Object.keys(f);
+        return DB.prepare(
+          `INSERT INTO ncr_records (ncr_id,issue_date,status,created_by,updated_by,created_at,updated_at,${cols.join(',')})
+           VALUES (?,?,?,?,?,?,?,${cols.map(() => '?').join(',')})`
+        ).bind(ncrId, today(), 'Open', user.username, user.username, nowIso(), nowIso(), ...cols.map((k) => f[k]));
       };
       const ncInsert = (id, uid, docNo, nc) => {
-        const ncrId = /^NCR-\d{4}-\d{3,}$/.test(String(nc.ncrId || '')) ? nc.ncrId : null;
+        const ncrId = /^NCR-\d{4}-\d{3,}$/.test(id) ? id : null;
         const status = nc.status === 'Closed' ? 'Closed' : 'Open';
         const { id: _i, uid: _u, docNo: _d, status: _s, ncrId: _n, closedDate: _c, synced: _y, dirty: _t, ...rest } = nc;
         const data = JSON.stringify(rest);
@@ -822,18 +849,25 @@ export default {
           if (data.length > 1500000) fail(413, 'ข้อมูลใบตรวจรับใหญ่เกินไป');
           // COND (accepted with conditions) is a deviation, so the record as a whole counts as not clean: it is filed under HOLD here.
           const worst = mats.some((m) => m.result === 'REJECT') ? 'REJECT' : mats.some((m) => m.result === 'HOLD' || m.result === 'COND') ? 'HOLD' : 'PASS';
-          const ncIds = await recvNcIds(ncList);
+          const ncIds = await nextNcrIds(ncList.length);
           const stmts = [DB.prepare(
             'INSERT INTO recv_records (doc_no,uid,recv_date,supplier,inspector,result,data,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?)'
           ).bind(docNo, uid, rec.date, String(rec.supplier).trim(), String(rec.inspector).trim(), worst, data, user.username, nowIso())];
           for (const p of photos) stmts.push(DB.prepare(
             'INSERT INTO recv_photos (doc_no,mat_idx,slot,content_type,size,data,created_by,created_at) VALUES (?,?,?,?,?,?,?,?)'
           ).bind(docNo, p.idx, p.slot, p.ph.type, p.ph.size, p.ph.b64, user.username, nowIso()));
-          ncList.forEach((nc, i) => stmts.push(ncInsert(ncIds[i], recvUid(nc.uid), docNo, nc)));
+          ncList.forEach((nc, i) => {
+            stmts.push(ncrFromNc(ncIds[i], docNo, nc, rec), ncInsert(ncIds[i], recvUid(nc.uid), docNo, nc));
+            // the inspection photos of that item become the NCR's problem photos
+            for (const p of photos.filter((x) => x.slot && x.idx === nc.matIdx)) stmts.push(DB.prepare(
+              "INSERT INTO ncr_photos (ncr_id,content_type,size,data,created_by,created_at,source,kind) VALUES (?,?,?,?,?,?,'internal','problem')"
+            ).bind(ncIds[i], p.ph.type, p.ph.size, p.ph.b64, user.username, nowIso()));
+          });
           try { await DB.batch(stmts); } catch (e) {
             if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) continue; // another phone took the number first
             throw e;
           }
+          for (const id of ncIds) await audit(DB, user.username, 'user', 'create', 'ncr', id, { source_type: 'RM_RECEIVING', receiving_doc: docNo });
           await audit(DB, user.username, 'user', 'create', 'recv', docNo, { supplier: rec.supplier, result: worst, items: mats.length, photos: photos.filter((p) => p.slot).length, nc: ncIds });
           return json({ docNo, ncs: ncList.map((nc, i) => ({ uid: nc.uid, id: ncIds[i] })) }, 201);
         }
@@ -853,21 +887,24 @@ export default {
         for (let attempt = 0; ; attempt++) {
           const done = await DB.prepare('SELECT nc_id FROM recv_nc WHERE uid=?').bind(uid).first();
           if (done) return json({ id: done.nc_id });
-          const [id] = await recvNcIds([nc]);
-          try { await ncInsert(id, uid, String(nc.docNo), nc).run(); } catch (e) {
+          const [id] = await nextNcrIds(1);
+          const parent = await DB.prepare('SELECT data, supplier, inspector, recv_date FROM recv_records WHERE doc_no=?').bind(String(nc.docNo)).first();
+          const prec = parent ? { ...JSON.parse(parent.data), supplier: parent.supplier, inspector: nz(nc.qa) || parent.inspector, date: parent.recv_date } : null;
+          try { await DB.batch([ncrFromNc(id, String(nc.docNo), nc, prec), ncInsert(id, uid, String(nc.docNo), nc)]); } catch (e) {
             if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) continue;
             throw e;
           }
-          await audit(DB, user.username, 'user', 'create', 'recv_nc', id, { doc_no: nc.docNo, fail_type: nc.failType });
+          await audit(DB, user.username, 'user', 'create', 'ncr', id, { source_type: 'RM_RECEIVING', receiving_doc: nc.docNo, fail_type: nc.failType });
           return json({ id }, 201);
         }
       }
-      const rn = path.match(/^\/api\/recv-nc\/(NC\d{3,6})$/);
+      const rn = path.match(/^\/api\/recv-nc\/(NC\d{3,6}|NCR-\d{4}-\d{3,})$/);
       if (rn && method === 'PATCH') {
         need(user, WRITERS);
         const b = await body();
         const row = await DB.prepare('SELECT status, ncr_id, closed_date FROM recv_nc WHERE nc_id=?').bind(rn[1]).first();
         if (!row) fail(404, 'ไม่พบ NC นี้');
+        if (rn[1].startsWith('NCR-')) fail(409, 'NC นี้คือ NCR ในระบบ NCR e-Form ให้แก้ไขและปิดในระบบ NCR e-Form');
         const next = { ...row };
         if ('ncrId' in b) {
           if (!blank(b.ncrId) && !/^NCR-\d{4}-\d{3,}$/.test(String(b.ncrId))) fail(400, 'รูปแบบเลข NCR ไม่ถูกต้อง');

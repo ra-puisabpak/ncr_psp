@@ -53,15 +53,16 @@ async function _syncRun(){
       rec.docNo=res.docNo;rec.synced=true;
       (rec.mats||[]).forEach(m=>{if(m.photo1)m.hasPhoto1=1;if(m.photo2)m.hasPhoto2=1;});
       if(rec.sig&&rec.sig.sigBase64)rec.sig.hasSig=1;
-      ncs.forEach(n=>{const x=(res.ncs||[]).find(y=>y.uid===n.uid);if(x)n.id=x.id;n.docNo=res.docNo;n.synced=true;});
+      ncs.forEach(n=>{const x=(res.ncs||[]).find(y=>y.uid===n.uid);if(x){n.id=x.id;if(/^NCR-/.test(x.id))n.ncrId=x.id;}n.docNo=res.docNo;n.synced=true;});
     }catch(e){err=e.message||'เชื่อมต่อไม่ได้';if(e.status!==400&&e.status!==413)break;}
   }
   if(!err||records.every(r=>r.synced)){
     for(const n of ncLogs.filter(x=>!x.synced).reverse()){
       const r=records.find(x=>x.docNo===n.docNo);if(r&&!r.synced)continue;
-      try{const res=await api('POST','/api/recv-nc',n);n.id=res.id;n.synced=true;}catch(e){err=e.message||'เชื่อมต่อไม่ได้';if(e.status!==400)break;}
+      try{const res=await api('POST','/api/recv-nc',n);n.id=res.id;if(/^NCR-/.test(res.id))n.ncrId=res.id;n.synced=true;}catch(e){err=e.message||'เชื่อมต่อไม่ได้';if(e.status!==400)break;}
     }
     for(const n of ncLogs.filter(x=>x.synced&&x.dirty)){
+      if(isNcr(n)){n.dirty=false;continue;}
       try{const res=await api('PATCH','/api/recv-nc/'+encodeURIComponent(n.id),{ncrId:n.ncrId||'',status:n.status});
         n.status=res.status;n.closedDate=res.closedDate;n.ncrId=res.ncrId;n.dirty=false;}catch(e){err=e.message||'เชื่อมต่อไม่ได้';if(e.status!==400)break;}
     }
@@ -1154,7 +1155,7 @@ function generatePDF(rec){
     return out;}),
     6,i=>`<tr><td class="c">${i}</td>${'<td></td>'.repeat(9)}<td class="c">${wOk('')}</td></tr>`);
   // ── 4. ผลการตรวจรับ
-  const ncOf=m=>ncLogs.filter(n=>n.docNo===rec.docNo&&(n.matIdx===m.idx||(n.matIdx==null&&mats.filter(x=>x.result!=='PASS').length===1&&m.result!=='PASS'))).map(n=>E(n.id)+(n.ncrId?'<br>'+E(n.ncrId):'')).join('<br>');
+  const ncOf=m=>ncLogs.filter(n=>n.docNo===rec.docNo&&(n.matIdx===m.idx||(n.matIdx==null&&mats.filter(x=>x.result!=='PASS').length===1&&m.result!=='PASS'))).map(n=>n.synced===false?'รอออกเลข':E(n.ncrId||n.id)).join('<br>');
   const res=v=>cb(v==='PASS','PASS')+cb(v==='COND','รับแบบมีเงื่อนไข')+cb(v==='HOLD','HOLD')+cb(v==='REJECT','REJECT');
   const s4=pad(mats.map((m,i)=>`<tr><td class="c">${i+1}</td><td class="c${m.result==='REJECT'?' rj':m.result==='HOLD'||m.result==='COND'?' hd2':''}" style="white-space:nowrap">${res(m.result)}</td><td>${E(m.note||'')}${m.result==='COND'&&m.condBy?'<br><span class="sm">รับแบบมีเงื่อนไขโดย: '+E(m.condBy)+'</span>':''}</td><td class="c mono">${ncOf(m)}</td></tr>`),
     6,i=>`<tr><td class="c">${i}</td><td class="c">${res('')}</td><td></td><td></td></tr>`);
@@ -1497,12 +1498,12 @@ function saveRecord(){
     if(m.result==='HOLD'||m.result==='REJECT'||m.result==='COND'){
       const _nc={id:nextNcId(),uid:newUid(),recUid:rec.uid,synced:false,docNo,supplier:sup,
         failType:m.result==='REJECT'?'Rejected Material':m.result==='COND'?'Conditional Acceptance — รับแบบมีเงื่อนไข':'Hold — Pending Investigation',
-        corrective:'—',qa:insp,status:'Open',closedDate:'',ncrId:'',date,result:m.result,matIdx:m.idx,mat:{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit},note:[m.note||m.code,inspSummary(m),m.doc==='FAIL'?'เอกสาร: '+docSummary(m):'',m.wtV==='HOLD'?wtSummary(m):''].filter(Boolean).join(' | ')};
+        corrective:'—',qa:insp,status:'Open',closedDate:'',ncrId:'',date,result:m.result,matIdx:m.idx,brief:m.note||'',mat:{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit},note:[m.note||m.code,inspSummary(m),m.doc==='FAIL'?'เอกสาร: '+docSummary(m):'',m.wtV==='HOLD'?wtSummary(m):''].filter(Boolean).join(' | ')};
       ncLogs.unshift(_nc);cloudSaveNC(_nc).catch(()=>{});ncCreated=true;
     }
   });
   const spInfo=SUPPLIERS.find(s=>s.id===sup)||{name:sup};
-  const subHtml=st=>`Doc: <strong>${escH(rec.docNo)}</strong><br>${rec.mats.length} รายการ | ${escH(spInfo.name)}<br>${st}${ncCreated?'<br>&#x26A0; สร้าง NC อัตโนมัติ<br><button class="bm" style="margin-top:10px;padding:10px;font-size:13px;background:#1e3a8a;color:#fff;width:100%" onclick="closeSaveModal();goS(\'sc-nc\')">&#x1F4DD; ไปหน้า NC Log เพื่อเปิด NCR</button>':''}`;
+  const subHtml=st=>`Doc: <strong>${escH(rec.docNo)}</strong><br>${rec.mats.length} รายการ | ${escH(spInfo.name)}<br>${st}${ncCreated?'<br>&#x26A0; สร้าง NC อัตโนมัติ<br><button class="bm" style="margin-top:10px;padding:10px;font-size:13px;background:#1e3a8a;color:#fff;width:100%" onclick="closeSaveModal();goS(\'sc-nc\')">&#x1F4DD; ไปหน้า NC Log เพื่อดูเลข NCR</button>':''}`;
   const setSub=st=>{if(_lastRec===rec)document.getElementById('save-sub').innerHTML=subHtml(st);};
   setSub('<span style="color:#e8900a">&#x23F3; กำลังส่งขึ้นฐานข้อมูล...</span>');
   syncAll().then(r=>{
@@ -1572,17 +1573,18 @@ function renderNC(){
   if(!ncLogs.length){el.innerHTML=`<div class="empty"><div class="ei">&#x2714;&#xFE0F;</div><div class="et">ไม่มีรายการ NC</div></div>`;return;}
   el.innerHTML=ncLogs.map(nc=>{
     const sp=SUPPLIERS.find(s=>s.id===nc.supplier)||{name:nc.supplier||'—'};
+    const br=ncBrief(nc);const mat=nc.mat&&nc.mat.name?[nc.mat.code,nc.mat.name].filter(Boolean).join(' '):'';
     return `<div class="nc-item ${nc.status.toLowerCase()}">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-family:monospace;font-size:12px;font-weight:700;color:var(--navy)">${nc.id}${nc.synced&&!nc.dirty?'':' <span style="color:#e8900a;font-family:inherit">(รอส่ง)</span>'}</span>
-        <span class="pill ${nc.status==='Closed'?'pill-closed':'pill-open'}">${nc.status}</span>
+        <span style="font-family:monospace;font-size:13px;font-weight:700;color:${nc.synced?'var(--navy)':'#e8900a'}">${escH(ncNo(nc))}</span>
+        <span class="pill ${nc.status==='Closed'?'pill-closed':'pill-open'}">${nc.status==='Closed'?'ปิดแล้ว':'เปิดอยู่'}</span>
       </div>
-      <div style="font-size:14px;font-weight:600;margin-bottom:4px">${nc.failType}</div>
-      <div style="font-size:12px;color:var(--gray3)">Doc: ${nc.docNo} | ${sp.name}</div>
-      <div style="font-size:12px;color:var(--gray3);margin-top:3px">${nc.corrective}</div>
-      ${nc.note?`<div style="font-size:12px;color:var(--gray3)">${escH(nc.note)}</div>`:''}
+      <div style="font-size:14px;font-weight:600;margin-bottom:4px">${escH(br.type)}${mat?' — '+escH(mat):''}</div>
+      ${br.detail?`<div style="font-size:13px;margin-bottom:4px">${escH(br.detail)}</div>`:''}
+      <div style="font-size:12px;color:var(--gray3)">ใบตรวจรับ ${escH(nc.docNo)} | ${escH(sp.name)}${nc.mat&&nc.mat.lot?' | Lot '+escH(nc.mat.lot):''}</div>
       ${ncrBox(nc)}
-      ${nc.status==='Open'?`<button class="bm bt" style="margin-top:10px;padding:10px;font-size:13px" onclick="closeNC('${nc.id}')">&#x2714; ปิด NC</button>`:`<div style="font-size:12px;color:var(--gray3);margin-top:6px">ปิดวันที่ ${nc.closedDate}</div>`}
+      ${isNcr(nc)||!nc.synced?(nc.status==='Closed'?`<div style="font-size:12px;color:var(--gray3);margin-top:6px">ปิดในระบบ NCR e-Form${nc.closedDate?' วันที่ '+fmtD(nc.closedDate):''}</div>`:'')
+        :nc.status==='Open'?`<button class="bm bt" style="margin-top:10px;padding:10px;font-size:13px" onclick="closeNC('${nc.id}')">&#x2714; ปิด NC</button>`:`<div style="font-size:12px;color:var(--gray3);margin-top:6px">ปิดวันที่ ${nc.closedDate}</div>`}
     </div>`;
   }).join('');
 }
@@ -1590,13 +1592,24 @@ function renderNC(){
 const NCR_APP_URL='https://puisabpak-ncr.pages.dev';
 let _ncrWin=null,_ncrFor=null;
 function nextNcId(){return 'NC'+String(Math.max(0,...ncLogs.map(n=>parseInt(String(n.id).slice(2))||0))+1).padStart(3,'0');}
+function isNcr(nc){return /^NCR-/.test(String(nc.id||''));}          // NC ที่ออกเลขร่วมกับระบบ NCR e-Form แล้ว
+function ncNo(nc){return nc.synced?(nc.ncrId||nc.id):'รอออกเลข NCR';}
+function ncBrief(nc){                                              // ข้อความสั้นของปัญหา: ชนิดผล + หมายเหตุของผู้ตรวจ (ไม่เอาผลสุ่มตรวจทั้งชุด)
+  const t=RES_TXT[nc.result]&&nc.result!=='PASS'?RES_TXT[nc.result]:String(nc.failType||'').split(' — ')[0];
+  const rec=records.find(r=>r.docNo===nc.docNo);const m=rec&&nc.matIdx!=null?(rec.mats||[]).find(x=>x.idx===nc.matIdx):null;
+  const d=nc.brief!=null?nc.brief:(m?m.note||'':(nc.mat?'':String(nc.note||'').split(' | ')[0]));
+  return {type:t,detail:String(d||'').trim()};
+}
 function matName(code){const m=MATERIALS.find(x=>x.code===code);return m?m.name:(code||'');}
 function ncrRef(nc){return nc.docNo+' / '+nc.id;}
 function ncrBox(nc){
   const b='margin-top:8px;padding:10px;font-size:13px;width:100%;';
+  if(!nc.synced)return `<div style="margin-top:8px;font-size:12px;color:#e8900a">ยังไม่ได้ส่งขึ้นฐานข้อมูล — เลข NCR จะออกเมื่อส่งสำเร็จ (กด "ซิงก์" ที่หน้าหลัก)</div>`;
+  if(isNcr(nc))return `<button class="bm" style="${b}background:#1e3a8a;color:#fff" onclick="viewNCR('${nc.id}')">&#x1F517; เปิดใน NCR e-Form${nc.status==='Open'?' (สอบสวน / ปิด)':''}</button>`;
+  // NC รุ่นเก่าที่ยังใช้เลข NCxxx: ผูกกับ NCR เองได้
   if(nc.ncrId){
     return `<div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:#e8f0fe;font-size:12px;color:#1e3a8a">
-      NCR e-Form: <strong style="font-family:monospace">${escH(nc.ncrId)}</strong>
+      NCR e-Form: <strong style="font-family:monospace">${escH(nc.ncrId)}</strong> (เลขเดิม ${escH(nc.id)})
       <button class="bm" style="${b}background:#1e3a8a;color:#fff" onclick="viewNCR('${nc.id}')">&#x1F517; ดู NCR ${escH(nc.ncrId)}</button>
       <div style="margin-top:6px;text-align:right"><span style="text-decoration:underline;cursor:pointer" onclick="setNCRId('${nc.id}')">แก้เลข NCR</span></div></div>`;
   }
@@ -1778,8 +1791,9 @@ function printReport(){
       '<tr><th>#</th><th>รหัส</th><th>วัตถุดิบ</th><th>Lot No</th><th>จำนวน</th><th>วันผลิต</th><th>วันหมดอายุ</th><th>อุณหภูมิ (°C)</th><th>ผล</th></tr></thead>'+rows+'</table>';
   }).join('');
   const docs=new Set(rs.map(r=>r.docNo));const ncs=ncLogs.filter(n=>docs.has(n.docNo));
-  const ncHtml=ncs.length?'<div class="sec">รายการ NC ที่เกี่ยวข้อง ('+ncs.length+' รายการ)</div><table class="nc"><thead><tr><th style="width:9%">NC No.</th><th style="width:22%">เลขที่ใบตรวจรับ</th><th style="width:19%">ประเภทปัญหา</th><th>รายละเอียด</th><th style="width:14%">NCR e-Form</th><th style="width:12%">สถานะ</th></tr></thead><tbody>'+
-    ncs.map(n=>'<tr><td class="mono c">'+escH(n.id)+'</td><td class="mono">'+escH(n.docNo)+'</td><td>'+escH(n.failType)+'</td><td>'+escH(n.note||'')+'</td><td class="mono c">'+escH(n.ncrId||'—')+'</td><td class="c">'+(n.status==='Closed'?'ปิดแล้ว':'เปิดอยู่')+(n.closedDate?'<br>'+fmtD(n.closedDate):'')+'</td></tr>').join('')+'</tbody></table>':'';
+  const ncHtml=ncs.length?'<div class="sec">รายการ NCR ที่เกี่ยวข้อง ('+ncs.length+' รายการ)</div><table class="nc"><thead><tr><th style="width:15%">NCR No.</th><th style="width:28%">วัตถุดิบ / Lot</th><th style="width:15%">ผลการตรวจ</th><th>ปัญหาที่พบ / เงื่อนไข</th><th style="width:12%">สถานะ</th></tr></thead><tbody>'+
+    ncs.map(n=>{const br=ncBrief(n);const mt=n.mat&&n.mat.name?escH(n.mat.name)+(n.mat.lot?'<br><span class="sm2">Lot '+escH(n.mat.lot)+'</span>':''):'<span class="sm2">ใบตรวจรับ '+escH(n.docNo)+'</span>';
+      return '<tr><td class="mono c">'+escH(ncNo(n))+'</td><td>'+mt+'</td><td class="c">'+escH(br.type)+'</td><td>'+escH(br.detail||'—')+'</td><td class="c">'+(n.status==='Closed'?'ปิดแล้ว'+(n.closedDate?'<br><span class="sm2">'+fmtD(n.closedDate)+'</span>':''):'เปิดอยู่')+'</td></tr>';}).join('')+'</tbody></table>':'';
   const html=`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>FM-QC-001 รายงาน${day?'รายวัน':'ราย Supplier'}</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -1816,6 +1830,7 @@ td{padding:4px 5px;border:1px solid #9aa5b1;vertical-align:middle;overflow-wrap:
 .dh2 b{color:#fff;font-weight:600}
 .det{font-size:9.5px;color:#3d4654;background:#fafbfc;padding:3px 6px}
 .det b{color:#0f2744;font-weight:600}
+.sm2{font-size:9px;color:#5c6470}
 .sec{font-size:11.5px;font-weight:700;color:#0f2744;border-bottom:1.5px solid #0f2744;padding:0 0 2px;margin:10px 0 5px}
 .sg{display:grid;grid-template-columns:1fr 1fr;border:1px solid #9aa5b1;margin-top:12px}
 .sg>div{padding:6px 12px 7px;text-align:center;font-size:10px;color:#5c6470}
