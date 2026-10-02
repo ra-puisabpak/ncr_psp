@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supplierApi } from '../api/d1Api'
 import { SOURCE_TH as SOURCE_LABELS } from '../data/masterData'
-import { PhotoThumb } from '../components/Photos'
+import PhotoSection, { PhotoThumb } from '../components/Photos'
 import { COMPANY_NAME, COMPANY_NAME_EN } from '../config'
 import { Save, CheckCircle2, AlertTriangle, ClipboardList } from 'lucide-react'
 
@@ -135,11 +135,11 @@ export default function SupplierReplyPage() {
                 <ReadField label="จำนวนของเสีย" value={ncr?.defect_qty != null ? `${ncr.defect_qty} ${ncr.defect_unit || ''}`.trim() : '-'} />
                 <ReadField label="รายละเอียดปัญหา" value={ncr?.nc_description} full />
                 <ReadField label="การแก้ไขเบื้องต้น (โดยผู้ผลิต)" value={ncr?.immediate_action} full />
-                {ncr?.photos?.length > 0 && (
+                {ncr?.photos?.some((p) => p.source !== 'supplier') && (
                   <div className="sm:col-span-2 flex flex-col gap-1">
                     <span className="text-[11px] font-medium text-gray-500">ภาพถ่ายประกอบ (แตะเพื่อดูภาพเต็ม)</span>
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                      {ncr.photos.map((p) => (
+                      {ncr.photos.filter((p) => p.source !== 'supplier').map((p) => (
                         <PhotoThumb key={p.id} load={() => supplierApi.photoBlob(token, p.id)} />
                       ))}
                     </div>
@@ -166,6 +166,11 @@ export default function SupplierReplyPage() {
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-gray-600">การป้องกัน (Preventive Action)</label>
                   <textarea className={textareaCls} rows={3} value={form.preventive_action} onChange={set('preventive_action')} placeholder="มาตรการป้องกันไม่ให้เกิดซ้ำ..." />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-600">ภาพประกอบการแก้ไข (ถ้ามี)</label>
+                  <PhotoSection api={supplierApi.photos(token)} only="supplier" max={6} readOnly={!ncr?.can_reply}
+                    hint="ถ่ายใหม่หรือเลือกจากคลังภาพ สูงสุด 6 ภาพ ภาพจะถูกส่งทันทีที่เลือก" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1">

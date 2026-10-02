@@ -61,8 +61,9 @@ export function PhotoThumb({ load, onRemove }) {
  * - Saved NCR (`api` given): photos upload at once and come from the server.
  * - New NCR (no `api`): photos wait in `pending` and the page uploads them right after the first save.
  */
-export default function PhotoSection({ api, readOnly, pending, setPending, max = 8 }) {
-  const [photos, setPhotos] = useState([])
+export default function PhotoSection({ api, readOnly, pending = [], setPending, max = 8, only = 'internal', hint, hideWhenEmpty }) {
+  const [all, setPhotos] = useState([])
+  const photos = all.filter((p) => (p.source || 'internal') === only)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const input = useRef(null)
@@ -96,8 +97,10 @@ export default function PhotoSection({ api, readOnly, pending, setPending, max =
     try { await api.remove(id); await reload() } catch (err) { setError(err.message) }
   }
 
+  if (hideWhenEmpty && count === 0) return null
   return (
     <div className="flex flex-col gap-2">
+      {hideWhenEmpty && <span className="text-xs font-medium text-gray-600">{hideWhenEmpty}</span>}
       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
         {api && photos.map((p) => (
           <PhotoThumb key={p.id} load={() => api.blob(p.id)} onRemove={readOnly ? null : () => remove(p.id)} />
@@ -117,9 +120,9 @@ export default function PhotoSection({ api, readOnly, pending, setPending, max =
           </button>
         )}
       </div>
-      <input ref={input} type="file" accept="image/*" multiple className="hidden" onChange={pick} />
+      {!readOnly && <input ref={input} type="file" accept="image/*" multiple className="hidden" onChange={pick} />}
       {readOnly && count === 0 && <div className="text-sm text-gray-400">ไม่มีภาพ</div>}
-      {!readOnly && <div className="text-[11px] text-gray-400">ถ่ายใหม่หรือเลือกจากคลังภาพ สูงสุด {max} ภาพ ระบบย่อขนาดให้อัตโนมัติ ผู้ส่งมอบจะเห็นภาพเหล่านี้เมื่อเปิดลิงก์ตอบกลับ</div>}
+      {!readOnly && <div className="text-[11px] text-gray-400">{hint || `ถ่ายใหม่หรือเลือกจากคลังภาพ สูงสุด ${max} ภาพ ระบบย่อขนาดให้อัตโนมัติ ผู้ส่งมอบจะเห็นภาพเหล่านี้เมื่อเปิดลิงก์ตอบกลับ`}</div>}
       {error && <div className="text-xs text-red-600">{error}</div>}
     </div>
   )

@@ -33,7 +33,27 @@ const SEVERITY_STYLE = {
   Low: { bg: '#c6f6d5', color: '#276749' },
 }
 
-export default function NCRFormA4({ data, capa }) {
+function PhotoBlock({ title, items }) {
+  if (!items.length) return null
+  return (
+    <table className="ncr-table avoid-break" style={{ marginBottom: '2mm' }}>
+      <tbody>
+        <tr><td className="section-header">{title}</td></tr>
+        <tr>
+          <td className="value-cell">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '2mm' }}>
+              {items.map((p) => (
+                <img key={p.id} src={p.src} alt="" style={{ width: '100%', height: '38mm', objectFit: 'contain', border: '0.5pt solid #ccc' }} />
+              ))}
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  )
+}
+
+export default function NCRFormA4({ data, capa, photos = [] }) {
   const d = data || {}
   const sevStyle = SEVERITY_STYLE[d.severity] || { bg: '#feebc8', color: '#c05621' }
 
@@ -264,6 +284,9 @@ export default function NCRFormA4({ data, capa }) {
           </tr>
         </tbody>
       </table>
+
+      <PhotoBlock title="ภาพถ่ายประกอบ / PHOTOS" items={photos.filter((p) => p.source !== 'supplier')} />
+      <PhotoBlock title="ภาพจากผู้ส่งมอบ / SUPPLIER PHOTOS" items={photos.filter((p) => p.source === 'supplier')} />
 
       {/* ===== SIGNATURES ===== */}
       <table className="ncr-table">

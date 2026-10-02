@@ -108,6 +108,14 @@ export default function NCRDetailPage() {
   const qaOnly = readOnly || (!isNew && !qa) // severity can be proposed by anyone when creating
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
 
+  // Picking a known item fills its stock unit, and shows its code and storage condition.
+  const material = MATERIALS.find((m) => m.label === form.material_name)
+  const pickMaterial = (e) => {
+    const label = e.target.value
+    const m = MATERIALS.find((x) => x.label === label)
+    setForm((f) => ({ ...f, material_name: label, defect_unit: m?.unit && !f.defect_unit ? m.unit : f.defect_unit }))
+  }
+
   const allergens = form.allergen ? form.allergen.split(',').map((s) => s.trim()).filter(Boolean) : []
   const toggleAllergen = (a) => setForm((f) => {
     const cur = f.allergen ? f.allergen.split(',').map((s) => s.trim()).filter(Boolean) : []
@@ -317,6 +325,12 @@ export default function NCRDetailPage() {
                     setPending={setPendingPhotos}
                   />
                 </FieldRow>
+                {!isNew && (
+                  <div className="sm:col-span-2">
+                    <PhotoSection key={`sup-${id}-${version}`} api={ncrApi.photos(id)} readOnly only="supplier"
+                      hideWhenEmpty="ภาพที่ผู้ส่งมอบแนบมากับคำตอบ" />
+                  </div>
+                )}
               </div>
 
               <SectionTitle>ส่วน A2 — กระบวนการ ผลิตภัณฑ์ และพารามิเตอร์</SectionTitle>
@@ -327,9 +341,15 @@ export default function NCRDetailPage() {
                     {PROCESSES.map((o) => <option key={o.code} value={o.code}>{o.code} - {o.label}</option>)}
                   </select>
                 </FieldRow>
-                <FieldRow label="วัตถุดิบ / ผลิตภัณฑ์">
-                  <input type="text" list="dl-materials" className={inputCls} value={form.material_name} onChange={set('material_name')} disabled={readOnly} />
-                  <datalist id="dl-materials">{MATERIALS.map((o) => <option key={o.code} value={o.label} />)}</datalist>
+                <FieldRow label="วัตถุดิบ / บรรจุภัณฑ์ / ผลิตภัณฑ์ (พิมพ์เพื่อค้นหา)">
+                  <input type="text" list="dl-materials" className={inputCls} value={form.material_name} onChange={pickMaterial} disabled={readOnly} />
+                  <datalist id="dl-materials">{MATERIALS.map((o) => <option key={o.code} value={o.label} label={`${o.code} · ${o.group}`} />)}</datalist>
+                  {material && (
+                    <span className="text-[11px] text-gray-500">
+                      {material.code} · {material.group}{material.unit ? ` · หน่วย ${material.unit}` : ''}
+                      {material.storage ? ` · การเก็บรักษา: ${material.storage}` : ''}
+                    </span>
+                  )}
                 </FieldRow>
                 <FieldRow label="ผู้ส่งมอบ (Supplier)">
                   <input type="text" list="dl-suppliers" className={inputCls} value={form.supplier_name} onChange={set('supplier_name')} disabled={readOnly} />

@@ -108,4 +108,11 @@ export const supplierApi = {
   get: (token) => request(`/api/supplier/${enc(token)}`, {}, { auth: false }),
   reply: (token, body) => post(`/api/supplier/${enc(token)}`, body, { auth: false }),
   photoBlob: (token, photoId) => requestBlob(`/api/supplier/${enc(token)}/photos/${photoId}`, { auth: false }),
+  // Same shape as ncrApi.photos(), for the photo picker on the supplier reply page.
+  photos: (token) => ({
+    list: () => request(`/api/supplier/${enc(token)}`, {}, { auth: false }).then((d) => d.photos || []),
+    upload: (body) => post(`/api/supplier/${enc(token)}/photos`, body, { auth: false }),
+    remove: (photoId) => post(`/api/supplier/${enc(token)}/photos/${photoId}/remove`, null, { auth: false }),
+    blob: (photoId) => requestBlob(`/api/supplier/${enc(token)}/photos/${photoId}`, { auth: false }),
+  }),
 }

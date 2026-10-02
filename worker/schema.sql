@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS ncr_photos (
   data         TEXT NOT NULL,
   created_by   TEXT NOT NULL,
   created_at   TEXT NOT NULL,
+  source       TEXT NOT NULL DEFAULT 'internal' CHECK(source IN ('internal','supplier')),
   removed      INTEGER NOT NULL DEFAULT 0,
   removed_by   TEXT,
   removed_at   TEXT

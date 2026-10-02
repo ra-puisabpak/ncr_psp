@@ -9,6 +9,7 @@ export default function NCRPrintPage() {
   const navigate = useNavigate()
   const [ncr, setNcr] = useState(null)
   const [capa, setCapa] = useState(null)
+  const [photos, setPhotos] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -20,6 +21,15 @@ export default function NCRPrintPage() {
       .then(([ncrData, capaData]) => { setNcr(ncrData); setCapa(capaData) })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
+    // Photos are private, so each one is fetched with the login and embedded in the page for printing.
+    const toDataUrl = (blob) => new Promise((resolve, reject) => {
+      const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(blob)
+    })
+    const api = ncrApi.photos(id)
+    api.list()
+      .then((list) => Promise.all(list.map(async (p) => ({ id: p.id, source: p.source, src: await toDataUrl(await api.blob(p.id)) }))))
+      .then(setPhotos)
+      .catch(() => {})
   }, [id])
 
   return (
@@ -49,7 +59,7 @@ export default function NCRPrintPage() {
           <div><strong>โหลดข้อมูลไม่ได้:</strong><br />{error}</div>
         </div>
       )}
-      {ncr && <NCRFormA4 data={ncr} capa={capa} />}
+      {ncr && <NCRFormA4 data={ncr} capa={capa} photos={photos} />}
     </div>
   )
 }
