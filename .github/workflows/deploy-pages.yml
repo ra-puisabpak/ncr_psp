@@ -35,7 +35,7 @@ jobs:
         run: npm run build
         env:
           # Address of the API Worker. Change if the Worker is deployed under another name.
-          VITE_API_URL: https://puisabpak-ncr-api.swifoods.workers.dev
+          VITE_API_URL: https://puisabpak-ncr-api.rapuisabpak.workers.dev
 
       - name: Create Pages project (first time only)
         run: npx wrangler@3 pages project create puisabpak-ncr --production-branch main || true
