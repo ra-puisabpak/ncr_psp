@@ -892,7 +892,14 @@ function setAql(idx,f,v){
   const re=document.getElementById('rs-'+idx);if(re)re.innerHTML=resPills(idx);
 }
 function setAqlPill(idx,f,v){const m=curMats.find(x=>x.idx===idx);if(m)m[f]=v;renderMats();}
-function resPills(idx){return pill(idx,'result',[{v:'PASS',c:'pass',l:'✓ PASS'},{v:'COND',c:'hold',l:'◐ รับแบบ<br>มีเงื่อนไข'},{v:'HOLD',c:'hold',l:'⏸ HOLD'},{v:'REJECT',c:'fail',l:'✗ REJECT'}]);}
+const COND_ROLES=['QA_MANAGER','FSTL','SUPERVISOR'];   // ผู้มีสิทธิ์รับแบบมีเงื่อนไข (ตรงกับที่เซิร์ฟเวอร์ตรวจ)
+function canCond(){return !!(session&&session.user&&COND_ROLES.includes(session.user.role));}
+function resPills(idx){
+  const p=pill(idx,'result',[{v:'PASS',c:'pass',l:'✓ PASS'},{v:'COND',c:'hold',l:'◐ รับแบบ<br>มีเงื่อนไข'},{v:'HOLD',c:'hold',l:'⏸ HOLD'},{v:'REJECT',c:'fail',l:'✗ REJECT'}]);
+  if(canCond())return p;
+  // ผู้ตรวจรับทั่วไป: ปุ่มนี้กดไม่ได้ ต้องให้ QC Supervisor หรือ QA เป็นผู้บันทึก
+  return p.replace(/<button type="button" class="tp hold[^"]*" onclick="setMat\(\d+,'result','COND'\);renderMats\(\)">/,'<button type="button" class="tp hold" style="opacity:.45" onclick="showToast(\'รับแบบมีเงื่อนไข ต้องให้ QC Supervisor หรือ QA เป็นผู้บันทึก\',\'err\')">');
+}
 function aqlPlanHtml(c){
   if(!c.bags)return'กรอกจำนวนถุงที่รับเข้า เพื่อคำนวณจำนวนถุงที่ต้องสุ่ม';
   if(!c.plan)return'&#x26A0; จำนวน '+c.bags+' ถุง อยู่นอกตาราง OPL (2–150 ถุง)<br>ให้ QC Supervisor กำหนดจำนวนสุ่ม แล้วกรอกจำนวนถุงและน้ำหนักตัวอย่างเอง';
@@ -1149,7 +1156,7 @@ function generatePDF(rec){
   // ── 4. ผลการตรวจรับ
   const ncOf=m=>ncLogs.filter(n=>n.docNo===rec.docNo&&(n.matIdx===m.idx||(n.matIdx==null&&mats.filter(x=>x.result!=='PASS').length===1&&m.result!=='PASS'))).map(n=>E(n.id)+(n.ncrId?'<br>'+E(n.ncrId):'')).join('<br>');
   const res=v=>cb(v==='PASS','PASS')+cb(v==='COND','รับแบบมีเงื่อนไข')+cb(v==='HOLD','HOLD')+cb(v==='REJECT','REJECT');
-  const s4=pad(mats.map((m,i)=>`<tr><td class="c">${i+1}</td><td class="c${m.result==='REJECT'?' rj':m.result==='HOLD'||m.result==='COND'?' hd2':''}" style="white-space:nowrap">${res(m.result)}</td><td>${E(m.note||'')}</td><td class="c mono">${ncOf(m)}</td></tr>`),
+  const s4=pad(mats.map((m,i)=>`<tr><td class="c">${i+1}</td><td class="c${m.result==='REJECT'?' rj':m.result==='HOLD'||m.result==='COND'?' hd2':''}" style="white-space:nowrap">${res(m.result)}</td><td>${E(m.note||'')}${m.result==='COND'&&m.condBy?'<br><span class="sm">อนุมัติรับแบบมีเงื่อนไขโดย: '+E(m.condBy)+'</span>':''}</td><td class="c mono">${ncOf(m)}</td></tr>`),
     6,i=>`<tr><td class="c">${i}</td><td class="c">${res('')}</td><td></td><td></td></tr>`);
 
   let body=`<div class="pg">${head('บันทึกการตรวจรับและตรวจสอบวัตถุดิบ','<b>เวลา:</b> '+E(rec.time||''))}
@@ -1470,6 +1477,7 @@ function saveRecord(){
   if(!date||!sup||!insp){showToast('กรอกข้อมูลให้ครบ','err');return;}
   if(!curMats.length){showToast('เพิ่มรายการวัตถุดิบก่อน','err');return;}
   for(let i=0;i<curMats.length;i++){const er=docCheck(curMats[i],i+1)||aqlCheck(curMats[i],i+1)||porkCheck(curMats[i],i+1)||wtCheck(curMats[i],i+1);if(er){goFP(2);showToast(er,'err');return;}}
+  if(curMats.some(m=>m.result==='COND')&&!canCond()){goFP(2);showToast('รับแบบมีเงื่อนไข ต้องให้ QC Supervisor หรือ QA เป็นผู้บันทึก','err');return;}
   for(let i=0;i<curMats.length;i++){if(curMats[i].result==='COND'&&!String(curMats[i].note||'').trim()){goFP(2);showToast('รายการที่ '+(i+1)+': รับแบบมีเงื่อนไข ต้องระบุเงื่อนไขในช่องหมายเหตุ','err');return;}}
   if(sigState.empty){showToast('กรุณาเซ็นชื่อก่อนบันทึก','err');return;}
   const docNo=document.getElementById('f-docno').value||genDoc();
@@ -1480,9 +1488,9 @@ function saveRecord(){
     carReg:document.getElementById('f-car').value,
     carTemp:document.getElementById('f-ctemp').value!==''?parseFloat(document.getElementById('f-ctemp').value):null,
     uid:newUid(),synced:false,inspector:insp,note:document.getElementById('f-note').value,poNo:document.getElementById('f-po').value.trim(),
-    mats:curMats.map(m=>({...m})),materials:curMats.map(m=>({...m})),
+    mats:curMats.map(m=>({...m,...(m.result==='COND'?{condBy:session.user.display_name}:{})})),materials:[],
     sig:{signerName:sigName,signedAt:sigDt,sigBase64:sigB64}};
-  records.unshift(rec);_lastRec=rec;
+  rec.materials=rec.mats;records.unshift(rec);_lastRec=rec;
   cloudSaveRecord(rec).catch(()=>{});
   let ncCreated=false;
   rec.mats.forEach(m=>{

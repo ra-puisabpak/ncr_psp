@@ -15,6 +15,7 @@ const LOCK_MINUTES = 15;
 const ROLES = ['QA_MANAGER', 'FSTL', 'QC', 'SUPERVISOR', 'VIEWER'];
 const WRITERS = new Set(['QA_MANAGER', 'FSTL', 'QC', 'SUPERVISOR']);
 const QA = new Set(['QA_MANAGER', 'FSTL']);
+const COND_ROLES = new Set(['QA_MANAGER', 'FSTL', 'SUPERVISOR']); // who may receive material with conditions
 
 // Fields any writer may set while the NCR is still open.
 const NCR_BASE = [
@@ -781,6 +782,11 @@ export default {
         if (!rec || typeof rec !== 'object' || !Array.isArray(rec.mats) || !rec.mats.length) fail(400, 'ข้อมูลใบตรวจรับไม่ครบ');
         if (rec.mats.length > 60) fail(400, 'รายการวัตถุดิบมากเกินไป');
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(rec.date || '')) || blank(rec.supplier) || blank(rec.inspector)) fail(400, 'กรุณาระบุวันที่ ผู้ส่งมอบ และผู้ตรวจรับ');
+        // Receiving with conditions is a concession: only a supervisor or QA may grant it, and a condition must be stated.
+        if (rec.mats.some((m) => m && m.result === 'COND')) {
+          need(user, COND_ROLES, 'การรับแบบมีเงื่อนไขต้องบันทึกโดย QC Supervisor หรือ QA เท่านั้น');
+          if (rec.mats.some((m) => m.result === 'COND' && blank(m.note))) fail(400, 'รับแบบมีเงื่อนไข ต้องระบุเงื่อนไขในช่องหมายเหตุ');
+        }
         const ncList = Array.isArray(b.ncs) ? b.ncs.slice(0, 60) : [];
         for (let attempt = 0; ; attempt++) {
           const done = await DB.prepare('SELECT doc_no FROM recv_records WHERE uid=?').bind(uid).first();
@@ -792,6 +798,7 @@ export default {
           const photos = [];
           const mats = rec.mats.map((m, i) => {
             const o = { ...m };
+            if (o.result === 'COND') { o.condBy = user.display_name; o.condRole = user.role; } else { delete o.condBy; delete o.condRole; }
             for (const slot of [1, 2]) {
               const src = o['photo' + slot];
               o['photo' + slot] = null;

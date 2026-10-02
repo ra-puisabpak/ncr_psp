@@ -242,6 +242,17 @@ check('NC linked to its NCR and closed', r.status === 200 && r.j.ncrId === id &&
 r = await call('GET', '/api/audit?entity_id=NC001', { token: qa });
 check('receiving changes are in the audit log', r.status === 200 && r.j.some((x) => x.entity === 'recv_nc' && x.action === 'close'), r.j);
 
+// conditional acceptance: supervisor or QA only
+const condBody = (uid, note) => { const x = recvBody(uid, ''); x.record.mats = [{ idx: 1, code: 'PKG-001', result: 'COND', note, condBy: 'someone else', photo1: null, photo2: null }]; return x; };
+r = await call('POST', '/api/recv', { token: qc, body: condBody('uid-cond-0001', 'กล่องบุบ ใช้ก่อน') });
+check('QC cannot receive with conditions', r.status === 403, r);
+r = await call('POST', '/api/recv', { token: qa, body: condBody('uid-cond-0002', '') });
+check('conditional acceptance needs a stated condition', r.status === 400, r);
+r = await call('POST', '/api/recv', { token: qa, body: condBody('uid-cond-0003', 'กล่องบุบ ใช้ก่อน') });
+check('QA manager can receive with conditions', r.status === 201, r);
+r = await call('GET', '/api/recv', { token: qa });
+check('the record names who granted the condition', r.j.records.find((x) => x.uid === 'uid-cond-0003').mats[0].condBy === 'QA Manager', r.j.records[0]);
+
 // print hand-over
 r = await call('POST', '/api/print-doc', { body: { html: '<html><body>x</body></html>' } });
 check('print hand-over needs a login', r.status === 401, r);
