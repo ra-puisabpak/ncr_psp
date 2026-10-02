@@ -61,9 +61,10 @@ export function PhotoThumb({ load, onRemove }) {
  * - Saved NCR (`api` given): photos upload at once and come from the server.
  * - New NCR (no `api`): photos wait in `pending` and the page uploads them right after the first save.
  */
-export default function PhotoSection({ api, readOnly, pending = [], setPending, max = 8, only = 'internal', hint, hideWhenEmpty }) {
+export default function PhotoSection({ api, readOnly, pending = [], setPending, max = 8, kind = 'problem', source, hint }) {
   const [all, setPhotos] = useState([])
-  const photos = all.filter((p) => (p.source || 'internal') === only)
+  // `kind`: problem photos or correction photos. `source` (optional) narrows to one uploader, e.g. the supplier.
+  const photos = all.filter((p) => (p.kind || 'problem') === kind && (!source || p.source === source))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const input = useRef(null)
@@ -80,7 +81,7 @@ export default function PhotoSection({ api, readOnly, pending = [], setPending, 
     try {
       for (const f of files) {
         const img = await compressImage(f)
-        if (api) await api.upload({ content_type: img.content_type, data: img.data })
+        if (api) await api.upload({ content_type: img.content_type, data: img.data, kind })
         else setPending((p) => [...p, img])
       }
       if (api) await reload()
@@ -97,13 +98,16 @@ export default function PhotoSection({ api, readOnly, pending = [], setPending, 
     try { await api.remove(id); await reload() } catch (err) { setError(err.message) }
   }
 
-  if (hideWhenEmpty && count === 0) return null
   return (
     <div className="flex flex-col gap-2">
-      {hideWhenEmpty && <span className="text-xs font-medium text-gray-600">{hideWhenEmpty}</span>}
       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
         {api && photos.map((p) => (
-          <PhotoThumb key={p.id} load={() => api.blob(p.id)} onRemove={readOnly ? null : () => remove(p.id)} />
+          <div key={p.id} className="relative">
+            <PhotoThumb load={() => api.blob(p.id)} onRemove={readOnly ? null : () => remove(p.id)} />
+            {!source && p.source === 'supplier' && (
+              <span className="absolute bottom-1 left-1 bg-teal-700 text-white text-[10px] px-1.5 py-0.5 rounded">ผู้ส่งมอบ</span>
+            )}
+          </div>
         ))}
         {!api && pending.map((p, i) => (
           <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 border border-gray-200">

@@ -316,7 +316,7 @@ export default function NCRDetailPage() {
                 <FieldRow label="ผู้รับผิดชอบ (Assignee)">
                   <input type="text" className={inputCls} value={form.assignee} onChange={set('assignee')} disabled={readOnly} />
                 </FieldRow>
-                <FieldRow label="ภาพถ่าย" full>
+                <FieldRow label="ภาพปัญหาที่พบ" full>
                   <PhotoSection
                     key={isNew ? 'new' : id}
                     api={isNew ? null : ncrApi.photos(id)}
@@ -325,12 +325,7 @@ export default function NCRDetailPage() {
                     setPending={setPendingPhotos}
                   />
                 </FieldRow>
-                {!isNew && (
-                  <div className="sm:col-span-2">
-                    <PhotoSection key={`sup-${id}-${version}`} api={ncrApi.photos(id)} readOnly only="supplier"
-                      hideWhenEmpty="ภาพที่ผู้ส่งมอบแนบมากับคำตอบ" />
-                  </div>
-                )}
+
               </div>
 
               <SectionTitle>ส่วน A2 — กระบวนการ ผลิตภัณฑ์ และพารามิเตอร์</SectionTitle>
@@ -413,6 +408,12 @@ export default function NCRDetailPage() {
                 <FieldRow label="การป้องกันการเกิดซ้ำ (Preventive Action)">
                   <textarea className={textareaCls} rows={3} value={form.preventive_action} onChange={set('preventive_action')} disabled={readOnly} />
                 </FieldRow>
+                {!isNew && (
+                  <FieldRow label="ภาพการแก้ไข (จากโรงงานหรือผู้ส่งมอบ)">
+                    <PhotoSection key={`fix-${id}-${version}`} api={ncrApi.photos(id)} kind="correction" readOnly={readOnly}
+                      hint="ภาพหลักฐานการแก้ไข สูงสุด 8 ภาพ ภาพที่ผู้ส่งมอบแนบผ่านลิงก์จะแสดงที่นี่ด้วย" />
+                  </FieldRow>
+                )}
               </div>
 
               {!isNew && (

@@ -14,8 +14,9 @@
   }
 
   html, body {
-    width: 210mm;
-    height: 297mm;
+    /* The printable width is the sheet minus the @page margins; a fixed 210mm would clip the right edge. */
+    width: auto;
+    height: auto;
     margin: 0;
     padding: 0;
     background: white !important;
@@ -35,6 +36,16 @@
 
   .avoid-break {
     page-break-inside: avoid;
+  }
+
+  /* On paper the page margins come from @page, so the on-screen sheet styling is dropped.
+     Without this each sheet is taller than the printable area and spills onto an extra page. */
+  .a4-page {
+    width: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
   }
 }
 

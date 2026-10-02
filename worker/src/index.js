@@ -5,7 +5,7 @@
 const SESSION_HOURS = 12;
 const SUPPLIER_LINK_DAYS = 14;
 const MAX_FAILED = 5;
-const MAX_PHOTOS = 8;            // per NCR, attached by staff
+const MAX_PHOTOS = 8;            // per NCR and per kind (problem / correction), attached by staff
 const MAX_SUPPLIER_PHOTOS = 6;   // per NCR, attached by the supplier with the reply
 const MAX_PHOTO_BYTES = 1024 * 1024; // after the phone has resized the picture
 const PHOTO_TYPES = { 'image/jpeg': [0xff, 0xd8, 0xff], 'image/png': [0x89, 0x50, 0x4e, 0x47], 'image/webp': [0x52, 0x49, 0x46, 0x46] };
@@ -287,13 +287,14 @@ export default {
             const { n } = await DB.prepare("SELECT COUNT(*) AS n FROM ncr_photos WHERE ncr_id=? AND removed=0 AND source='supplier'").bind(ncrId).first();
             if (n >= MAX_SUPPLIER_PHOTOS) fail(409, `แนบภาพได้ไม่เกิน ${MAX_SUPPLIER_PHOTOS} ภาพ`);
             const ts = nowIso();
-            await DB.prepare("INSERT INTO ncr_photos (ncr_id,content_type,size,data,created_by,created_at,source) VALUES (?,?,?,?,?,?,'supplier')")
+            await DB.prepare("INSERT INTO ncr_photos (ncr_id,content_type,size,data,created_by,created_at,source,kind) VALUES (?,?,?,?,?,?,'supplier','correction')")
               .bind(ncrId, ph.type, ph.size, ph.b64, 'supplier', ts).run();
             const row = await DB.prepare("SELECT id FROM ncr_photos WHERE ncr_id=? AND created_at=? AND source='supplier' ORDER BY id DESC LIMIT 1").bind(ncrId, ts).first();
             await audit(DB, 'supplier', 'supplier', 'add_photo', 'ncr', ncrId, { photo_id: row.id, size: ph.size });
             return json({ success: true, id: row.id }, 201);
           }
-          const ph = await DB.prepare('SELECT id, source, content_type, data FROM ncr_photos WHERE id=? AND ncr_id=? AND removed=0')
+          // The supplier sees the problem photos and the supplier's own photos, not the factory's internal correction photos.
+          const ph = await DB.prepare("SELECT id, source, content_type, data FROM ncr_photos WHERE id=? AND ncr_id=? AND removed=0 AND (kind='problem' OR source='supplier')")
             .bind(Number(sup[3]), ncrId).first();
           if (!ph) fail(404, 'ไม่พบภาพ');
           if (!sup[4] && method === 'GET') return photoResponse(ph, cors);
@@ -309,7 +310,7 @@ export default {
         }
         if (method === 'GET') {
           const photos = link.entity === 'ncr'
-            ? (await DB.prepare('SELECT id, source FROM ncr_photos WHERE ncr_id=? AND removed=0 ORDER BY id').bind(link.entity_id).all()).results
+            ? (await DB.prepare("SELECT id, source, kind FROM ncr_photos WHERE ncr_id=? AND removed=0 AND (kind='problem' OR source='supplier') ORDER BY id").bind(link.entity_id).all()).results
             : [];
           return json({ type: link.entity, ...Object.fromEntries(cfg.view.map((k) => [k, doc[k] ?? null])),
             photos, can_reply: !locked, link_expires_at: link.expires_at });
@@ -506,21 +507,24 @@ export default {
         if (!pm[2]) {
           if (method === 'GET') {
             const { results } = await DB.prepare(
-              'SELECT id, source, content_type, size, created_by, created_at FROM ncr_photos WHERE ncr_id=? AND removed=0 ORDER BY id').bind(id).all();
+              'SELECT id, source, kind, content_type, size, created_by, created_at FROM ncr_photos WHERE ncr_id=? AND removed=0 ORDER BY id').bind(id).all();
             return json(results);
           }
           if (method === 'POST') {
             need(user, WRITERS);
             if (locked) fail(409, 'NCR ปิดแล้ว เพิ่มภาพไม่ได้');
-            const ph = decodePhoto(await body());
-            const { n } = await DB.prepare("SELECT COUNT(*) AS n FROM ncr_photos WHERE ncr_id=? AND removed=0 AND source='internal'").bind(id).first();
-            if (n >= MAX_PHOTOS) fail(409, `แนบภาพได้ไม่เกิน ${MAX_PHOTOS} ภาพต่อ NCR`);
+            const b = await body();
+            const ph = decodePhoto(b);
+            // "problem" = what was found; "correction" = evidence of the fix.
+            const kind = b.kind === 'correction' ? 'correction' : 'problem';
+            const { n } = await DB.prepare("SELECT COUNT(*) AS n FROM ncr_photos WHERE ncr_id=? AND removed=0 AND source='internal' AND kind=?").bind(id, kind).first();
+            if (n >= MAX_PHOTOS) fail(409, `แนบภาพได้ไม่เกิน ${MAX_PHOTOS} ภาพต่อหัวข้อ`);
             const ts = nowIso();
-            await DB.prepare('INSERT INTO ncr_photos (ncr_id,content_type,size,data,created_by,created_at) VALUES (?,?,?,?,?,?)')
-              .bind(id, ph.type, ph.size, ph.b64, user.username, ts).run();
+            await DB.prepare('INSERT INTO ncr_photos (ncr_id,content_type,size,data,created_by,created_at,kind) VALUES (?,?,?,?,?,?,?)')
+              .bind(id, ph.type, ph.size, ph.b64, user.username, ts, kind).run();
             const row = await DB.prepare('SELECT id FROM ncr_photos WHERE ncr_id=? AND created_at=? AND created_by=? ORDER BY id DESC LIMIT 1')
               .bind(id, ts, user.username).first();
-            await audit(DB, user.username, 'user', 'add_photo', 'ncr', id, { photo_id: row.id, size: ph.size });
+            await audit(DB, user.username, 'user', 'add_photo', 'ncr', id, { photo_id: row.id, kind, size: ph.size });
             return json({ success: true, id: row.id }, 201);
           }
         } else {

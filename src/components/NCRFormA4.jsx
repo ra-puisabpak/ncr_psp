@@ -1,4 +1,4 @@
-import { COMPANY_NAME, COMPANY_NAME_EN, FORM_CODE_NCR, FORM_REVISION } from '../config'
+import { COMPANY_SHORT, COMPANY_NAME, COMPANY_NAME_EN, FORM_CODE_NCR, FORM_REVISION } from '../config'
 import { PROCESSES, byCode, DISPOSITION_TH, SOURCE_TH as SOURCE_TH_ALL } from '../data/masterData'
 
 const PROCESS_LABEL = byCode(PROCESSES)
@@ -33,23 +33,66 @@ const SEVERITY_STYLE = {
   Low: { bg: '#c6f6d5', color: '#276749' },
 }
 
-function PhotoBlock({ title, items }) {
-  if (!items.length) return null
+// One half of the photo attachment page: a titled box with the photos laid out to fill it.
+const HALF_BODY_MM = 108
+function PhotoHalf({ title, items, color }) {
+  const n = items.length
+  const cols = n <= 1 ? 1 : n <= 4 ? 2 : n <= 6 ? 3 : 4
+  const rows = Math.max(1, Math.ceil(n / cols))
+  const gap = 2
+  const cellH = (HALF_BODY_MM - gap * (rows - 1)) / rows
   return (
-    <table className="ncr-table avoid-break" style={{ marginBottom: '2mm' }}>
+    <table className="ncr-table" style={{ marginBottom: '3mm' }}>
       <tbody>
-        <tr><td className="section-header">{title}</td></tr>
+        <tr><td className="section-header" style={color ? { background: color } : undefined}>{title} ({n} ภาพ)</td></tr>
         <tr>
-          <td className="value-cell">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '2mm' }}>
-              {items.map((p) => (
-                <img key={p.id} src={p.src} alt="" style={{ width: '100%', height: '38mm', objectFit: 'contain', border: '0.5pt solid #ccc' }} />
-              ))}
-            </div>
+          <td className="value-cell" style={{ height: `${HALF_BODY_MM + 4}mm`, verticalAlign: 'top', padding: '2mm' }}>
+            {n === 0 ? (
+              <div style={{ height: `${HALF_BODY_MM}mm`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999', fontSize: '9pt' }}>
+                ไม่มีภาพ
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: `${gap}mm` }}>
+                {items.map((p) => (
+                  <div key={p.id} style={{ height: `${cellH}mm`, border: '0.5pt solid #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                    <img src={p.src} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                  </div>
+                ))}
+              </div>
+            )}
           </td>
         </tr>
       </tbody>
     </table>
+  )
+}
+
+// Page 2: photo attachment. Top half = the problem found, bottom half = evidence of the correction.
+function PhotoAttachmentPage({ d, photos }) {
+  return (
+    <div className="a4-page page-break" style={{ fontFamily: "'Sarabun', sans-serif" }}>
+      <table className="ncr-table" style={{ marginBottom: '3mm' }}>
+        <tbody>
+          <tr>
+            <td style={{ width: '22%', textAlign: 'center', padding: '4px' }}>
+              <div style={{ fontSize: '13pt', fontWeight: '700', color: '#1a365d' }}>{COMPANY_SHORT}</div>
+              <div style={{ fontSize: '7pt', color: '#666' }}>{COMPANY_NAME_EN}</div>
+            </td>
+            <td style={{ textAlign: 'center', padding: '4px' }}>
+              <div style={{ fontSize: '12pt', fontWeight: '700', color: '#1a365d' }}>เอกสารแนบท้าย : ภาพถ่ายประกอบ</div>
+              <div style={{ fontSize: '9pt', color: '#2b6cb0' }}>Attachment : Photographs</div>
+            </td>
+            <td style={{ width: '28%', padding: '3px 5px', fontSize: '8pt' }}>
+              <strong>NCR ID:</strong> <span style={{ color: '#c53030', fontWeight: '700' }}>{val(d.ncr_id)}</span><br />
+              <strong>รหัสเอกสาร:</strong> {FORM_CODE_NCR} Rev.{FORM_REVISION}<br />
+              <strong>หน้า:</strong> 2 / 2
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <PhotoHalf title="ภาพปัญหาที่พบ / PROBLEM PHOTOS" items={photos.filter((p) => p.kind !== 'correction')} />
+      <PhotoHalf title="ภาพการแก้ไข / CORRECTION PHOTOS" color="#276749" items={photos.filter((p) => p.kind === 'correction')} />
+    </div>
   )
 }
 
@@ -58,6 +101,7 @@ export default function NCRFormA4({ data, capa, photos = [] }) {
   const sevStyle = SEVERITY_STYLE[d.severity] || { bg: '#feebc8', color: '#c05621' }
 
   return (
+    <>
     <div className="a4-page" style={{ fontFamily: "'Sarabun', sans-serif" }}>
 
       {/* ===== HEADER ===== */}
@@ -65,7 +109,7 @@ export default function NCRFormA4({ data, capa, photos = [] }) {
         <tbody>
           <tr>
             <td rowSpan={3} style={{ width: '22%', textAlign: 'center', padding: '4px' }}>
-              <div style={{ fontSize: '13pt', fontWeight: '700', color: '#1a365d' }}>SWI</div>
+              <div style={{ fontSize: '13pt', fontWeight: '700', color: '#1a365d' }}>{COMPANY_SHORT}</div>
               <div style={{ fontSize: '7.5pt', color: '#444', lineHeight: '1.4' }}>{COMPANY_NAME}</div>
               <div style={{ fontSize: '7pt', color: '#666' }}>{COMPANY_NAME_EN}</div>
             </td>
@@ -285,9 +329,6 @@ export default function NCRFormA4({ data, capa, photos = [] }) {
         </tbody>
       </table>
 
-      <PhotoBlock title="ภาพถ่ายประกอบ / PHOTOS" items={photos.filter((p) => p.source !== 'supplier')} />
-      <PhotoBlock title="ภาพจากผู้ส่งมอบ / SUPPLIER PHOTOS" items={photos.filter((p) => p.source === 'supplier')} />
-
       {/* ===== SIGNATURES ===== */}
       <table className="ncr-table">
         <tbody>
@@ -314,8 +355,10 @@ export default function NCRFormA4({ data, capa, photos = [] }) {
       <div style={{ marginTop: '3mm', fontSize: '7pt', color: '#888', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #ddd', paddingTop: '2mm' }}>
         <span>{FORM_CODE_NCR} Rev.{FORM_REVISION}</span>
         <span>{COMPANY_NAME_EN}</span>
-        <span>NCR: {val(d.ncr_id)}</span>
+        <span>NCR: {val(d.ncr_id)}{photos.length > 0 ? ' · หน้า 1 / 2' : ''}</span>
       </div>
     </div>
+    {photos.length > 0 && <PhotoAttachmentPage d={d} photos={photos} />}
+    </>
   )
 }

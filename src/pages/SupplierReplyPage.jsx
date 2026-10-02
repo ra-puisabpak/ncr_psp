@@ -135,11 +135,11 @@ export default function SupplierReplyPage() {
                 <ReadField label="จำนวนของเสีย" value={ncr?.defect_qty != null ? `${ncr.defect_qty} ${ncr.defect_unit || ''}`.trim() : '-'} />
                 <ReadField label="รายละเอียดปัญหา" value={ncr?.nc_description} full />
                 <ReadField label="การแก้ไขเบื้องต้น (โดยผู้ผลิต)" value={ncr?.immediate_action} full />
-                {ncr?.photos?.some((p) => p.source !== 'supplier') && (
+                {ncr?.photos?.some((p) => p.kind === 'problem') && (
                   <div className="sm:col-span-2 flex flex-col gap-1">
                     <span className="text-[11px] font-medium text-gray-500">ภาพถ่ายประกอบ (แตะเพื่อดูภาพเต็ม)</span>
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                      {ncr.photos.filter((p) => p.source !== 'supplier').map((p) => (
+                      {ncr.photos.filter((p) => p.kind === 'problem').map((p) => (
                         <PhotoThumb key={p.id} load={() => supplierApi.photoBlob(token, p.id)} />
                       ))}
                     </div>
@@ -169,7 +169,7 @@ export default function SupplierReplyPage() {
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-gray-600">ภาพประกอบการแก้ไข (ถ้ามี)</label>
-                  <PhotoSection api={supplierApi.photos(token)} only="supplier" max={6} readOnly={!ncr?.can_reply}
+                  <PhotoSection api={supplierApi.photos(token)} kind="correction" source="supplier" max={6} readOnly={!ncr?.can_reply}
                     hint="ถ่ายใหม่หรือเลือกจากคลังภาพ สูงสุด 6 ภาพ ภาพจะถูกส่งทันทีที่เลือก" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

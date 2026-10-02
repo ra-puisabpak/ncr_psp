@@ -27,7 +27,7 @@ export default function NCRPrintPage() {
     })
     const api = ncrApi.photos(id)
     api.list()
-      .then((list) => Promise.all(list.map(async (p) => ({ id: p.id, source: p.source, src: await toDataUrl(await api.blob(p.id)) }))))
+      .then((list) => Promise.all(list.map(async (p) => ({ id: p.id, source: p.source, kind: p.kind, src: await toDataUrl(await api.blob(p.id)) }))))
       .then(setPhotos)
       .catch(() => {})
   }, [id])
