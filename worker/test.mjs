@@ -242,6 +242,23 @@ check('NC linked to its NCR and closed', r.status === 200 && r.j.ncrId === id &&
 r = await call('GET', '/api/audit?entity_id=NC001', { token: qa });
 check('receiving changes are in the audit log', r.status === 200 && r.j.some((x) => x.entity === 'recv_nc' && x.action === 'close'), r.j);
 
+// print hand-over
+r = await call('POST', '/api/print-doc', { body: { html: '<html><body>x</body></html>' } });
+check('print hand-over needs a login', r.status === 401, r);
+const bigDoc = '<!DOCTYPE html><html><body>ใบตรวจรับ' + 'ก'.repeat(1200000) + '</body></html>';
+r = await call('POST', '/api/print-doc', { token: qc, body: { html: bigDoc } });
+check('print document accepted', r.status === 201 && /\/p\/[A-Za-z0-9_-]{40,}$/.test(r.j.url), r.status);
+const printPath = new URL(r.j.url).pathname;
+r = await call('GET', printPath);
+check('print document opens without login, complete and boxed in', r.status === 200 && r.j === bigDoc && r.res.headers.get('Content-Security-Policy').startsWith('sandbox allow-scripts allow-modals;') && r.res.headers.get('Cache-Control') === 'no-store', r.status);
+r = await call('GET', '/p/' + 'A'.repeat(43));
+check('unknown print address is refused', r.status === 404, r.status);
+db.prepare("UPDATE print_docs SET created_at='2020-01-01T00:00:00.000Z'").run();
+r = await call('GET', printPath);
+check('print document expires', r.status === 404, r.status);
+await call('POST', '/api/print-doc', { token: qc, body: { html: '<html><body>second document</body></html>' } });
+check('expired print documents are cleared', db.prepare('SELECT COUNT(*) AS n FROM print_docs').get().n === 1);
+
 // audit, paging, lockout, CORS, logout
 r = await call('GET', `/api/audit?entity_id=${id}`, { token: qa });
 check('audit trail has full history', r.status === 200 && r.j.some((a) => a.action === 'supplier_reply' && a.actor_type === 'supplier') && r.j.some((a) => a.action === 'close') && r.j.some((a) => a.action === 'reopen'), r.j.map((a) => a.action));

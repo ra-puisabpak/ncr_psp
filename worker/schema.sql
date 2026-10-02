@@ -202,3 +202,13 @@ CREATE TABLE IF NOT EXISTS recv_nc (
   updated_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_recv_nc_doc ON recv_nc(doc_no);
+
+-- Documents handed over for printing: kept for a few minutes, opened by a one-off address (only its hash is stored).
+CREATE TABLE IF NOT EXISTS print_docs (
+  token_hash TEXT NOT NULL,
+  seq        INTEGER NOT NULL,
+  chunk      TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (token_hash, seq)
+);

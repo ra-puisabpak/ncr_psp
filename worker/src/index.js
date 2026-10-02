@@ -7,6 +7,7 @@ const SUPPLIER_LINK_DAYS = 14;
 const MAX_FAILED = 5;
 const MAX_PHOTOS = 8;            // per NCR and per kind (problem / correction), attached by staff
 const MAX_SUPPLIER_PHOTOS = 6;   // per NCR, attached by the supplier with the reply
+const PRINT_DOC_MINUTES = 30; // how long a document handed over for printing can be opened
 const MAX_PHOTO_BYTES = 1024 * 1024; // after the phone has resized the picture
 const PHOTO_TYPES = { 'image/jpeg': [0xff, 0xd8, 0xff], 'image/png': [0x89, 0x50, 0x4e, 0x47], 'image/webp': [0x52, 0x49, 0x46, 0x46] };
 const LOCK_MINUTES = 15;
@@ -339,6 +340,22 @@ export default {
             { ...changes, status: { from: doc.status, to: cfg.nextStatus } });
           return json({ success: true });
         }
+      }
+
+      // ----- a document handed over for printing, opened by its one-off address (no login: the phone's own browser opens it) -----
+      const pd = path.match(/^\/p\/([A-Za-z0-9_-]{40,})$/);
+      if (pd && method === 'GET') {
+        const { results } = await DB.prepare(
+          'SELECT chunk FROM print_docs WHERE token_hash=? AND created_at > ? ORDER BY seq'
+        ).bind(await sha256(pd[1]), new Date(Date.now() - PRINT_DOC_MINUTES * 60e3).toISOString()).all();
+        const page = results.length ? results.map((r) => r.chunk).join('')
+          : '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:sans-serif;padding:24px">ลิงก์เอกสารนี้หมดอายุแล้ว กรุณากลับไปที่แอปแล้วกดพิมพ์ใหม่</body>';
+        return new Response(page, { status: results.length ? 200 : 404, headers: {
+          'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer',
+          'X-Robots-Tag': 'noindex', 'X-Content-Type-Options': 'nosniff',
+          // The page is whatever a signed-in user sent, so it runs boxed in: no access to this site, no network beyond fonts.
+          'Content-Security-Policy': "sandbox allow-scripts allow-modals; default-src 'none'; img-src data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline'",
+        } });
       }
 
       // ===== everything below requires a logged-in user =====
@@ -693,6 +710,20 @@ export default {
           await audit(DB, user.username, 'user', closing ? 'close' : 'update', 'capa', id, changes);
           return json({ success: true });
         }
+      }
+
+      if (path === '/api/print-doc' && method === 'POST') {
+        const html = String((await body()).html || '');
+        if (html.length < 20) fail(400, 'ไม่มีเอกสารสำหรับพิมพ์');
+        if (html.length > 8000000) fail(413, 'เอกสารใหญ่เกินไป');
+        const token = randomToken(32), hash = await sha256(token), now = nowIso();
+        const stmts = [DB.prepare('DELETE FROM print_docs WHERE created_at < ?').bind(new Date(Date.now() - PRINT_DOC_MINUTES * 60e3).toISOString())];
+        for (let i = 0, seq = 0; i < html.length; i += 500000, seq++) {
+          stmts.push(DB.prepare('INSERT INTO print_docs (token_hash,seq,chunk,created_by,created_at) VALUES (?,?,?,?,?)')
+            .bind(hash, seq, html.slice(i, i + 500000), user.username, now));
+        }
+        await DB.batch(stmts);
+        return json({ url: `${url.origin}/p/${token}`, minutes: PRINT_DOC_MINUTES }, 201);
       }
 
       // ===== Receiving inspection (FM-QC-001) =====
