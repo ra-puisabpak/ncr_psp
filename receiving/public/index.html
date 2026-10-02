@@ -1133,11 +1133,11 @@ function generatePDF(rec){
   const photoHTML=mats.filter(m=>m.photo1||m.photo2).map((m,i)=>{
     const mi=(typeof MATERIALS!=='undefined')?MATERIALS.find(x=>x.code===m.code)||{}:{};
     const photos=[m.photo1,m.photo2].filter(Boolean).map((p,pi)=>`
-      <div style="display:inline-block;margin:4px 8px 4px 0;vertical-align:top">
-        <img src="${p}" style="width:180px;height:130px;object-fit:cover;border-radius:6px;border:1px solid #dde1e7;display:block">
+      <div style="display:inline-block;margin:4px 6px 4px 0;vertical-align:top">
+        <img src="${p}" style="width:146px;height:104px;object-fit:cover;border-radius:6px;border:1px solid #dde1e7;display:block">
         <div style="font-size:10px;color:#9aa0ab;text-align:center;margin-top:3px">รูปที่ ${pi+1}</div>
       </div>`).join('');
-    return `<div style="margin-bottom:12px;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e8eaed">
+    return `<div class="keep" style="padding:8px 10px;background:#f8fafc;border-radius:8px;border:1px solid #e8eaed">
       <div style="font-size:12px;font-weight:700;color:#0f2744;margin-bottom:6px">${mats.indexOf(m)+1}. ${m.code} — ${mi.name||m.name||'—'} | Lot: ${m.lot||'—'}</div>
       ${photos}
     </div>`;
@@ -1160,7 +1160,7 @@ body{font-family:'Sarabun',sans-serif;font-size:13px;color:#1a2130;background:#f
 @media print{
   body{print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .no-print{display:none!important}
-  .page-break{page-break-before:always}
+  tr,.keep{page-break-inside:avoid;break-inside:avoid}
 }
 .header{background:#0f2744;color:#fff;padding:10px 14px;display:flex;align-items:center;gap:12px}
 .logo{width:42px;height:42px;border-radius:8px;object-fit:contain;background:#fff;padding:3px}
@@ -1262,10 +1262,11 @@ ${mats.some(m=>wtSummary(m))?`<div style="font-size:12px;font-weight:700;color:#
   ผลการตรวจรับโดยรวม: ${overall}
 </div>
 
-${photoHTML?`<div class="${mats.filter(m=>m.photo1||m.photo2).length>0?'page-break':''}">
+${photoHTML?`<div>
 <div style="font-size:13px;font-weight:700;color:#0f2744;margin:8px 0 6px;padding:6px 12px;background:#f4f5f7;border-radius:6px;border-left:3px solid #0d7a5f">📷 รูปถ่ายสินค้า — Photo Evidence</div>
-${photoHTML}</div>`:''}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">${photoHTML}</div></div>`:''}
 
+<div class="keep">
 <div class="sig-section">
   <div class="sig-box">
     <div class="sig-title">ลายเซ็นผู้ตรวจรับ</div>
@@ -1286,6 +1287,7 @@ ${photoHTML}</div>`:''}
 <div class="footer">
   <span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) | FM-QC-001 | SD-QC-001</span>
   <span>พิมพ์: ${stampTH}</span>
+</div>
 </div>
 
 <script>
