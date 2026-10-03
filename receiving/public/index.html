@@ -647,7 +647,7 @@ textarea{resize:none;min-height:80px}
       <div class="ssub" id="save-sub"></div>
       <div class="srows">
         <div style="font-size:11px;font-weight:700;color:var(--gray3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">ข้อมูลที่บันทึก</div>
-        <div class="srow"><div class="sric" style="background:#c8e6c9;color:#1b5e20">&#x1F4BE;</div><div style="font-size:13px"><strong>ฐานข้อมูลกลาง (D1)</strong> — ใบรับ + NC Log + ลายเซ็น + รูปถ่าย (บัญชีทดลองใช้: ไม่บันทึก)</div></div>
+        <div class="srow"><div class="sric" style="background:#c8e6c9;color:#1b5e20">&#x1F4BE;</div><div style="font-size:13px"><strong>ฐานข้อมูลกลาง (D1)</strong> — ใบรับ + NC Log + ลายเซ็น + รูปถ่าย</div></div>
       </div>
       <img id="sig-prev-img" style="max-height:48px;border:1px solid var(--border);border-radius:8px;background:#fafbfc;padding:4px;margin-bottom:12px;display:none">
       <button class="bm bt" style="width:100%;margin-bottom:10px" onclick="dlExcel()">&#x1F4E5; ดาวน์โหลด Excel</button>
@@ -910,7 +910,7 @@ function setAqlPill(idx,f,v){const m=curMats.find(x=>x.idx===idx);if(m)m[f]=v;re
 const COND_ROLES=['QA_MANAGER','FSTL','SUPERVISOR','QC'];   // ผู้มีสิทธิ์รับแบบมีเงื่อนไข (ตรงกับที่เซิร์ฟเวอร์ตรวจ)
 function canCond(){return isDemo()||!!(session&&session.user&&COND_ROLES.includes(session.user.role));}
 function resPills(idx){
-  const p=pill(idx,'result',[{v:'PASS',c:'pass',l:'✓ PASS'},{v:'COND',c:'hold',l:'◐ รับแบบ<br>มีเงื่อนไข'},{v:'HOLD',c:'hold',l:'⏸ HOLD'},{v:'REJECT',c:'fail',l:'✗ REJECT'}]);
+  const p=pill(idx,'result',[{v:'PASS',c:'pass',l:'✓ PASS'},{v:'COND',c:'hold',l:'◐ รับแบบมีเงื่อนไข'},{v:'HOLD',c:'hold',l:'⏸ HOLD'},{v:'REJECT',c:'fail',l:'✗ REJECT'}]);
   if(canCond())return p;
   // บัญชีที่ไม่มีสิทธิ์บันทึก (ดูอย่างเดียว): ปุ่มนี้กดไม่ได้
   return p.replace(/<button type="button" class="tp hold[^"]*" onclick="setMat\(\d+,'result','COND'\);renderMats\(\)">/,'<button type="button" class="tp hold" style="opacity:.45" onclick="showToast(\'บัญชีนี้ไม่มีสิทธิ์รับแบบมีเงื่อนไข\',\'err\')">');
@@ -1413,7 +1413,7 @@ function renderMats(){
       ${docHtml(m)}
       ${sampHtml}
       ${aqTog}${aqHtml}${wtHtml(m)}
-      <div style="margin-top:12px"><label style="font-size:13px;font-weight:700;color:var(--gray4);margin-bottom:8px;display:block">ผลการตรวจรับ</label><div class="trow" id="rs-${m.idx}">${resPills(m.idx)}</div></div>
+      <div style="margin-top:12px"><label style="font-size:13px;font-weight:700;color:var(--gray4);margin-bottom:8px;display:block">ผลการตรวจรับ</label><div class="trow" id="rs-${m.idx}" style="display:grid;grid-template-columns:1fr 1fr">${resPills(m.idx)}</div></div>
       <div class="fg" style="margin-top:12px"><label>หมายเหตุ</label><input type="text" value="${m.note}" placeholder="หมายเหตุ..." oninput="setMat(${m.idx},'note',this.value)"></div>
       ${photoHtml}
     </div></div>`;
