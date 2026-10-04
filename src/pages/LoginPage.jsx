@@ -37,7 +37,7 @@ export default function LoginPage() {
         <div>
           <img src={LOGO_URL} alt="" className="w-20 h-20 mx-auto mb-3 object-contain" />
           <div className="font-bold text-blue-900 text-lg leading-tight">{COMPANY_NAME}</div>
-          <div className="text-sm text-gray-500">ระบบ NCR / CAPA · เข้าสู่ระบบ</div>
+          <div className="text-sm text-gray-500">ระบบ PSP Quality · เข้าสู่ระบบ</div>
         </div>
         {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm">{error}</div>}
         <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
