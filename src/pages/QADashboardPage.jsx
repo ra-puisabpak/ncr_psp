@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, Boxes, Route,
+  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, Boxes, Route, HandHeart,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { qaApi } from '../api/d1Api'
@@ -96,6 +96,14 @@ export default function QADashboardPage() {
 
       <h2 className="text-sm font-bold text-gray-700 mb-2">บันทึกตรวจ</h2>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+        <Link to="/qa/hygiene" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center shrink-0"><HandHeart className="w-5 h-5" /></div>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-sm text-gray-800">สุขลักษณะส่วนบุคคล</div>
+            <div className="text-[11px] text-gray-500">ตรวจก่อนเข้างาน{summary ? ` · ${date === bkkToday() ? 'วันนี้' : date} ${summary.hygTotal} คน${summary.hygFail ? ` · ไม่ผ่าน ${summary.hygFail}` : ''}` : ''}</div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-300" />
+        </Link>
         <a href={RECEIVING_URL} className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
           <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0"><PackageCheck className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">

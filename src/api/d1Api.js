@@ -135,3 +135,15 @@ export const qaApi = {
   recvLots: (days = 120) => request(`/api/recv/lots?days=${days}`),
   trace: (q) => request(`/api/trace?${new URLSearchParams({ q })}`),
 }
+
+// Smart QA: personal hygiene check before work.
+export const hygApi = {
+  items: () => request('/api/hyg/items'),
+  createItem: (body) => post('/api/hyg/items', body),
+  updateItem: (key, body) => patch(`/api/hyg/items/${enc(key)}`, body),
+  employees: () => request('/api/hyg/employees'),
+  addEmployee: (body) => post('/api/hyg/employees', body),
+  updateEmployee: (id, body) => patch(`/api/hyg/employees/${id}`, body),
+  records: (params = {}) => request(`/api/hyg/records?${new URLSearchParams(params)}`),
+  save: (body) => post('/api/hyg/records', body),
+}

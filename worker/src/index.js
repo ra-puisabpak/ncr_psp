@@ -1119,7 +1119,8 @@ export default {
         const { results: recent } = await DB.prepare(
           'SELECT rec_id, cp_id, record_date, record_time, product_name, batch_no, result, ncr_id, inspector FROM qc_records ORDER BY created_at DESC LIMIT 10').all();
         const total = byCp.reduce((s, r) => s + r.total, 0), failCount = byCp.reduce((s, r) => s + (r.fail || 0), 0);
-        return json({ date: day, total, fail: failCount, pass: total - failCount, byCp,
+        const hyg = await DB.prepare("SELECT COUNT(*) AS total, SUM(result='FAIL') AS fail FROM hyg_records WHERE inspect_date=?").bind(day).first();
+        return json({ date: day, total, fail: failCount, pass: total - failCount, byCp, hygTotal: hyg?.total || 0, hygFail: hyg?.fail || 0,
           ncrOpen: ncr?.open || 0, ncrProcessOpen: ncr?.process || 0, recent });
       }
       if (path === '/api/qc' && method === 'POST') {
@@ -1309,6 +1310,143 @@ export default {
           `SELECT ncr_id, issue_date, status, severity, disposition, source_type, lot_no, product_lot_no, material_name, nc_description FROM ncr_records
             WHERE lot_no LIKE ? OR product_lot_no LIKE ? OR product_lot_no IN (${ph}) ORDER BY ncr_id LIMIT 200`).bind(like, like, ...batches).all();
         return json({ q, received, releases: rels.map(relRow), qc, ncrs: ncrs.map((n) => ({ ...n, nc_description: String(n.nc_description || '').slice(0, 200) })) });
+      }
+
+      // ===== Smart QA: personal hygiene check before work =====
+      if (path === '/api/hyg/items' && method === 'GET') {
+        return json((await DB.prepare('SELECT * FROM hyg_items ORDER BY active DESC, sort, item_key').all()).results);
+      }
+      const hi = path.match(/^\/api\/hyg\/items(?:\/(H\d{2,3}))?$/);
+      if (hi && (method === 'POST' || (method === 'PATCH' && hi[1]))) {
+        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่แก้ไขหัวข้อการตรวจได้');
+        const b = await body();
+        const str = (v, n) => (blank(v) ? null : String(v).trim().slice(0, n));
+        if (method === 'POST') {
+          if (blank(b.label)) fail(400, 'กรุณาระบุหัวข้อการตรวจ');
+          const last = await DB.prepare('SELECT item_key, sort FROM hyg_items ORDER BY item_key DESC LIMIT 1').first();
+          const key = `H${String((last ? parseInt(last.item_key.slice(1), 10) : 0) + 1).padStart(2, '0')}`;
+          const sort = (await DB.prepare('SELECT MAX(sort) AS m FROM hyg_items').first())?.m ?? 0;
+          await DB.prepare('INSERT INTO hyg_items (item_key,sort,label,note,pass_desc,fail_desc,critical,active,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,1,?,?)')
+            .bind(key, sort + 1, str(b.label, 120), str(b.note, 300), str(b.pass_desc, 300), str(b.fail_desc, 300), b.critical ? 1 : 0, user.username, nowIso()).run();
+          await audit(DB, user.username, 'user', 'create', 'hyg_item', key, { label: b.label, critical: b.critical ? 1 : 0 });
+          return json({ success: true, item_key: key }, 201);
+        }
+        const row = await DB.prepare('SELECT * FROM hyg_items WHERE item_key=?').bind(hi[1]).first();
+        if (!row) fail(404, 'ไม่พบหัวข้อการตรวจ');
+        const next = { ...row };
+        for (const [k, n] of [['label', 120], ['note', 300], ['pass_desc', 300], ['fail_desc', 300]]) if (k in b) next[k] = str(b[k], n);
+        if (blank(next.label)) fail(400, 'กรุณาระบุหัวข้อการตรวจ');
+        for (const k of ['critical', 'active']) if (k in b) next[k] = b[k] ? 1 : 0;
+        if ('sort' in b) { const n = parseInt(b.sort, 10); if (!(n >= 0 && n < 1000)) fail(400, 'ลำดับไม่ถูกต้อง'); next.sort = n; }
+        const fields = ['label', 'note', 'pass_desc', 'fail_desc', 'critical', 'active', 'sort'];
+        const changes = diff(row, next, fields);
+        if (Object.keys(changes).length) {
+          await DB.prepare(`UPDATE hyg_items SET ${fields.map((k) => `${k}=?`).join(',')}, updated_by=?, updated_at=? WHERE item_key=?`)
+            .bind(...fields.map((k) => next[k]), user.username, nowIso(), row.item_key).run();
+          await audit(DB, user.username, 'user', 'update', 'hyg_item', row.item_key, changes);
+        }
+        return json({ success: true });
+      }
+
+      if (path === '/api/hyg/employees' && method === 'GET') {
+        return json((await DB.prepare('SELECT emp_id, name, dept, active FROM hyg_employees ORDER BY active DESC, name').all()).results);
+      }
+      if (path === '/api/hyg/employees' && method === 'POST') {
+        need(user, WRITERS);
+        const b = await body();
+        const name = String(b.name || '').trim().replace(/\s+/g, ' ');
+        if (name.length < 2 || name.length > 100) fail(400, 'กรุณาระบุชื่อ-สกุลพนักงาน');
+        if (await DB.prepare('SELECT 1 FROM hyg_employees WHERE name=?').bind(name).first()) fail(409, 'มีชื่อพนักงานนี้แล้ว');
+        const dept = blank(b.dept) ? null : String(b.dept).trim().slice(0, 60);
+        await DB.prepare('INSERT INTO hyg_employees (name, dept, active, created_by, created_at) VALUES (?,?,1,?,?)').bind(name, dept, user.username, nowIso()).run();
+        const row = await DB.prepare('SELECT emp_id, name, dept, active FROM hyg_employees WHERE name=?').bind(name).first();
+        await audit(DB, user.username, 'user', 'create', 'hyg_employee', String(row.emp_id), { name, dept });
+        return json(row, 201);
+      }
+      const he = path.match(/^\/api\/hyg\/employees\/(\d+)$/);
+      if (he && method === 'PATCH') {
+        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่แก้ไขรายชื่อพนักงานได้');
+        const b = await body();
+        const row = await DB.prepare('SELECT * FROM hyg_employees WHERE emp_id=?').bind(he[1]).first();
+        if (!row) fail(404, 'ไม่พบพนักงาน');
+        const next = { ...row };
+        if ('name' in b) {
+          next.name = String(b.name || '').trim().replace(/\s+/g, ' ');
+          if (next.name.length < 2 || next.name.length > 100) fail(400, 'กรุณาระบุชื่อ-สกุลพนักงาน');
+          if (next.name !== row.name && await DB.prepare('SELECT 1 FROM hyg_employees WHERE name=?').bind(next.name).first()) fail(409, 'มีชื่อพนักงานนี้แล้ว');
+        }
+        if ('dept' in b) next.dept = blank(b.dept) ? null : String(b.dept).trim().slice(0, 60);
+        if ('active' in b) next.active = b.active ? 1 : 0;
+        const changes = diff(row, next, ['name', 'dept', 'active']);
+        if (Object.keys(changes).length) {
+          await DB.prepare('UPDATE hyg_employees SET name=?, dept=?, active=? WHERE emp_id=?').bind(next.name, next.dept, next.active, row.emp_id).run();
+          await audit(DB, user.username, 'user', 'update', 'hyg_employee', String(row.emp_id), changes);
+        }
+        return json({ success: true });
+      }
+
+      if (path === '/api/hyg/records' && method === 'GET') {
+        const sp = url.searchParams, where = ['1=1'], p = [];
+        const d = (k) => (/^\d{4}-\d{2}-\d{2}$/.test(sp.get(k) || '') ? sp.get(k) : null);
+        if (d('date')) { where.push('inspect_date=?'); p.push(d('date')); }
+        if (d('from')) { where.push('inspect_date>=?'); p.push(d('from')); }
+        if (d('to')) { where.push('inspect_date<=?'); p.push(d('to')); }
+        if (sp.get('result')) { where.push('result=?'); p.push(sp.get('result')); }
+        if (sp.get('emp_id')) { where.push('emp_id=?'); p.push(sp.get('emp_id')); }
+        const { results } = await DB.prepare(`SELECT * FROM hyg_records WHERE ${where.join(' AND ')} ORDER BY inspect_date DESC, rec_id DESC LIMIT 1000`).bind(...p).all();
+        return json(results.map((r) => ({ ...r, results: JSON.parse(r.results), items: JSON.parse(r.items), failed: r.failed ? JSON.parse(r.failed) : [] })));
+      }
+      if (path === '/api/hyg/records' && method === 'POST') {
+        need(user, WRITERS);
+        const b = await body();
+        const uid = recvUid(b.uid);
+        const done = await DB.prepare('SELECT rec_id, result FROM hyg_records WHERE uid=?').bind(uid).first();
+        if (done) return json(done);
+        const date = String(b.inspect_date || '');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) fail(400, 'กรุณาระบุวันที่ตรวจ');
+        if (date > today()) fail(400, 'วันที่ตรวจต้องไม่เป็นวันในอนาคต');
+        if (!blank(b.inspect_time) && !/^\d{2}:\d{2}$/.test(String(b.inspect_time))) fail(400, 'รูปแบบเวลาไม่ถูกต้อง');
+        const emp = await DB.prepare('SELECT * FROM hyg_employees WHERE emp_id=?').bind(parseInt(b.emp_id, 10) || 0).first();
+        if (!emp) fail(400, 'กรุณาเลือกพนักงานที่ถูกตรวจ');
+        if (!emp.active) fail(409, 'พนักงานคนนี้ถูกปิดการใช้งานแล้ว');
+        const { results: items } = await DB.prepare('SELECT item_key, label, critical FROM hyg_items WHERE active=1 ORDER BY sort, item_key').all();
+        const results = {}, failed = [];
+        for (const it of items) {
+          const v = b.results?.[it.item_key];
+          if (v !== 'P' && v !== 'F') fail(400, `กรุณาประเมิน "${it.label}"`);
+          results[it.item_key] = v;
+          if (v === 'F') failed.push({ key: it.item_key, label: it.label, critical: it.critical });
+        }
+        const result = failed.length ? 'FAIL' : 'PASS';
+        let action = null;
+        if (failed.length) {
+          // A failed check needs what was done about it; a critical item (health, wounds) keeps the person out.
+          if (!['CORRECTED', 'EXCLUDED'].includes(b.action)) fail(400, 'กรุณาระบุการแก้ไขสำหรับรายการที่ไม่ผ่าน');
+          if (b.action === 'CORRECTED' && failed.some((f) => f.critical)) fail(400, 'รายการสำคัญไม่ผ่าน ต้องไม่อนุญาตให้เข้าพื้นที่ผลิต');
+          action = b.action;
+        }
+        const note = blank(b.note) ? null : String(b.note).trim().slice(0, 500);
+        if (action === 'EXCLUDED' && !note) fail(400, 'กรุณาระบุรายละเอียดเมื่อไม่อนุญาตให้เข้าพื้นที่ผลิต');
+        for (let attempt = 0; ; attempt++) {
+          const day = date.slice(2).replace(/-/g, '');
+          const last = await DB.prepare('SELECT rec_id FROM hyg_records WHERE rec_id LIKE ? ORDER BY rec_id DESC LIMIT 1').bind(`PH-${day}-%`).first();
+          const recId = `PH-${day}-${String((last ? parseInt(last.rec_id.slice(-4), 10) : 0) + 1).padStart(4, '0')}`;
+          try {
+            await DB.prepare(`INSERT INTO hyg_records (rec_id,uid,inspect_date,inspect_time,shift,emp_id,emp_name,dept,results,items,result,failed,action,note,inspector,created_by,created_at)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(recId, uid, date, nz(b.inspect_time), blank(b.shift) ? null : String(b.shift).trim().slice(0, 20),
+              emp.emp_id, emp.name, emp.dept, JSON.stringify(results), JSON.stringify(items), result, failed.length ? JSON.stringify(failed) : null,
+              action, note, user.display_name, user.username, nowIso()).run();
+          } catch (e) {
+            if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
+              const again = await DB.prepare('SELECT rec_id, result FROM hyg_records WHERE uid=?').bind(uid).first();
+              if (again) return json(again);
+              continue;
+            }
+            throw e;
+          }
+          await audit(DB, user.username, 'user', 'create', 'hyg_record', recId, { emp: emp.name, result, failed: failed.map((f) => f.key), action });
+          return json({ rec_id: recId, result, failed, action }, 201);
+        }
       }
 
       fail(404, `Not found: ${method} ${path}`);

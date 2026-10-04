@@ -352,3 +352,65 @@ CREATE TABLE IF NOT EXISTS fg_releases (
 );
 CREATE INDEX IF NOT EXISTS idx_rel_batch ON fg_releases(batch_no);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_rel_once ON fg_releases(product_code, batch_no) WHERE decision = 'RELEASE';
+
+-- ===== Smart QA: personal hygiene check before work (GHPs) =====
+-- Check items: QA edits the wording; `critical` items, when failed, keep the person out of production.
+CREATE TABLE IF NOT EXISTS hyg_items (
+  item_key   TEXT PRIMARY KEY,
+  sort       INTEGER NOT NULL,
+  label      TEXT NOT NULL,
+  note       TEXT,
+  pass_desc  TEXT,
+  fail_desc  TEXT,
+  critical   INTEGER NOT NULL DEFAULT 0,
+  active     INTEGER NOT NULL DEFAULT 1,
+  updated_by TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+-- The 12 items of the hygiene check app used before, plus health status (Codex CXC 1-1969, personal hygiene: health status).
+INSERT OR IGNORE INTO hyg_items (item_key,sort,label,note,pass_desc,fail_desc,critical,updated_by,updated_at) VALUES
+('H01',1,'หมวกคลุมผม / หมวก','คลุมผมมิดชิด สะอาด ไม่มีขุย','คลุมผมมิดชิด · สะอาด · ไม่มีขุย / เส้นผมออกนอกหมวก','ผมออกนอกหมวก · หมวกสกปรก · ไม่สวมหมวก',0,'system',datetime('now')),
+('H02',2,'ผ้าปิดจมูก / หน้ากาก','ปิดจมูกและปากมิดชิด สะอาด กระชับ','ปิดจมูกและปากมิดชิด · สะอาด · กระชับพอดี','ไม่สวมหน้ากาก · หน้ากากหย่อน/สกปรก · ปิดไม่มิดชิด',0,'system',datetime('now')),
+('H03',3,'ผ้ากันเปื้อน','สะอาด ไม่เปื้อน ไม่มีรอยขาด','สะอาด · ไม่เปื้อน · ไม่มีรอยขาด','ผ้ากันเปื้อนสกปรก / เปื้อน / ขาด / ไม่สวม',0,'system',datetime('now')),
+('H04',4,'ถุงมือ','สะอาด ไม่มีรอยขาด เหมาะกับงาน','สะอาด · ไม่มีรอยขาด · เหมาะกับประเภทงาน','ถุงมือสกปรก / ขาด / ไม่เหมาะกับงาน / ไม่สวม',0,'system',datetime('now')),
+('H05',5,'รองเท้า / รองเท้าบูท','สะอาด ไม่แตก/หลุด อยู่ในสภาพดี','สะอาด · ไม่แตกหรือหลุด · อยู่ในสภาพพร้อมใช้งาน','รองเท้าสกปรก / แตก / ชำรุด / ไม่สวมรองเท้า',0,'system',datetime('now')),
+('H06',6,'ความสะอาดของชุดทำงาน','ไม่มีคราบ เรียบร้อย พร้อมเข้าพื้นที่ผลิต','ชุดสะอาด · ไม่มีคราบ · เรียบร้อยพร้อมเข้าพื้นที่ผลิต','ชุดสกปรก / มีคราบ / ขาด / ไม่เรียบร้อย',0,'system',datetime('now')),
+('H07',7,'เล็บมือ','ตัดสั้น สะอาด ไม่ทาสี ไม่มีเล็บปลอม','เล็บตัดสั้น · สะอาด · ไม่ทาสีเล็บ · ไม่มีเล็บปลอม','เล็บยาว / ทาสีเล็บ / ติดเล็บปลอม',0,'system',datetime('now')),
+('H08',8,'เครื่องประดับ','ไม่มีแหวน กำไล ต่างหู นาฬิกา','ไม่สวมแหวน · ไม่ใส่กำไล / ต่างหู / นาฬิกา','สวมแหวน / กำไล / ต่างหู / นาฬิกา เข้าพื้นที่ผลิต',0,'system',datetime('now')),
+('H09',9,'น้ำหอม','ไม่ใช้น้ำหอม / สเปรย์ฉีดตัวก่อนเข้างาน','ไม่ใช้น้ำหอมหรือสเปรย์ฉีดตัวก่อนเข้าพื้นที่ผลิต','ฉีดน้ำหอม / สเปรย์ก่อนเข้าพื้นที่ผลิต',0,'system',datetime('now')),
+('H10',10,'ขนมขบเคี้ยว','ไม่นำขนม อาหาร หรือเครื่องดื่มเข้าพื้นที่ผลิต','ไม่พกขนม / อาหาร / เครื่องดื่มเข้าพื้นที่ผลิต','พกขนม / อาหาร / เครื่องดื่มเข้าพื้นที่ผลิต',0,'system',datetime('now')),
+('H11',11,'ของใช้ส่วนตัว','ไม่พกโทรศัพท์ กุญแจ หรือของใช้ส่วนตัวเข้าพื้นที่ผลิต','ไม่พกโทรศัพท์ / กุญแจ / ของใช้ส่วนตัวเข้าพื้นที่','พกโทรศัพท์ / กุญแจ / ของใช้ส่วนตัวเข้าพื้นที่ผลิต',0,'system',datetime('now')),
+('H12',12,'การล้างมือ','ล้างมือครบขั้นตอน ใช้น้ำยาฆ่าเชื้อ ก่อนเข้าพื้นที่ผลิต','ล้างมือครบขั้นตอน · ใช้น้ำยาฆ่าเชื้อ','ไม่ล้างมือ / ล้างมือไม่ครบขั้นตอน / ไม่ใช้น้ำยาฆ่าเชื้อ',0,'system',datetime('now')),
+('H13',13,'สุขภาพ / บาดแผล','ไม่มีอาการท้องเสีย อาเจียน ไข้ ไอ เจ็บคอ ตัวเหลือง ตาเหลือง หรือแผลเปิด/ติดเชื้อที่มือ แขน หน้า','ไม่มีอาการเจ็บป่วย · แผลเล็กปิดด้วยพลาสเตอร์สีและถุงมือ','มีอาการเจ็บป่วยที่ติดต่อทางอาหาร / แผลเปิดหรือติดเชื้อ',1,'system',datetime('now'));
+
+CREATE TABLE IF NOT EXISTS hyg_employees (
+  emp_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL UNIQUE,
+  dept       TEXT,
+  active     INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+-- One check of one person. `items` keeps the wording in force at the time, so an old record reads the same after QA edits the list.
+CREATE TABLE IF NOT EXISTS hyg_records (
+  rec_id       TEXT PRIMARY KEY,
+  uid          TEXT NOT NULL UNIQUE,
+  inspect_date TEXT NOT NULL,
+  inspect_time TEXT,
+  shift        TEXT,
+  emp_id       INTEGER NOT NULL,
+  emp_name     TEXT NOT NULL,
+  dept         TEXT,
+  results      TEXT NOT NULL,
+  items        TEXT NOT NULL,
+  result       TEXT NOT NULL CHECK(result IN ('PASS','FAIL')),
+  failed       TEXT,
+  action       TEXT CHECK(action IN ('CORRECTED','EXCLUDED') OR action IS NULL),
+  note         TEXT,
+  inspector    TEXT NOT NULL,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_hyg_date ON hyg_records(inspect_date);
+CREATE INDEX IF NOT EXISTS idx_hyg_emp ON hyg_records(emp_id);

@@ -426,6 +426,50 @@ check('QA can take a point off the release list', r.status === 200 && !r.j.requi
 r = await call('GET', '/api/control-points', { token: qc });
 check('the register shows which points are needed for release', r.j.find((c) => c.cp_id === 'CCP-01').release_required === 1 && r.j.find((c) => c.cp_id === 'OPRP-05').release_required === 0, r.j.map((c) => [c.cp_id, c.release_required]));
 
+// ----- Smart QA: personal hygiene check -----
+r = await call('GET', '/api/hyg/items', { token: qc });
+check('hygiene check starts with the 12 items plus health status (critical)', r.status === 200 && r.j.length === 13 && r.j[12].item_key === 'H13' && r.j[12].critical === 1 && r.j[0].label.startsWith('หมวก'), r.j.map((i) => i.item_key));
+r = await call('PATCH', '/api/hyg/items/H09', { token: qc, body: { active: false } });
+check('QC cannot change the check items', r.status === 403, r);
+r = await call('POST', '/api/hyg/employees', { token: qc, body: { name: '  สมศรี   ใจดี ', dept: 'ผลิต' } });
+check('an inspector adds an employee', r.status === 201 && r.j.name === 'สมศรี ใจดี' && r.j.active === 1, r);
+const emp = r.j;
+r = await call('POST', '/api/hyg/employees', { token: qc, body: { name: 'สมศรี ใจดี' } });
+check('the same employee cannot be added twice', r.status === 409, r);
+const allP = (o = {}) => ({ ...Object.fromEntries(Array.from({ length: 13 }, (_, i) => [`H${String(i + 1).padStart(2, '0')}`, 'P'])), ...o });
+const hygBody = (o = {}) => ({ uid: 'hyg-uid-' + Math.random().toString(36).slice(2, 10), inspect_date: '2026-09-20', inspect_time: '07:45', shift: 'เช้า', emp_id: emp.emp_id, results: allP(), ...o });
+r = await call('POST', '/api/hyg/records', { token: qc, body: hygBody({ results: allP({ H05: undefined }) }) });
+check('every item must be answered', r.status === 400 && /รองเท้า/.test(r.j.error), r);
+r = await call('POST', '/api/hyg/records', { token: qc, body: hygBody({ results: allP({ H05: 'Fail' }) }) });
+check('only P or F is accepted as an answer', r.status === 400, r);
+r = await call('POST', '/api/hyg/records', { token: qc, body: hygBody() });
+check('a passing check is saved with a server number and the inspector from the login', r.status === 201 && r.j.result === 'PASS' && r.j.rec_id === 'PH-260920-0001', r);
+r = await call('POST', '/api/hyg/records', { token: qc, body: hygBody({ results: allP({ H08: 'F' }) }) });
+check('a failed item needs an action', r.status === 400, r);
+r = await call('POST', '/api/hyg/records', { token: qc, body: hygBody({ results: allP({ H08: 'F' }), action: 'CORRECTED', note: 'ถอดแหวนแล้ว' }) });
+check('a failed item corrected on the spot is recorded', r.status === 201 && r.j.result === 'FAIL' && r.j.action === 'CORRECTED', r);
+r = await call('POST', '/api/hyg/records', { token: qc, body: hygBody({ results: allP({ H13: 'F' }), action: 'CORRECTED' }) });
+check('a failed health check cannot be "corrected" — the person stays out', r.status === 400, r);
+r = await call('POST', '/api/hyg/records', { token: qc, body: hygBody({ results: allP({ H13: 'F' }), action: 'EXCLUDED' }) });
+check('keeping someone out needs the details', r.status === 400, r);
+r = await call('POST', '/api/hyg/records', { token: qc, body: hygBody({ results: allP({ H13: 'F' }), action: 'EXCLUDED', note: 'ท้องเสีย ส่งพบแพทย์ ย้ายไปงานนอกพื้นที่ผลิต' }) });
+check('a person with a health issue is kept out of production', r.status === 201 && r.j.action === 'EXCLUDED', r);
+r = await call('POST', '/api/hyg/records', { token: qc, body: hygBody({ inspect_date: '2999-01-01' }) });
+check('a hygiene check cannot be dated in the future', r.status === 400, r);
+await call('PATCH', '/api/hyg/items/H09', { token: qa, body: { label: 'น้ำหอม / โลชั่นกลิ่นแรง' } });
+r = await call('GET', '/api/hyg/records?date=2026-09-20', { token: qc });
+check('records keep the wording in force when they were made', r.status === 200 && r.j.length === 3 && r.j.every((x) => x.inspector === 'QC One')
+  && r.j[0].items.find((i) => i.item_key === 'H09').label === 'น้ำหอม', r.j.map((x) => x.rec_id));
+r = await call('GET', '/api/qc/summary?date=2026-09-20', { token: qc });
+check('daily summary counts hygiene checks', r.j.hygTotal === 3 && r.j.hygFail === 2, r.j);
+r = await call('PATCH', `/api/hyg/employees/${emp.emp_id}`, { token: qc, body: { active: false } });
+check('QC cannot deactivate an employee', r.status === 403, r);
+await call('PATCH', `/api/hyg/employees/${emp.emp_id}`, { token: qa, body: { active: false } });
+r = await call('POST', '/api/hyg/records', { token: qc, body: hygBody() });
+check('a deactivated employee cannot be checked', r.status === 409, r);
+r = await call('GET', '/api/hyg/records', { headers: {} });
+check('hygiene records need a login', r.status === 401, r);
+
 // The schema runs at every deploy: running it again changes nothing people entered, and retires only untouched first-register entries.
 db.prepare("INSERT INTO control_points (cp_id,name,cp_type,status,params,version,created_by,created_at,updated_by,updated_at) VALUES ('CP-HEAT','old','TBD','DRAFT','[]',1,'system','x','system','x'),('CP-BONE','old','TBD','DRAFT','[]',2,'system','x','qam','x')").run();
 db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
