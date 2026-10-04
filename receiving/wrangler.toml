@@ -1,5 +1,6 @@
-# FM-QC-001 receiving inspection app: one static page served by its own Worker.
-# Records stay in the browser of the device that fills them in; this Worker stores nothing.
+# Old address of the FM-QC-001 receiving app. The app now lives in PSP QUALITY APP at /receiving/;
+# this Worker serves the same page (copied in by the deploy workflow) so unsent records on phones can
+# still be sent, then the page moves people to the new address. Records are stored in D1 by the NCR API.
 name = "puisabpak-receiving"
 compatibility_date = "2025-01-01"
 

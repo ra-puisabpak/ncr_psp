@@ -11,7 +11,17 @@
 // ════ ฐานข้อมูลกลาง (Cloudflare D1 ผ่าน API ของระบบ NCR e-Form) + สำเนาในเครื่อง ════
 const API='https://puisabpak-ncr-api.rapuisabpak.workers.dev';
 const LS_KEY='fmqc001_data_v1',SS_KEY='fmqc001_session';
-let session=null;try{session=JSON.parse(localStorage.getItem(SS_KEY)||'null');}catch(e){}
+// เปิดจาก PSP QUALITY APP (เว็บเดียวกัน) ใช้การเข้าสู่ระบบเดียวกับแอปหลัก ไม่ต้องเข้าสู่ระบบซ้ำ
+const NCR_TOKEN='psp_ncr_token',NCR_USER='psp_ncr_user';
+const OLD_HOST=location.hostname.endsWith('.workers.dev');   // ที่อยู่เดิม (Worker แยก) — ย้ายมาอยู่ใน PSP QUALITY APP แล้ว
+const NEW_URL='https://puisabpak-ncr.pages.dev/receiving/';
+function readSession(){
+  try{const t=localStorage.getItem(NCR_TOKEN),u=JSON.parse(localStorage.getItem(NCR_USER)||'null');if(t&&u)return {token:t,user:u};}catch(e){}
+  try{return JSON.parse(localStorage.getItem(SS_KEY)||'null');}catch(e){return null;}
+}
+function storeSession(s){try{localStorage.setItem(SS_KEY,JSON.stringify(s));if(!OLD_HOST){localStorage.setItem(NCR_TOKEN,s.token);localStorage.setItem(NCR_USER,JSON.stringify(s.user));}}catch(e){}}
+function clearSession(){try{localStorage.removeItem(SS_KEY);if(!OLD_HOST){localStorage.removeItem(NCR_TOKEN);localStorage.removeItem(NCR_USER);}}catch(e){}}
+let session=readSession();
 // โหมดทดลองใช้: บัญชีบทบาท "ดูอย่างเดียว" (เช่นชื่อผู้ใช้ visitor) กรอกและพิมพ์ได้ทุกขั้นตอน แต่ไม่มีอะไรถูกบันทึก —
 // ไม่ส่งขึ้นฐานข้อมูล ไม่เก็บในเครื่อง และไม่แสดงข้อมูลจริงของบริษัท ข้อมูลที่ลองกรอกหายเมื่อปิดหรือรีเฟรชแอป
 function isDemo(){return !!(session&&session.user&&(session.user.role==='VIEWER'||session.user.username==='visitor'));}
@@ -38,7 +48,7 @@ async function api(method,path,body){
   try{
     const r=await fetch(API+path,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.token},body:body?JSON.stringify(body):undefined,signal:ctl.signal});
     const j=await r.json().catch(()=>({}));
-    if(r.status===401){session=null;try{localStorage.removeItem(SS_KEY);}catch(e){}showLogin('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');}
+    if(r.status===401){session=null;clearSession();showLogin('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');}
     if(!r.ok)throw Object.assign(new Error(j.error||('HTTP '+r.status)),{status:r.status});
     return j;
   }finally{clearTimeout(t);}
@@ -104,7 +114,7 @@ async function refreshAll(manual){
   try{
     const r=await syncAll();
     await pullAll();
-    if(r.ok)showCloudStatus('✅ ข้อมูลตรงกับฐานข้อมูลแล้ว','ok');
+    if(r.ok){showCloudStatus('✅ ข้อมูลตรงกับฐานข้อมูลแล้ว','ok');if(handOver())return;}
     else showCloudStatus('⚠ ยังส่งไม่ครบ: '+r.err,'warn');
   }catch(e){if(e.status!==401)showCloudStatus('⚠ เชื่อมต่อฐานข้อมูลไม่ได้ — แสดงข้อมูลในเครื่อง','warn');}
 }
@@ -154,7 +164,7 @@ async function doLogin(e){
     const r=await fetch(API+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('_lu').value.trim(),password:document.getElementById('_lp').value})});
     const j=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(j.error||'เข้าสู่ระบบไม่สำเร็จ');
-    session={token:j.token,user:j.user};try{localStorage.setItem(SS_KEY,JSON.stringify(session));}catch(e2){}
+    session={token:j.token,user:j.user};storeSession(session);
     loadLocal();   // บัญชีทดลองเริ่มจากว่าง บัญชีจริงโหลดรายการที่ค้างในเครื่อง
     document.getElementById('_lp').value='';document.getElementById('_login').style.display='none';
     const fi=document.getElementById('f-inspector');if(fi&&!fi.value)fi.value=session.user.display_name;
@@ -166,7 +176,7 @@ async function doLogout(){
   const demo=isDemo();const p=demo?0:records.filter(r=>!r.synced).length+ncLogs.filter(n=>!n.synced||n.dirty).length;
   if(!confirm(p?'มี '+p+' รายการที่ยังไม่ได้ส่งขึ้นฐานข้อมูล (จะเก็บไว้ในเครื่องนี้)\nออกจากระบบหรือไม่?':'ออกจากระบบหรือไม่?'))return;
   try{await api('POST','/api/logout');}catch(e){}
-  session=null;try{localStorage.removeItem(SS_KEY);}catch(e){}
+  session=null;clearSession();
   if(demo){loadLocal();}else{records=records.filter(r=>!r.synced);ncLogs=ncLogs.filter(n=>!n.synced||n.dirty);   // ไม่ทิ้งข้อมูลของฐานข้อมูลไว้ในเครื่อง
     saveLocal();}
   renderAll();showLogin();
@@ -174,8 +184,24 @@ async function doLogout(){
 async function cloudSaveRecord(rec){const ok=saveLocal();return ok;}
 async function cloudSaveNC(nc){return saveLocal();}
 async function cloudCloseNC(id,body){return saveLocal();}
+// ที่อยู่เดิม: ถ้าไม่มีรายการค้างส่งในเครื่อง พาไปที่ใหม่ทันที ถ้ามี ให้ส่งขึ้นฐานข้อมูลก่อน (ข้อมูลในเครื่องย้ายข้ามเว็บไม่ได้)
+function handOver(){
+  if(!OLD_HOST)return false;
+  if(pendingCount()===0){location.replace(NEW_URL);return true;}
+  let bn=document.getElementById('_move');
+  if(!bn){bn=document.createElement('div');bn.id='_move';
+    bn.style.cssText='position:fixed;left:0;right:0;top:0;z-index:9000;background:#b3261e;color:#fff;font-size:13px;font-weight:600;padding:10px 12px;text-align:center';
+    document.body.appendChild(bn);}
+  bn.innerHTML='แอปตรวจรับย้ายไปอยู่ใน PSP QUALITY APP แล้ว — เครื่องนี้มี '+pendingCount()+' รายการที่ยังไม่ได้ส่ง กด &#x21BB; ซิงก์ ให้ส่งครบก่อน ระบบจะพาไปที่ใหม่เอง';
+  return false;
+}
 function syncFromCloud(){
   loadLocal();renderAll();
+  if(OLD_HOST){
+    if(isDemo()||pendingCount()===0){location.replace(NEW_URL);return;}
+    const b=document.getElementById('_back');if(b)b.href='https://puisabpak-ncr.pages.dev/qa';
+    handOver();
+  }
   if(session){const fi=document.getElementById('f-inspector');if(fi&&!fi.value)fi.value=session.user.display_name;refreshAll(false);}
   else showLogin();
 }
@@ -427,7 +453,8 @@ textarea{resize:none;min-height:80px}
 <!-- HOME -->
 <div class="screen active" id="sc-home">
   <div class="app-header">
-    <div class="app-header-title">Puisabpak — QC Receiving</div>
+    <a href="/qa" id="_back" style="color:#fff;text-decoration:none;font-size:20px;line-height:1;padding:6px 4px 6px 0" aria-label="กลับ PSP QUALITY APP">&#x2190;</a>
+    <div class="app-header-title">ตรวจรับวัตถุดิบ</div>
     <button class="app-header-action" onclick="goToForm()">+ รับสินค้า</button>
   </div>
   <div class="scroll-area">
@@ -1604,7 +1631,7 @@ function renderNC(){
   }).join('');
 }
 // ════ เชื่อมกับระบบ NCR e-Form (FM-QA-001) ════
-const NCR_APP_URL='https://puisabpak-ncr.pages.dev';
+const NCR_APP_URL=OLD_HOST?'https://puisabpak-ncr.pages.dev':location.origin;
 let _ncrWin=null,_ncrFor=null;
 function nextNcId(){return 'NC'+String(Math.max(0,...ncLogs.map(n=>parseInt(String(n.id).slice(2))||0))+1).padStart(3,'0');}
 function isNcr(nc){return /^NCR-/.test(String(nc.id||''));}          // NC ที่ออกเลขร่วมกับระบบ NCR e-Form แล้ว

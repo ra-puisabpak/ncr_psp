@@ -1,6 +1,6 @@
 // NCR eForm service worker — app-shell caching for installable PWA
-const CACHE = 'puisabpak-ncr-v1'
-const APP_SHELL = ['/', '/ncr', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']
+const CACHE = 'puisabpak-ncr-v2'
+const APP_SHELL = ['/', '/ncr', '/receiving/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -26,15 +26,19 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET' || url.origin !== self.location.origin) return
 
   // SPA navigations: network-first, fall back to cached app shell when offline.
+  // The receiving app (/receiving/) is its own page; everything else is the React app shell at '/'.
   if (request.mode === 'navigate') {
+    const shell = url.pathname.startsWith('/receiving') ? '/receiving/' : '/'
     event.respondWith(
       fetch(request)
         .then((res) => {
-          const copy = res.clone()
-          caches.open(CACHE).then((c) => c.put('/', copy)).catch(() => {})
+          if (res.ok) {
+            const copy = res.clone()
+            caches.open(CACHE).then((c) => c.put(shell, copy)).catch(() => {})
+          }
           return res
         })
-        .catch(() => caches.match(request).then((r) => r || caches.match('/')))
+        .catch(() => caches.match(shell))
     )
     return
   }

@@ -1,10 +1,14 @@
-name: Deploy Puisabpak Receiving App (Worker)
+name: Deploy Puisabpak Receiving App (old address)
 
+# The receiving app now lives in PSP QUALITY APP at /receiving/ (Cloudflare Pages).
+# The old Worker address keeps serving the same page only so phones that still hold
+# unsent records there can send them; once nothing is pending, the page moves to the new address.
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
+      - 'public/receiving/**'
       - 'receiving/**'
       - '.github/workflows/deploy-receiving.yml'
 
@@ -14,6 +18,9 @@ jobs:
     name: Deploy to Cloudflare Workers
     steps:
       - uses: actions/checkout@v4
+
+      - name: Use the page from PSP QUALITY APP
+        run: mkdir -p receiving/public && cp public/receiving/index.html receiving/public/index.html
 
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3

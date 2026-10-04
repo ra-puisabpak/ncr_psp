@@ -38,6 +38,12 @@
   ],
   "shortcuts": [
     {
+      "name": "ตรวจรับวัตถุดิบ FM-QC-001",
+      "short_name": "ตรวจรับ",
+      "url": "/receiving/",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
       "name": "สร้าง NCR ใหม่",
       "short_name": "NCR ใหม่",
       "url": "/ncr/new",

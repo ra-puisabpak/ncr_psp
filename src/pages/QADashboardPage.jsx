@@ -108,7 +108,7 @@ export default function QADashboardPage() {
           <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0"><PackageCheck className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">ตรวจรับวัตถุดิบ</div>
-            <div className="text-[11px] text-gray-500">FM-QC-001 · เปิดแอปตรวจรับ</div>
+            <div className="text-[11px] text-gray-500">FM-QC-001 · บันทึกการตรวจรับ</div>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </a>
