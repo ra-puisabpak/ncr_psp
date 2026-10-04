@@ -540,6 +540,42 @@ check('a freezer at -16 °C is out of spec but not escalated', r.status === 201 
 r = await call('GET', '/api/cold/readings?unit_id=CH-01&from=2026-09-01&to=2026-09-30', { token: qc });
 check('readings are listed per unit with the limits in force', r.status === 200 && r.j.length === 3 && r.j.every((x) => x.limits.spec_max === 5 && x.inspector === 'QC One'), r.j);
 
+// ----- formulas and PD_03 weighing -----
+r = await call('GET', '/api/formulas', { token: qc });
+const fg4 = r.j.find((f) => f.product_code === 'FG0004');
+check('formulas start from the latest PD_03 weighings, all draft', r.status === 200 && r.j.length === 10 && r.j.every((f) => f.status === 'DRAFT' && f.tolerance_pct === null)
+  && fg4.items.find((i) => i.name === 'หมูบด').target === 46.51 && /เจือปน/.test(fg4.items.find((i) => i.name === 'โปแตสเซียม').note), r.j.map((f) => f.product_code));
+r = await call('PATCH', '/api/formulas/FG0004', { token: qa, body: { status: 'APPROVED' } });
+check('a formula cannot be approved without a weighing tolerance', r.status === 422, r);
+r = await call('PATCH', '/api/formulas/FG0004', { token: qc, body: { tolerance_pct: 2 } });
+check('QC cannot change a formula', r.status === 403, r);
+const fgItems = fg4.items.map((i) => ({ ...i, target: i.name === 'หมูบด' ? 45 : i.target }));
+r = await call('PATCH', '/api/formulas/FG0004', { token: qa, body: { items: fgItems, tolerance_pct: 2, status: 'APPROVED' } });
+check('QA sets targets and tolerance, approves, and the version moves on', r.status === 200 && r.j.version === 2, r);
+const linesFor = (o = {}) => fgItems.map((i) => ({ name: i.name, lot: `LOT-${i.name}`, weights: [o[i.name] ?? i.target] }));
+const wBody = (o = {}) => ({ uid: 'wr-uid-' + Math.random().toString(36).slice(2, 10), product_code: 'FG0004', prod_date: '2026-09-22', batch_no: 'B260922-01', sets: 1, scale_id: 'MDB009', lines: linesFor(), ...o });
+r = await call('POST', '/api/weigh', { token: qc, body: wBody({ lines: linesFor().slice(1) }) });
+check('every formula item must be weighed', r.status === 400, r);
+r = await call('POST', '/api/weigh', { token: qc, body: wBody({ lines: linesFor().map((l, i) => (i ? l : { ...l, lot: '' })) }) });
+check('every line needs a raw-material lot', r.status === 400 && /LOT/.test(r.j.error), r);
+r = await call('POST', '/api/weigh', { token: qc, body: wBody() });
+check('weights within tolerance pass', r.status === 201 && r.j.result === 'PASS' && r.j.wr_id === 'PD-260922-001', r);
+r = await call('POST', '/api/weigh', { token: qc, body: wBody() });
+check('a batch is weighed once', r.status === 409, r);
+const devBody = wBody({ batch_no: 'B260922-02', lines: linesFor({ หมูบด: 46.51 }) });
+r = await call('POST', '/api/weigh', { token: qc, body: devBody });
+check('out of tolerance cannot be saved by QC', r.status === 403, r);
+r = await call('POST', '/api/weigh', { token: qa, body: devBody });
+check('out of tolerance needs the assessment', r.status === 400, r);
+r = await call('POST', '/api/weigh', { token: qa, body: { ...devBody, note: 'หมูบดเกิน 3.4% ประเมินแล้วไม่กระทบความปลอดภัย ปรับเครื่องปรุงตามสัดส่วน' } });
+check('QA records an out-of-tolerance weighing with the assessment', r.status === 201 && r.j.result === 'DEVIATION' && /\+3\.4%/.test(r.j.deviations[0].text), r);
+r = await call('POST', '/api/weigh', { token: qa, body: wBody({ batch_no: 'B260922-03', lines: [...linesFor(), { name: 'ผงชูรสเพิ่ม', lot: 'LOT-X', weights: [0.2] }], note: 'ทดลอง' }) });
+check('an item outside the formula is a deviation', r.status === 201 && r.j.result === 'DEVIATION' && r.j.deviations[0].kind === 'EXTRA', r);
+r = await call('GET', '/api/weigh?product_code=FG0004&batch_no=B260922-01', { token: qc });
+check('a weighing keeps lots, weights, weigher and formula version', r.status === 200 && r.j.length === 1 && r.j[0].lines.length === 9 && r.j[0].weigher === 'QC One' && r.j[0].formula_version === 2 && r.j[0].tolerance_pct === 2, r.j);
+r = await call('GET', '/api/trace?q=LOT-หมูบด', { token: qc });
+check('tracing a raw-material lot finds the batches that weighed it', r.status === 200 && r.j.weighings.length === 3 && r.j.weighings.some((w) => w.batch_no === 'B260922-02' && w.lots.some((l) => l.kg === 46.51)), r.j.weighings);
+
 // The schema runs at every deploy: running it again changes nothing people entered, and retires only untouched first-register entries.
 db.prepare("INSERT INTO control_points (cp_id,name,cp_type,status,params,version,created_by,created_at,updated_by,updated_at) VALUES ('CP-HEAT','old','TBD','DRAFT','[]',1,'system','x','system','x'),('CP-BONE','old','TBD','DRAFT','[]',2,'system','x','qam','x')").run();
 db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));

@@ -4,7 +4,7 @@ import {
   ArrowLeft, Search, CheckCircle2, XCircle, AlertTriangle, CircleDashed, ShieldCheck, Plus, Trash2, PackageCheck, PauseCircle, Ban,
 } from 'lucide-react'
 import Layout from '../components/Layout'
-import { qaApi } from '../api/d1Api'
+import { qaApi, weighApi } from '../api/d1Api'
 import { useAuth, isQA } from '../auth'
 import { PRODUCTS, MATERIALS, byCode } from '../data/masterData'
 import { Badge, CP_TYPE_CLS, CP_TYPE_TH, bkkToday, addDays } from '../qa/shared'
@@ -127,6 +127,17 @@ function LotPicker({ lots, setLots }) {
 function DecisionForm({ gate, onSaved }) {
   const [f, setF] = useState({ qty: '', unit: 'กระปุก', mfg_date: bkkToday(), exp_date: '', note: '' })
   const [lots, setLots] = useState([])
+  const [weighed, setWeighed] = useState(null)
+  // The lots this batch weighed in PD_03 fill the list, so traceability needs no retyping.
+  useEffect(() => {
+    weighApi.list({ product_code: gate.product_code, batch_no: gate.batch_no }).then((l) => {
+      const w = l[0]; setWeighed(w || false)
+      if (w) {
+        setLots(w.lines.map((x) => ({ code: x.code || '', name: x.name, lot: x.lot, doc_no: x.doc_no || '' })))
+        setF((v) => ({ ...v, mfg_date: w.prod_date }))
+      }
+    }).catch(() => setWeighed(false))
+  }, [gate.product_code, gate.batch_no])
   const [checks, setChecks] = useState({})
   const [uid, setUid] = useState(newUid)
   const [saving, setSaving] = useState(false)
@@ -154,6 +165,8 @@ function DecisionForm({ gate, onSaved }) {
         <label className="text-xs text-gray-600">วันผลิต *<input type="date" value={f.mfg_date} onChange={set('mfg_date')} className={input} /></label>
         <label className="text-xs text-gray-600">วันหมดอายุ *<input type="date" value={f.exp_date} min={f.mfg_date} onChange={set('exp_date')} className={input} /></label>
       </div>
+      {weighed && <div className="text-[11px] text-green-700">ดึงล็อตวัตถุดิบ {weighed.lines.length} รายการจากบันทึกการชั่ง {weighed.wr_id} แล้ว</div>}
+      {weighed === false && <div className="text-[11px] text-amber-700">ไม่พบบันทึกการชั่ง (PD_03) ของ Batch นี้ — ระบุล็อตเอง</div>}
       <LotPicker lots={lots} setLots={setLots} />
       <div className="space-y-2">
         {CHECKS.map(([k, label]) => (

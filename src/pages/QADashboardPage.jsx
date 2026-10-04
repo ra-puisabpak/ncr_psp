@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, Boxes, Route, HandHeart, Droplets, Thermometer,
+  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, Boxes, Route, HandHeart, Droplets, Thermometer, Scale,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { qaApi } from '../api/d1Api'
@@ -96,6 +96,14 @@ export default function QADashboardPage() {
 
       <h2 className="text-sm font-bold text-gray-700 mb-2">บันทึกตรวจ</h2>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+        <Link to="/qa/weigh" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center shrink-0"><Scale className="w-5 h-5" /></div>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-sm text-gray-800">บันทึกการชั่งวัตถุดิบ</div>
+            <div className="text-[11px] text-gray-500">PD_03 · ตามสูตร พร้อม LOT วัตถุดิบ</div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-300" />
+        </Link>
         <Link to="/qa/oil" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
           <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0"><Droplets className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">

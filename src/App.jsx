@@ -27,6 +27,9 @@ import OilReportPage from './pages/OilReportPage'
 import ColdPage from './pages/ColdPage'
 import ColdUnitsPage from './pages/ColdUnitsPage'
 import ColdReportPage from './pages/ColdReportPage'
+import WeighPage from './pages/WeighPage'
+import WeighPrintPage from './pages/WeighPrintPage'
+import FormulasPage from './pages/FormulasPage'
 
 const Private = ({ children, role }) => <RequireAuth role={role}>{children}</RequireAuth>
 
@@ -65,6 +68,9 @@ export default function App() {
           <Route path="/qa/cold" element={<Private><ColdPage /></Private>} />
           <Route path="/qa/cold/units" element={<Private><ColdUnitsPage /></Private>} />
           <Route path="/qa/cold/report" element={<Private><ColdReportPage /></Private>} />
+          <Route path="/qa/weigh" element={<Private><WeighPage /></Private>} />
+          <Route path="/qa/weigh/:id/print" element={<Private><WeighPrintPage /></Private>} />
+          <Route path="/qa/formulas" element={<Private><FormulasPage /></Private>} />
           <Route path="/account" element={<Private><AccountPage /></Private>} />
           <Route path="/users" element={<Private role="QA_MANAGER"><UsersPage /></Private>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -16,6 +16,7 @@ const ROLES = ['QA_MANAGER', 'FSTL', 'QC', 'SUPERVISOR', 'VIEWER'];
 const WRITERS = new Set(['QA_MANAGER', 'FSTL', 'QC', 'SUPERVISOR']);
 const QA = new Set(['QA_MANAGER', 'FSTL']);
 const COND_ROLES = new Set(['QA_MANAGER', 'FSTL', 'SUPERVISOR', 'QC']); // who may receive material with conditions
+const ASSESSORS = new Set(['QA_MANAGER', 'FSTL', 'SUPERVISOR']); // who may assess a weighing out of tolerance (PD_03)
 
 // Fields any writer may set while the NCR is still open.
 const NCR_BASE = [
@@ -1322,13 +1323,20 @@ export default {
             }
           }
         }
-        const batches = [...new Set([...rels.map((r) => r.batch_no), ...[q]])];
+        // Weighing records (PD_03) show which batches used a lot even before any release.
+        const { results: weighRows } = await DB.prepare('SELECT * FROM weigh_records WHERE batch_no LIKE ? OR lines LIKE ? ORDER BY prod_date DESC LIMIT 100').bind(like, like).all();
+        const weighings = weighRows.map((r) => {
+          const lines = JSON.parse(r.lines);
+          return { wr_id: r.wr_id, product_code: r.product_code, product_name: r.product_name, prod_date: r.prod_date, batch_no: r.batch_no, sets: r.sets, result: r.result,
+            lots: lines.map((l) => ({ name: l.name, lot: l.lot, doc_no: l.doc_no, kg: Math.round(l.weights.reduce((a, n) => a + n, 0) * 1000) / 1000 })) };
+        });
+        const batches = [...new Set([...rels.map((r) => r.batch_no), ...weighings.map((w) => w.batch_no), q])];
         const ph = batches.map(() => '?').join(',');
         const { results: qc } = await DB.prepare(`SELECT rec_id, cp_id, record_date, product_code, product_name, batch_no, result, ncr_id FROM qc_records WHERE batch_no IN (${ph}) ORDER BY record_date, rec_id`).bind(...batches).all();
         const { results: ncrs } = await DB.prepare(
           `SELECT ncr_id, issue_date, status, severity, disposition, source_type, lot_no, product_lot_no, material_name, nc_description FROM ncr_records
             WHERE lot_no LIKE ? OR product_lot_no LIKE ? OR product_lot_no IN (${ph}) ORDER BY ncr_id LIMIT 200`).bind(like, like, ...batches).all();
-        return json({ q, received, releases: rels.map(relRow), qc, ncrs: ncrs.map((n) => ({ ...n, nc_description: String(n.nc_description || '').slice(0, 200) })) });
+        return json({ q, received, weighings, releases: rels.map(relRow), qc, ncrs: ncrs.map((n) => ({ ...n, nc_description: String(n.nc_description || '').slice(0, 200) })) });
       }
 
       // ===== PSP QUALITY APP: personal hygiene check before work =====
@@ -1465,6 +1473,137 @@ export default {
           }
           await audit(DB, user.username, 'user', 'create', 'hyg_record', recId, { emp: emp.name, result, failed: failed.map((f) => f.key), action });
           return json({ rec_id: recId, result, failed, action }, 201);
+        }
+      }
+
+      // ===== PSP QUALITY APP: formulas and raw-material weighing (PD_03) =====
+      if (path === '/api/formulas' && method === 'GET') {
+        const { results } = await DB.prepare('SELECT * FROM formulas ORDER BY product_code').all();
+        return json(results.map((r) => ({ ...r, items: JSON.parse(r.items) })));
+      }
+      const fm = path.match(/^\/api\/formulas(?:\/([A-Za-z0-9_-]{1,30}))?$/);
+      if (fm && (method === 'POST' || (method === 'PATCH' && fm[1]))) {
+        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่แก้ไขสูตรได้');
+        const b = await body();
+        const row = fm[1] ? await DB.prepare('SELECT * FROM formulas WHERE product_code=?').bind(fm[1]).first() : null;
+        if (method === 'PATCH' && !row) fail(404, 'ไม่พบสูตร');
+        const code = row ? row.product_code : String(b.product_code || '').trim().toUpperCase();
+        if (!row) {
+          if (!/^[A-Z0-9_-]{2,30}$/.test(code)) fail(400, 'รหัสผลิตภัณฑ์ไม่ถูกต้อง');
+          if (await DB.prepare('SELECT 1 FROM formulas WHERE product_code=?').bind(code).first()) fail(409, 'มีสูตรของผลิตภัณฑ์นี้แล้ว');
+        }
+        const next = { ...(row || { status: 'DRAFT', version: 1, tolerance_pct: null }) };
+        if ('product_name' in b || !row) { next.product_name = txt(b.product_name, 200); if (!next.product_name) fail(400, 'กรุณาระบุชื่อผลิตภัณฑ์'); }
+        if ('items' in b || !row) {
+          const list = Array.isArray(b.items) ? b.items : [];
+          if (!list.length || list.length > 40) fail(400, 'สูตรต้องมีวัตถุดิบ 1–40 รายการ');
+          const seen = new Set();
+          next.items = JSON.stringify(list.map((it) => {
+            const name = String(it?.name || '').trim().slice(0, 80);
+            const target = Number(it?.target);
+            if (!name || seen.has(name)) fail(400, `ชื่อวัตถุดิบว่างหรือซ้ำ: ${name || '(ว่าง)'}`);
+            if (!(target > 0) || target > 1000) fail(400, `น้ำหนักที่กำหนดของ ${name} ต้องมากกว่า 0 และไม่เกิน 1000 กก.`);
+            seen.add(name);
+            const o = { name, target: Math.round(target * 1000) / 1000 };
+            if (!blank(it.note)) o.note = String(it.note).trim().slice(0, 200);
+            return o;
+          }));
+        }
+        if ('tolerance_pct' in b) {
+          next.tolerance_pct = blank(b.tolerance_pct) ? null : Number(b.tolerance_pct);
+          if (next.tolerance_pct !== null && !(next.tolerance_pct > 0 && next.tolerance_pct <= 50)) fail(400, 'Tolerance ต้องอยู่ระหว่าง 0–50%');
+        }
+        if ('status' in b) { if (!['DRAFT', 'APPROVED'].includes(b.status)) fail(400, 'สถานะไม่ถูกต้อง'); next.status = b.status; }
+        if (next.status === 'APPROVED' && next.tolerance_pct === null) fail(422, 'ต้องกำหนด Tolerance ของการชั่งก่อนอนุมัติสูตร');
+        if ('source' in b || !row) next.source = txt(b.source, 300);
+        const fields = ['product_name', 'items', 'tolerance_pct', 'status', 'source'];
+        if (!row) {
+          await DB.prepare('INSERT INTO formulas (product_code,product_name,version,status,tolerance_pct,items,source,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?,?)')
+            .bind(code, next.product_name, 1, next.status, next.tolerance_pct, next.items, next.source, user.username, nowIso()).run();
+          await audit(DB, user.username, 'user', 'create', 'formula', code, { product_name: next.product_name });
+          return json({ success: true, product_code: code, version: 1 }, 201);
+        }
+        const changes = diff(row, next, fields);
+        if (!Object.keys(changes).length) return json({ success: true, version: row.version });
+        next.version = row.version + (['items', 'tolerance_pct', 'status'].some((k) => k in changes) ? 1 : 0);
+        await DB.prepare(`UPDATE formulas SET ${fields.map((k) => `${k}=?`).join(',')}, version=?, updated_by=?, updated_at=? WHERE product_code=?`)
+          .bind(...fields.map((k) => next[k]), next.version, user.username, nowIso(), code).run();
+        await audit(DB, user.username, 'user', b.status === 'APPROVED' && row.status !== 'APPROVED' ? 'approve' : 'update', 'formula', code, { ...changes, version: { from: row.version, to: next.version } });
+        return json({ success: true, version: next.version });
+      }
+
+      if (path === '/api/weigh' && method === 'GET') {
+        const sp = url.searchParams, where = ['1=1'], p = [];
+        if (isDate(sp.get('from'))) { where.push('prod_date>=?'); p.push(sp.get('from')); }
+        if (isDate(sp.get('to'))) { where.push('prod_date<=?'); p.push(sp.get('to')); }
+        for (const k of ['product_code', 'batch_no', 'wr_id']) if (sp.get(k)) { where.push(`${k}=?`); p.push(sp.get(k)); }
+        const { results } = await DB.prepare(`SELECT * FROM weigh_records WHERE ${where.join(' AND ')} ORDER BY prod_date DESC, wr_id DESC LIMIT 500`).bind(...p).all();
+        return json(results.map((r) => ({ ...r, lines: JSON.parse(r.lines), deviations: r.deviations ? JSON.parse(r.deviations) : [] })));
+      }
+      if (path === '/api/weigh' && method === 'POST') {
+        need(user, WRITERS);
+        const b = await body();
+        const uid = recvUid(b.uid);
+        const done = await DB.prepare('SELECT wr_id, result FROM weigh_records WHERE uid=?').bind(uid).first();
+        if (done) return json(done);
+        const f = await DB.prepare('SELECT * FROM formulas WHERE product_code=?').bind(String(b.product_code || '')).first();
+        if (!f) fail(400, 'ผลิตภัณฑ์นี้ยังไม่มีสูตรในระบบ ให้ QA เพิ่มสูตรก่อน');
+        if (!isDate(b.prod_date) || b.prod_date > today()) fail(400, 'กรุณาระบุวันที่ผลิต (ไม่เป็นวันในอนาคต)');
+        const batch = cleanBatch(b.batch_no);
+        const sets = parseInt(b.sets, 10);
+        if (!(sets >= 1 && sets <= 12)) fail(400, 'จำนวนชุดต้องเป็น 1–12');
+        if (await DB.prepare('SELECT wr_id FROM weigh_records WHERE product_code=? AND batch_no=?').bind(f.product_code, batch).first()) fail(409, 'Batch นี้มีบันทึกการชั่งแล้ว');
+        const items = JSON.parse(f.items);
+        const given = Array.isArray(b.lines) ? b.lines.slice(0, 60) : [];
+        const tol = f.tolerance_pct;
+        const deviations = [];
+        const readLine = (l, target, extra) => {
+          const name = String(l?.name || '').trim().slice(0, 80);
+          const w = (Array.isArray(l?.weights) ? l.weights : []).slice(0, sets).map((v) => (blank(v) ? NaN : Number(v)));
+          if (w.length !== sets || w.some((n) => !Number.isFinite(n) || n < 0 || n > 1000)) fail(400, `กรอกน้ำหนักของ ${name} ให้ครบ ${sets} ชุด (กก.)`);
+          const lot = String(l?.lot || '').trim().slice(0, 60);
+          if (!lot) fail(400, `กรุณาระบุ LOT ของ ${name} (เลือกจากใบตรวจรับ FM-QC-001)`);
+          const line = { name, target, lot, doc_no: String(l?.doc_no || '').slice(0, 40), code: String(l?.code || '').slice(0, 40), weights: w };
+          if (extra) { line.extra = true; deviations.push({ name, kind: 'EXTRA', text: `${name} ไม่อยู่ในสูตร` }); }
+          else if (tol !== null) {
+            w.forEach((n, i) => {
+              const pct = ((n - target) / target) * 100;
+              if (Math.abs(pct) > tol) deviations.push({ name, kind: 'TOL', set: i + 1, text: `${name} ชุดที่ ${i + 1}: ${n} กก. (กำหนด ${target} กก. ${pct > 0 ? '+' : ''}${pct.toFixed(1)}% เกิน ±${tol}%)` });
+            });
+          }
+          return line;
+        };
+        const lines = items.map((it) => {
+          const l = given.find((x) => String(x?.name || '').trim() === it.name);
+          if (!l) fail(400, `ไม่มีรายการ ${it.name} ตามสูตร`);
+          return readLine(l, it.target, false);
+        });
+        for (const l of given.filter((x) => !items.some((it) => it.name === String(x?.name || '').trim()))) lines.push(readLine(l, null, true));
+        const result = deviations.length ? 'DEVIATION' : 'PASS';
+        const note = txt(b.note, 1000);
+        // PD_03 Rev.01: out of tolerance or off-formula, production stops until someone with authority assesses it.
+        if (result === 'DEVIATION') {
+          need(user, ASSESSORS, 'น้ำหนักนอก Tolerance หรือมีวัตถุดิบนอกสูตร ต้องให้หัวหน้างาน / QA เป็นผู้ประเมินและบันทึก');
+          if (!note) fail(400, 'กรุณาบันทึกผลการประเมินของผู้มีอำนาจก่อนนำไปผลิตต่อ');
+        }
+        for (let attempt = 0; ; attempt++) {
+          const wrId = await dayId(DB, 'weigh_records', 'wr_id', 'PD', b.prod_date);
+          try {
+            await DB.prepare(`INSERT INTO weigh_records (wr_id,uid,product_code,product_name,prod_date,batch_no,sets,formula_version,formula_status,tolerance_pct,scale_id,lines,deviations,result,note,assessed_by,weigher,created_by,created_at)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(wrId, uid, f.product_code, f.product_name, b.prod_date, batch, sets, f.version, f.status, tol,
+              txt(b.scale_id, 40), JSON.stringify(lines), deviations.length ? JSON.stringify(deviations) : null, result, note,
+              result === 'DEVIATION' ? user.display_name : null, user.display_name, user.username, nowIso()).run();
+          } catch (e) {
+            if (/weigh_records\.product_code/.test(e.message)) fail(409, 'Batch นี้มีบันทึกการชั่งแล้ว');
+            if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
+              const again = await DB.prepare('SELECT wr_id, result FROM weigh_records WHERE uid=?').bind(uid).first();
+              if (again) return json(again);
+              continue;
+            }
+            throw e;
+          }
+          await audit(DB, user.username, 'user', 'create', 'weigh_record', wrId, { product_code: f.product_code, batch_no: batch, sets, result, lots: lines.map((l) => l.lot) });
+          return json({ wr_id: wrId, result, deviations }, 201);
         }
       }
 

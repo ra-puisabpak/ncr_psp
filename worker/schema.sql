@@ -488,3 +488,56 @@ CREATE TABLE IF NOT EXISTS cold_readings (
   created_at   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_cold_unit_date ON cold_readings(unit_id, read_date);
+
+
+-- ===== PSP QUALITY APP: production formulas and raw-material weighing (PD_03 Rev.01) =====
+-- Weights per one set, in kg (liquids counted 1 ml = 1 g). DRAFT until QA confirms against the registered formula.
+-- tolerance_pct: allowed deviation of each weighed item from its target; NULL = not yet set (weighing only warns).
+CREATE TABLE IF NOT EXISTS formulas (
+  product_code  TEXT PRIMARY KEY,
+  product_name  TEXT NOT NULL,
+  version       INTEGER NOT NULL DEFAULT 1,
+  status        TEXT NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','APPROVED')),
+  tolerance_pct REAL,
+  items         TEXT NOT NULL,
+  source        TEXT,
+  updated_by    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+);
+-- Starting formulas: the actual weights of the latest PD_03 of each product (summary prepared 04/10/2026).
+INSERT OR IGNORE INTO formulas (product_code,product_name,version,status,tolerance_pct,items,source,updated_by,updated_at) VALUES
+('FG0001','น้ำพริกปลาร้าพริกสด',1,'DRAFT',NULL,'[{"name": "หอมแดง", "target": 20.02}, {"name": "กระเทียม", "target": 20.12}, {"name": "พริกขี้หนูสด", "target": 20.08}, {"name": "ปลาร้า", "target": 4.5}, {"name": "พริกแห้งคั่ว", "target": 0.5}, {"name": "น้ำปลา", "target": 1.0}, {"name": "ชูรส", "target": 0.7, "note": "ยืนยันว่าอยู่ในสูตรที่ขึ้นทะเบียนและฉลาก"}, {"name": "เกลือ", "target": 1.4}, {"name": "โปแตสเซียม", "target": 0.15, "note": "วัตถุเจือปนอาหาร — ยืนยันชนิด ปริมาณสูงสุดตามประกาศ สธ. และการแสดงบนฉลาก"}]','ใบชั่ง PD_03 วันที่ 2/10/2026 (1 ชุด เฉลี่ยต่อชุด) — น้ำหนักที่ชั่งจริง ยังไม่ใช่สูตรที่อนุมัติ','system',datetime('now')),
+('FG0002','น้ำพริกตาแดงมันกุ้ง',1,'DRAFT',NULL,'[{"name": "หอมแขก", "target": 20.3}, {"name": "กระเทียม", "target": 20.28}, {"name": "พริกแห้งคั่ว", "target": 2.1}, {"name": "กุ้ง", "target": 0.8}, {"name": "น้ำมัน", "target": 3.0}, {"name": "น้ำปลา", "target": 1.7}, {"name": "กะปิ", "target": 0.5}, {"name": "น้ำตาลปี๊บ", "target": 1.4}, {"name": "มะขามเปียก", "target": 1.6}, {"name": "ชูรส", "target": 0.7, "note": "ยืนยันว่าอยู่ในสูตรที่ขึ้นทะเบียนและฉลาก"}, {"name": "เกลือ", "target": 0.6}, {"name": "เบนโซเอต", "target": 0.07, "note": "วัตถุเจือปนอาหาร — ยืนยันชนิด ปริมาณสูงสุดตามประกาศ สธ. และการแสดงบนฉลาก"}]','ใบชั่ง PD_03 วันที่ 2/10/2026 (1 ชุด เฉลี่ยต่อชุด) — น้ำหนักที่ชั่งจริง ยังไม่ใช่สูตรที่อนุมัติ','system',datetime('now')),
+('FG0003','น้ำพริกเห็ดหอมมังสวิรัติ',1,'DRAFT',NULL,'[{"name": "หอมแขก", "target": 19.22}, {"name": "กระเทียม", "target": 19.31}, {"name": "พริกแห้งคั่ว", "target": 0.7}, {"name": "เห็ดหอม", "target": 5.0}, {"name": "น้ำมัน", "target": 3.0}, {"name": "ซีอิ๊วขาว", "target": 1.5}, {"name": "แม็กกี้", "target": 0.5}, {"name": "เกลือ", "target": 0.8}, {"name": "ชูรส", "target": 0.9, "note": "ยืนยันว่าอยู่ในสูตรที่ขึ้นทะเบียนและฉลาก"}, {"name": "เบนโซเอต", "target": 0.08, "note": "วัตถุเจือปนอาหาร — ยืนยันชนิด ปริมาณสูงสุดตามประกาศ สธ. และการแสดงบนฉลาก"}, {"name": "น้ำตาลปี๊บ", "target": 3.5}, {"name": "มะขามเปียก", "target": 0.55}]','ใบชั่ง PD_03 วันที่ 2/10/2026 (1 ชุด เฉลี่ยต่อชุด) — น้ำหนักที่ชั่งจริง ยังไม่ใช่สูตรที่อนุมัติ','system',datetime('now')),
+('FG0004','น้ำพริกหมูเสวย',1,'DRAFT',NULL,'[{"name": "หอมแขก", "target": 15.3}, {"name": "กระเทียม", "target": 15.1}, {"name": "พริกแห้งคั่ว", "target": 5.8}, {"name": "หมูบด", "target": 46.51}, {"name": "น้ำมัน", "target": 5.0}, {"name": "น้ำปลา", "target": 6.2}, {"name": "น้ำตาลปี๊บ", "target": 1.2}, {"name": "ชูรส", "target": 0.95, "note": "ยืนยันว่าอยู่ในสูตรที่ขึ้นทะเบียนและฉลาก"}, {"name": "โปแตสเซียม", "target": 0.09, "note": "วัตถุเจือปนอาหาร — ยืนยันชนิด ปริมาณสูงสุดตามประกาศ สธ. และการแสดงบนฉลาก"}]','ใบชั่ง PD_03 วันที่ 2/10/2026 (1 ชุด เฉลี่ยต่อชุด) — น้ำหนักที่ชั่งจริง ยังไม่ใช่สูตรที่อนุมัติ','system',datetime('now')),
+('FG0005','น้ำพริกปลาย่างพลัส',1,'DRAFT',NULL,'[{"name": "หอมแขก", "target": 30.14}, {"name": "กระเทียม", "target": 30.47}, {"name": "พริกแห้งคั่ว", "target": 6.5}, {"name": "ปลาย่างป่น", "target": 5.0}, {"name": "น้ำมัน", "target": 6.5}, {"name": "น้ำปลา", "target": 4.0}, {"name": "น้ำตาลปี๊บ", "target": 1.7}, {"name": "ชูรส", "target": 0.8, "note": "ยืนยันว่าอยู่ในสูตรที่ขึ้นทะเบียนและฉลาก"}, {"name": "เกลือ", "target": 1.0}, {"name": "โปแตสเซียม", "target": 0.09, "note": "วัตถุเจือปนอาหาร — ยืนยันชนิด ปริมาณสูงสุดตามประกาศ สธ. และการแสดงบนฉลาก"}, {"name": "มะขามเปียก", "target": 0.7}]','ใบชั่ง PD_03 วันที่ 25/09/2026 (1 ชุด เฉลี่ยต่อชุด) — น้ำหนักที่ชั่งจริง ยังไม่ใช่สูตรที่อนุมัติ','system',datetime('now')),
+('FG0006','น้ำปลาหวานแซ่บ',1,'DRAFT',NULL,'[{"name": "หอมแดง", "target": 13.0}, {"name": "พริกจินดา", "target": 3.5}, {"name": "พริกป่น", "target": 1.0}, {"name": "กุ้งป่น", "target": 6.0}, {"name": "กุ้งใหญ่เปลือก", "target": 2.0}, {"name": "กุ้งใหญ่", "target": 1.0}, {"name": "น้ำปลา", "target": 3.0}, {"name": "น้ำตาลปี๊บ", "target": 24.0}, {"name": "น้ำตาลทราย", "target": 6.0}, {"name": "เกลือ", "target": 0.15}]','ใบชั่ง PD_03 วันที่ 1/10/2026 (1 ชุด เฉลี่ยต่อชุด) — น้ำหนักที่ชั่งจริง ยังไม่ใช่สูตรที่อนุมัติ','system',datetime('now')),
+('FG0007','พริกผัดน้ำมันมะกอก สูตรออริจินอล',1,'DRAFT',NULL,'[{"name": "หอมแดง", "target": 55.01}, {"name": "กระเทียม", "target": 20.253}, {"name": "พริกแห้งไม่มีก้าน", "target": 1.2}, {"name": "พริกแห้งมีก้าน", "target": 0.5}, {"name": "เกลือ", "target": 1.0}, {"name": "ชูรส", "target": 0.9, "note": "ยืนยันว่าอยู่ในสูตรที่ขึ้นทะเบียนและฉลาก"}, {"name": "น้ำมันปรุง", "target": 14.5}]','ใบชั่ง PD_03 วันที่ 2/10/2026 (3 ชุด เฉลี่ยต่อชุด) — น้ำหนักที่ชั่งจริง ยังไม่ใช่สูตรที่อนุมัติ','system',datetime('now')),
+('FG0008','น้ำพริกเผ็ดแมคเคอเรล',1,'DRAFT',NULL,'[{"name": "หอมแดง", "target": 9.07}, {"name": "กระเทียม", "target": 9.085}, {"name": "พริกแห้งไม่มีก้าน", "target": 3.0}, {"name": "พริกแห้งมีก้าน", "target": 2.5}, {"name": "ปลาทูป่น", "target": 6.0}, {"name": "ปลาย่าง", "target": 0.25}, {"name": "ปลาฉลาด", "target": 0.25}, {"name": "พริกแห้งคั่ว", "target": 0.4}, {"name": "เกลือ", "target": 0.9}, {"name": "ชูรส", "target": 0.6, "note": "ยืนยันว่าอยู่ในสูตรที่ขึ้นทะเบียนและฉลาก"}, {"name": "น้ำตาลทรายแดง", "target": 0.6}]','ใบชั่ง PD_03 วันที่ 24/09/2026 (2 ชุด เฉลี่ยต่อชุด) — น้ำหนักที่ชั่งจริง ยังไม่ใช่สูตรที่อนุมัติ','system',datetime('now')),
+('FG0009','พริกผัดน้ำมันมะกอก สูตรเผ็ด',1,'DRAFT',NULL,'[{"name": "หอมแดง", "target": 55.01}, {"name": "กระเทียม", "target": 20.35}, {"name": "พริกแห้งไม่มีก้าน", "target": 6.0}, {"name": "พริกแห้งมีก้าน", "target": 1.0}, {"name": "เกลือ", "target": 1.6}, {"name": "ชูรส", "target": 1.6, "note": "ยืนยันว่าอยู่ในสูตรที่ขึ้นทะเบียนและฉลาก"}, {"name": "น้ำตาลหล่อ", "target": 0.7}, {"name": "น้ำมันปรุง", "target": 16.0}]','ใบชั่ง PD_03 วันที่ 2/10/2026 (2 ชุด เฉลี่ยต่อชุด) — น้ำหนักที่ชั่งจริง ยังไม่ใช่สูตรที่อนุมัติ','system',datetime('now')),
+('FG0010','พริกผัดน้ำมันงา',1,'DRAFT',NULL,'[{"name": "หอมแดง", "target": 55.01}, {"name": "กระเทียม", "target": 20.58}, {"name": "พริกแห้ง", "target": 1.2}, {"name": "งาคั่ว", "target": 1.5}, {"name": "เกลือ", "target": 0.7}, {"name": "ชูรส", "target": 0.7, "note": "ยืนยันว่าอยู่ในสูตรที่ขึ้นทะเบียนและฉลาก"}, {"name": "น้ำตาลหล่อ", "target": 0.4}, {"name": "น้ำมันหอมเจียว", "target": 8.0}, {"name": "น้ำมันงา", "target": 6.0}]','ใบชั่ง PD_03 วันที่ 25/09/2026 (1 ชุด เฉลี่ยต่อชุด) — น้ำหนักที่ชั่งจริง ยังไม่ใช่สูตรที่อนุมัติ','system',datetime('now'));
+
+-- One weighing record (PD_03) of one production batch: every line with its raw-material lot and the weight of each set.
+CREATE TABLE IF NOT EXISTS weigh_records (
+  wr_id          TEXT PRIMARY KEY,
+  uid            TEXT NOT NULL UNIQUE,
+  product_code   TEXT NOT NULL,
+  product_name   TEXT,
+  prod_date      TEXT NOT NULL,
+  batch_no       TEXT NOT NULL,
+  sets           INTEGER NOT NULL,
+  formula_version INTEGER,
+  formula_status TEXT,
+  tolerance_pct  REAL,
+  scale_id       TEXT,
+  lines          TEXT NOT NULL,
+  deviations     TEXT,
+  result         TEXT NOT NULL CHECK(result IN ('PASS','DEVIATION')),
+  note           TEXT,
+  assessed_by    TEXT,
+  weigher        TEXT NOT NULL,
+  created_by     TEXT NOT NULL,
+  created_at     TEXT NOT NULL,
+  UNIQUE(product_code, batch_no)
+);
+CREATE INDEX IF NOT EXISTS idx_weigh_date ON weigh_records(prod_date);

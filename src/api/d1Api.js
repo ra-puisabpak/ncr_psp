@@ -163,3 +163,14 @@ export const coldApi = {
   readings: (params = {}) => request(`/api/cold/readings?${new URLSearchParams(params)}`),
   save: (body) => post('/api/cold/readings', body),
 }
+
+// Production formulas and PD_03 raw-material weighing.
+export const formulaApi = {
+  list: () => request('/api/formulas'),
+  create: (body) => post('/api/formulas', body),
+  update: (code, body) => patch(`/api/formulas/${enc(code)}`, body),
+}
+export const weighApi = {
+  list: (params = {}) => request(`/api/weigh?${new URLSearchParams(params)}`),
+  save: (body) => post('/api/weigh', body),
+}

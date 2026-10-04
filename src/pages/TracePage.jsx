@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Search, PackageOpen, Boxes, ClipboardCheck, FileText } from 'lucide-react'
+import { ArrowLeft, Search, PackageOpen, Boxes, ClipboardCheck, FileText, Scale } from 'lucide-react'
 import Layout from '../components/Layout'
 import { qaApi } from '../api/d1Api'
 import { MATERIALS, byCode } from '../data/masterData'
@@ -62,6 +62,15 @@ export default function TracePage() {
                 </div>
                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${m.result === 'PASS' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>{m.result}</span>
               </div>
+            ))}
+          </Section>
+          <Section icon={Scale} title="ใช้ในการผลิต (บันทึกการชั่ง PD_03)" count={(res.weighings || []).length}>
+            {(res.weighings || []).map((w) => (
+              <Link key={w.wr_id} to={`/qa/weigh/${w.wr_id}/print`} className="block p-3 text-sm hover:bg-gray-50">
+                <div className="font-semibold text-gray-800">{w.product_name} · Batch {w.batch_no}</div>
+                <div className="text-[11px] text-gray-500">{w.wr_id} · ผลิต {w.prod_date} · {w.sets} ชุด{w.result === 'DEVIATION' ? ' · นอกเกณฑ์ (ประเมินแล้ว)' : ''}</div>
+                <div className="text-[11px] text-gray-600">{w.lots.filter((l) => l.lot.toLowerCase().includes(res.q.toLowerCase()) || w.batch_no.toLowerCase().includes(res.q.toLowerCase())).map((l) => `${l.name} ${l.lot} (${l.kg} กก.)`).join(' · ')}</div>
+              </Link>
             ))}
           </Section>
           <Section icon={Boxes} title="Batch สินค้าและการตัดสินปล่อย" count={res.releases.length}>
