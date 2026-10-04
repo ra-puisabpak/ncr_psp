@@ -6,6 +6,7 @@ import { prodctlApi, weighApi, qaApi } from '../api/d1Api'
 import { useAuth, canWrite } from '../auth'
 import { PRODUCTS } from '../data/masterData'
 import { Badge, ResultBadge, bkkToday, newUid } from '../qa/shared'
+import { FORMS } from '../config'
 
 const input = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500'
 const STEPS = [['garlic', 'กระเทียม'], ['shallot', 'หอม'], ['chili', 'พริก / เห็ด / หมูบด']]
@@ -105,7 +106,7 @@ export default function ProdControlPage() {
       <div className="flex flex-wrap items-end justify-between gap-2 mb-3">
         <div>
           <h1 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Flame className="w-5 h-5 text-orange-600" />แบบฟอร์มควบคุมการผลิต</h1>
-          <div className="text-xs text-gray-500">QC_08 · ต่อ Batch · ระบบสร้างบันทึก CCP-01 / CCP-02 / OPRP-05 ให้จากค่าที่กรอก</div>
+          <div className="text-xs text-gray-500">{FORMS.PRODCTL.code} · ต่อ Batch · ระบบสร้างบันทึก CCP-01 / CCP-02 / OPRP-05 ให้จากค่าที่กรอก</div>
         </div>
         <Link to={`/qa/prodctl/report?date=${date}`} className="flex items-center gap-1.5 text-sm bg-white border border-gray-300 rounded-lg px-3 py-1.5"><Printer className="w-4 h-4" />รายงาน A4</Link>
       </div>
@@ -128,7 +129,7 @@ export default function ProdControlPage() {
           <label className="text-xs text-gray-600">ชนิดน้ำมัน<input value={oil} onChange={(e) => setOil(e.target.value)} placeholder="เช่น น้ำมันรำข้าว" className={input} /></label>
         </div>
         {open.length > 0 && (
-          <label className="text-xs text-gray-600 block">Batch ที่ชั่งวัตถุดิบแล้ว (PD_03) วันนี้
+          <label className="text-xs text-gray-600 block">Batch ที่ชั่งวัตถุดิบแล้ว ({FORMS.WEIGH.code}) วันนี้
             <select value={product && batch ? `${product}|${batch}` : ''} onChange={(e) => pickWeighed(e.target.value)} className={input}>
               <option value="">-- เลือก หรือกรอกเองด้านล่าง --</option>
               {open.map((w) => <option key={w.wr_id} value={`${w.product_code}|${w.batch_no}`}>{w.product_name} · {w.batch_no}</option>)}

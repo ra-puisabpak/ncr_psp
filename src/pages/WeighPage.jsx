@@ -7,6 +7,7 @@ import { useAuth, canWrite } from '../auth'
 import { MATERIALS, byCode } from '../data/masterData'
 import { Badge, bkkToday, addDays, newUid } from '../qa/shared'
 import { FORMULA_STATUS } from './FormulasPage'
+import { FORMS } from '../config'
 
 const MAT_LABEL = byCode(MATERIALS)
 const input = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500'
@@ -91,7 +92,7 @@ export default function WeighPage() {
       <div className="flex flex-wrap items-end justify-between gap-2 mb-3">
         <div>
           <h1 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Scale className="w-5 h-5 text-violet-600" />บันทึกการชั่งวัตถุดิบ</h1>
-          <div className="text-xs text-gray-500">PD_03 Rev.01 · ทุก Batch · เลือก LOT จากใบตรวจรับเพื่อการสอบย้อนกลับ</div>
+          <div className="text-xs text-gray-500">{FORMS.WEIGH.code} Rev.{FORMS.WEIGH.rev} · ทุก Batch · เลือก LOT จากใบตรวจรับเพื่อการสอบย้อนกลับ</div>
         </div>
         <Link to="/qa/formulas" className="flex items-center gap-1.5 text-sm bg-white border border-gray-300 rounded-lg px-3 py-1.5"><BookOpen className="w-4 h-4" />สูตรการผลิต</Link>
       </div>
@@ -100,7 +101,7 @@ export default function WeighPage() {
         <div className={`rounded-xl p-3 mb-4 text-sm font-semibold flex items-center gap-2 ${saved.result === 'PASS' ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-900'}`}>
           {saved.result === 'PASS' ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
           <span className="flex-1">บันทึก {saved.wr_id} แล้ว{saved.result === 'DEVIATION' ? ' — มีรายการนอกเกณฑ์ (ประเมินแล้ว)' : ''}</span>
-          <Link to={`/qa/weigh/${saved.wr_id}/print`} className="underline whitespace-nowrap">พิมพ์ PD_03</Link>
+          <Link to={`/qa/weigh/${saved.wr_id}/print`} className="underline whitespace-nowrap">พิมพ์ {FORMS.WEIGH.code}</Link>
         </div>
       )}
 

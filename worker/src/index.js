@@ -16,7 +16,7 @@ const ROLES = ['QA_MANAGER', 'FSTL', 'QC', 'SUPERVISOR', 'VIEWER'];
 const WRITERS = new Set(['QA_MANAGER', 'FSTL', 'QC', 'SUPERVISOR']);
 const QA = new Set(['QA_MANAGER', 'FSTL']);
 const COND_ROLES = new Set(['QA_MANAGER', 'FSTL', 'SUPERVISOR', 'QC']); // who may receive material with conditions
-const ASSESSORS = new Set(['QA_MANAGER', 'FSTL', 'SUPERVISOR']); // who may assess a weighing out of tolerance (PD_03)
+const ASSESSORS = new Set(['QA_MANAGER', 'FSTL', 'SUPERVISOR']); // who may assess a weighing out of tolerance (FM-QC-004)
 
 // Fields any writer may set while the NCR is still open.
 const NCR_BASE = [
@@ -269,7 +269,7 @@ function evaluate(params, values, na = []) {
 }
 
 // Saves one monitoring record against the limits in force; a failed check opens an NCR in the same write.
-// Used by the monitoring form and by the forms that derive records from what they capture (QC_08).
+// Used by the monitoring form and by the forms that derive records from what they capture (FM-QC-002).
 // `na`: checks that do not apply to this batch (recorded as NA, never judged).
 async function saveQcRecord(DB, user, b, na = []) {
   const uid = String(b.uid || '');
@@ -410,7 +410,7 @@ const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 const isTime = (v) => /^\d{2}:\d{2}$/.test(String(v || ''));
 const txt = (v, n) => (blank(v) ? null : String(v).trim().slice(0, n));
 
-// ---------- QC_08 production control: what it captures, and the control-point values derived from it ----------
+// ---------- FM-QC-002 production control: what it captures, and the control-point values derived from it ----------
 const FRY_STEPS = ['garlic', 'shallot', 'chili'];
 const FRY_TH = { garlic: 'กระเทียม', shallot: 'หอม', chili: 'พริก / เห็ด / หมูบด' };
 const minutesBetween = (a, b) => { const [h1, m1] = a.split(':').map(Number), [h2, m2] = b.split(':').map(Number); let d = h2 * 60 + m2 - (h1 * 60 + m1); if (d < 0) d += 1440; return d; };
@@ -1397,7 +1397,7 @@ export default {
             }
           }
         }
-        // Weighing records (PD_03) show which batches used a lot even before any release.
+        // Weighing records (FM-QC-004) show which batches used a lot even before any release.
         const { results: weighRows } = await DB.prepare('SELECT * FROM weigh_records WHERE batch_no LIKE ? OR lines LIKE ? ORDER BY prod_date DESC LIMIT 100').bind(like, like).all();
         const weighings = weighRows.map((r) => {
           const lines = JSON.parse(r.lines);
@@ -1550,7 +1550,7 @@ export default {
         }
       }
 
-      // ===== PSP QUALITY APP: formulas and raw-material weighing (PD_03) =====
+      // ===== PSP QUALITY APP: formulas and raw-material weighing (FM-QC-004) =====
       if (path === '/api/formulas' && method === 'GET') {
         const { results } = await DB.prepare('SELECT * FROM formulas ORDER BY product_code').all();
         return json(results.map((r) => ({ ...r, items: JSON.parse(r.items) })));
@@ -1655,7 +1655,7 @@ export default {
         for (const l of given.filter((x) => !items.some((it) => it.name === String(x?.name || '').trim()))) lines.push(readLine(l, null, true));
         const result = deviations.length ? 'DEVIATION' : 'PASS';
         const note = txt(b.note, 1000);
-        // PD_03 Rev.01: out of tolerance or off-formula, production stops until someone with authority assesses it.
+        // FM-QC-004 (formerly PD_03) Rev.01: out of tolerance or off-formula, production stops until someone with authority assesses it.
         if (result === 'DEVIATION') {
           need(user, ASSESSORS, 'น้ำหนักนอก Tolerance หรือมีวัตถุดิบนอกสูตร ต้องให้หัวหน้างาน / QA เป็นผู้ประเมินและบันทึก');
           if (!note) fail(400, 'กรุณาบันทึกผลการประเมินของผู้มีอำนาจก่อนนำไปผลิตต่อ');
@@ -1681,7 +1681,7 @@ export default {
         }
       }
 
-      // ===== PSP QUALITY APP: production control (QC_08) =====
+      // ===== PSP QUALITY APP: production control (FM-QC-002) =====
       if (path === '/api/prodctl' && method === 'GET') {
         const sp = url.searchParams, where = ['1=1'], p = [];
         if (isDate(sp.get('from'))) { where.push('prod_date>=?'); p.push(sp.get('from')); }
@@ -1695,7 +1695,7 @@ export default {
         const b = await body();
         const uid = recvUid(b.uid);
         const { results: cpRows } = await DB.prepare(`SELECT * FROM control_points WHERE cp_id IN (${DERIVED_CPS.map(() => '?').join(',')}) AND status <> 'RETIRED'`).bind(...DERIVED_CPS).all();
-        // Writes the control-point records for a saved QC_08; safe to run again (each derived record has its own fixed uid).
+        // Writes the control-point records for a saved FM-QC-002; safe to run again (each derived record has its own fixed uid).
         const derive = async (row, d) => {
           const out = [];
           for (const cp of cpRows.map(cpRow)) {
@@ -1703,7 +1703,7 @@ export default {
             const dv = deriveValues(cp.cp_id, d);
             if (!dv) continue;
             const r = await saveQcRecord(DB, user, { uid: `${row.uid}-${cp.cp_id}`, cp_id: cp.cp_id, record_date: row.prod_date, record_time: dv.time || null,
-              product_code: row.product_code, product_name: row.product_name, batch_no: row.batch_no, values: dv.values, note: `จากแบบฟอร์มควบคุมการผลิต QC_08 ${row.pc_id}` }, dv.na);
+              product_code: row.product_code, product_name: row.product_name, batch_no: row.batch_no, values: dv.values, note: `จากแบบฟอร์มควบคุมการผลิต FM-QC-002 ${row.pc_id}` }, dv.na);
             out.push({ cp_id: cp.cp_id, rec_id: r.body.rec_id, result: r.body.result, ncr_id: r.body.ncr_id || null });
           }
           const result = out.some((x) => x.result === 'FAIL') || row.ncr_id ? 'FAIL' : 'PASS';
@@ -1734,9 +1734,9 @@ export default {
           const stmts = [];
           if (ncrId) stmts.push(autoNcrStmt(DB, user, ncrId, {
             source_type: 'IN_PROCESS', source_ref: pcId, process_ref: 'PC0009', severity: 'Major', found_date: b.prod_date,
-            material_code: product, material_name: productName, product_lot_no: batch, parameter_id: 'QC_08', parameter_name: 'สิ่งปลอมปนหลังพักเย็น',
+            material_code: product, material_name: productName, product_lot_no: batch, parameter_id: 'FM-QC-002', parameter_name: 'สิ่งปลอมปนหลังพักเย็น',
             critical_limit: 'ไม่มีสิ่งปลอมปน', actual_result: 'พบสิ่งปลอมปน',
-            nc_description: `พบสิ่งปลอมปนในผลิตภัณฑ์หลังพักเย็น — แบบฟอร์มควบคุมการผลิต QC_08 ${pcId}\nผลิตภัณฑ์: ${product} ${productName || ''} · Batch ${batch}\n${note}`.slice(0, 2000),
+            nc_description: `พบสิ่งปลอมปนในผลิตภัณฑ์หลังพักเย็น — แบบฟอร์มควบคุมการผลิต FM-QC-002 ${pcId}\nผลิตภัณฑ์: ${product} ${productName || ''} · Batch ${batch}\n${note}`.slice(0, 2000),
             immediate_action: `กักกัน Batch ${batch} รอ QA ตัดสิน`,
           }));
           stmts.push(DB.prepare(`INSERT INTO prod_controls (pc_id,uid,product_code,product_name,prod_date,batch_no,oil_type,data,derived,result,note,ncr_id,inspector,created_by,created_at)
@@ -1748,13 +1748,13 @@ export default {
             throw e;
           }
           await audit(DB, user.username, 'user', 'create', 'prod_control', pcId, { product_code: product, batch_no: batch, ncr_id: ncrId });
-          if (ncrId) await audit(DB, user.username, 'user', 'create', 'ncr', ncrId, { source: 'QC_08', prod_control: pcId });
+          if (ncrId) await audit(DB, user.username, 'user', 'create', 'ncr', ncrId, { source: 'FM-QC-002', prod_control: pcId });
           const row = await DB.prepare('SELECT * FROM prod_controls WHERE pc_id=?').bind(pcId).first();
           return json(await derive(row, d), 201);
         }
       }
 
-      // ===== PSP QUALITY APP: frying oil (FM-QC-07) =====
+      // ===== PSP QUALITY APP: frying oil (FM-QC-005) =====
       if (path === '/api/oil' && method === 'GET') {
         const sp = url.searchParams, where = ['1=1'], p = [];
         if (isDate(sp.get('from'))) { where.push('check_date>=?'); p.push(sp.get('from')); }
@@ -1802,9 +1802,9 @@ export default {
             stmts.push(autoNcrStmt(DB, user, ncrId, {
               source_type: 'IN_PROCESS', source_ref: chkId, process_ref: 'PC0006', severity: 'Major',
               found_date: rec.check_date, found_time: rec.check_time, lot_no: rec.tank,
-              parameter_id: 'FM-QC-07', parameter_name: 'คุณภาพน้ำมันทอด (TPM) / อุณหภูมิน้ำมัน',
+              parameter_id: 'FM-QC-005', parameter_name: 'คุณภาพน้ำมันทอด (TPM) / อุณหภูมิน้ำมัน',
               critical_limit: 'TPM < 25% (ประกาศ สธ.) · อุณหภูมิตาม WI ของผลิตภัณฑ์', actual_result: why.join('\n'),
-              nc_description: [`น้ำมันทอดไม่ผ่านเกณฑ์ (FM-QC-07 บันทึก ${chkId} · ${STAGE_TH[b.stage]})`, ...why,
+              nc_description: [`น้ำมันทอดไม่ผ่านเกณฑ์ (FM-QC-005 บันทึก ${chkId} · ${STAGE_TH[b.stage]})`, ...why,
                 rec.line ? `ผลิตภัณฑ์/ไลน์: ${rec.line}` : '', rec.oil_type ? `ชนิดน้ำมัน: ${rec.oil_type}` : '', rec.tank ? `ถัง/Lot: ${rec.tank}` : '', note ? `หมายเหตุ: ${note}` : '']
                 .filter(Boolean).join('\n').slice(0, 2000),
               immediate_action: `หยุดใช้และกักกันน้ำมัน (HOLD) — ${action}`.slice(0, 1000),
@@ -1841,7 +1841,7 @@ export default {
         return json({ success: true });
       }
 
-      // ===== PSP QUALITY APP: refrigerator / freezer temperature (FM-QC-05) =====
+      // ===== PSP QUALITY APP: refrigerator / freezer temperature (FM-QC-006) =====
       if (path === '/api/cold/units' && method === 'GET') {
         return json((await DB.prepare('SELECT * FROM cold_units ORDER BY active DESC, area, unit_id').all()).results);
       }
@@ -1944,7 +1944,7 @@ export default {
             stmts.push(autoNcrStmt(DB, user, ncrId, {
               source_type: unit.area === 'WIP' ? 'IN_PROCESS' : 'WAREHOUSE', source_ref: rdId,
               severity: 'Major', found_date: b.read_date, found_time: nz(b.read_time), hold_location: unit.unit_id,
-              parameter_id: 'FM-QC-05', parameter_name: `อุณหภูมิ${unit.unit_type === 'CHILL' ? 'ตู้เย็น' : 'ตู้แช่แข็ง'} ${unit.unit_id}`,
+              parameter_id: 'FM-QC-006', parameter_name: `อุณหภูมิ${unit.unit_type === 'CHILL' ? 'ตู้เย็น' : 'ตู้แช่แข็ง'} ${unit.unit_id}`,
               critical_limit: `เกณฑ์ ${specTxt} · Escalation > ${unit.escalate_at} °C`, actual_result: `${temp} °C`,
               material_name: affected, lot_no: affected,
               nc_description: [`Temperature Deviation: ${unit.unit_id} ${unit.name} (${unit.area}) อ่านได้ ${temp} °C เกิน Escalation Limit ${unit.escalate_at} °C — บันทึก ${rdId}`,
@@ -1967,7 +1967,7 @@ export default {
             throw e;
           }
           await audit(DB, user.username, 'user', 'create', 'cold_reading', rdId, { unit_id: unit.unit_id, temp, status, ncr_id: ncrId });
-          if (ncrId) await audit(DB, user.username, 'user', 'create', 'ncr', ncrId, { source: 'FM-QC-05', cold_reading: rdId });
+          if (ncrId) await audit(DB, user.username, 'user', 'create', 'ncr', ncrId, { source: 'FM-QC-006', cold_reading: rdId });
           return json({ rd_id: rdId, status, ncr_id: ncrId, calib_expired: calibExpired }, 201);
         }
       }

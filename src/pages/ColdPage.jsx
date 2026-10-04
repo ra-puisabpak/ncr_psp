@@ -5,6 +5,7 @@ import Layout from '../components/Layout'
 import { coldApi } from '../api/d1Api'
 import { useAuth, canWrite } from '../auth'
 import { Badge, bkkToday, bkkTime, monthOf, newUid } from '../qa/shared'
+import { FORMS } from '../config'
 
 const input = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500'
 export const SLOTS = ['08:00', '11:00', '15:00', '17:00']
@@ -78,7 +79,7 @@ export default function ColdPage() {
       <div className="flex flex-wrap items-end justify-between gap-2 mb-3">
         <div>
           <h1 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Thermometer className="w-5 h-5 text-sky-600" />อุณหภูมิตู้เย็น / ตู้แช่แข็ง</h1>
-          <div className="text-xs text-gray-500">FM-QC-05 Rev.02 · ตรวจ 08:00 · 11:00 · 15:00 · 17:00</div>
+          <div className="text-xs text-gray-500">{FORMS.COLD.code} Rev.{FORMS.COLD.rev} · ตรวจ 08:00 · 11:00 · 15:00 · 17:00</div>
         </div>
         <div className="flex gap-2">
           <Link to={`/qa/cold/report?month=${monthOf(date)}`} className="flex items-center gap-1.5 text-sm bg-white border border-gray-300 rounded-lg px-3 py-1.5"><Printer className="w-4 h-4" />รายงาน A4</Link>

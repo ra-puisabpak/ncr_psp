@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { oilApi } from '../api/d1Api'
-import { COMPANY_NAME } from '../config'
+import { COMPANY_NAME, FORMS } from '../config'
 import { bkkToday, monthOf, monthRange, thaiMonth } from '../qa/shared'
 import { STAGE_TH, OIL_RESULT } from './OilPage'
 
 const td = 'border border-black px-1 py-0.5'
 const RES_TXT = { PASS: 'ผ่าน', FAIL: 'ไม่ผ่าน', NA: 'N/A' }
 
-// FM-QC-07 for one month on A4 landscape: every check in date order, with verification and actions.
+// The frying-oil record for one month on A4 landscape: every check in date order, with verification and actions.
 export default function OilReportPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
@@ -37,7 +37,7 @@ export default function OilReportPage() {
         <div className="print-area bg-white mx-auto my-4 shadow p-[8mm] text-black w-[297mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none text-[10.5px]" style={{ fontFamily: "'Sarabun', sans-serif" }}>
           <div className="flex justify-between items-start border-b-2 border-black pb-1">
             <div><b className="text-[13px]">{COMPANY_NAME}</b><div className="text-[14px] font-bold">บันทึกการตรวจสอบคุณภาพน้ำมันทอดและอุณหภูมิ</div></div>
-            <div className="text-right">รหัสเอกสาร FM-QC-07<br />Rev.02 / 17-09-69</div>
+            <div className="text-right">รหัสเอกสาร {FORMS.OIL.code}<br />Rev.{FORMS.OIL.rev}</div>
           </div>
           <div className="grid grid-cols-4 gap-2 my-1.5">
             <div><b>เดือน / ปี:</b> {thaiMonth(month)}</div>

@@ -5,6 +5,7 @@ import Layout from '../components/Layout'
 import { oilApi } from '../api/d1Api'
 import { useAuth, canWrite, isQA } from '../auth'
 import { Badge, bkkToday, bkkTime, monthOf, monthRange, newUid } from '../qa/shared'
+import { FORMS } from '../config'
 
 const input = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500'
 export const STAGE_TH = { BEFORE: 'ก่อนการผลิต', DURING: 'ระหว่างการผลิต', AFTER: 'หลังการผลิต' }
@@ -71,7 +72,7 @@ export default function OilPage() {
       <div className="flex flex-wrap items-end justify-between gap-2 mb-3">
         <div>
           <h1 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Droplets className="w-5 h-5 text-amber-600" />คุณภาพน้ำมันทอดและอุณหภูมิ</h1>
-          <div className="text-xs text-gray-500">FM-QC-07 Rev.02 · TPM &lt; 20% ปกติ · 20–&lt;25% เฝ้าระวัง · ≥ 25% ห้ามใช้ (ประกาศ สธ.)</div>
+          <div className="text-xs text-gray-500">{FORMS.OIL.code} Rev.{FORMS.OIL.rev} · TPM &lt; 20% ปกติ · 20–&lt;25% เฝ้าระวัง · ≥ 25% ห้ามใช้ (ประกาศ สธ.)</div>
         </div>
         <Link to={`/qa/oil/report?month=${month}`} className="flex items-center gap-1.5 text-sm bg-white border border-gray-300 rounded-lg px-3 py-1.5"><Printer className="w-4 h-4" />รายงาน A4</Link>
       </div>

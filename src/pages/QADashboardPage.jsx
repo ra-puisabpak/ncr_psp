@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { qaApi } from '../api/d1Api'
-import { RECEIVING_URL } from '../config'
+import { RECEIVING_URL, FORMS } from '../config'
 import { CP_TYPE_TH, CP_TYPE_CLS, CP_STATUS_TH, CP_STATUS_CLS, Badge, ResultBadge, bkkToday } from '../qa/shared'
 
 function Tile({ icon: Icon, label, value, sub, tone, to }) {
@@ -100,7 +100,7 @@ export default function QADashboardPage() {
           <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center shrink-0"><Scale className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">บันทึกการชั่งวัตถุดิบ</div>
-            <div className="text-[11px] text-gray-500">PD_03 · ตามสูตร พร้อม LOT วัตถุดิบ</div>
+            <div className="text-[11px] text-gray-500">{FORMS.WEIGH.code} · ตามสูตร พร้อม LOT วัตถุดิบ</div>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
@@ -108,7 +108,7 @@ export default function QADashboardPage() {
           <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0"><Flame className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">แบบฟอร์มควบคุมการผลิต</div>
-            <div className="text-[11px] text-gray-500">QC_08 · ทอด/เจียว ผัดฆ่าเชื้อ พักเย็น → CCP อัตโนมัติ</div>
+            <div className="text-[11px] text-gray-500">{FORMS.PRODCTL.code} · ทอด/เจียว ผัดฆ่าเชื้อ พักเย็น → CCP อัตโนมัติ</div>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
@@ -116,7 +116,7 @@ export default function QADashboardPage() {
           <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0"><Droplets className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">คุณภาพน้ำมันทอด</div>
-            <div className="text-[11px] text-gray-500">FM-QC-07 · TPM และอุณหภูมิ</div>
+            <div className="text-[11px] text-gray-500">{FORMS.OIL.code} · TPM และอุณหภูมิ</div>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
@@ -124,7 +124,7 @@ export default function QADashboardPage() {
           <div className="w-10 h-10 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center shrink-0"><Thermometer className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">อุณหภูมิตู้เย็น / ตู้แช่แข็ง</div>
-            <div className="text-[11px] text-gray-500">FM-QC-05 · 08:00 · 11:00 · 15:00 · 17:00</div>
+            <div className="text-[11px] text-gray-500">{FORMS.COLD.code} · 08:00 · 11:00 · 15:00 · 17:00</div>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
@@ -132,7 +132,7 @@ export default function QADashboardPage() {
           <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center shrink-0"><HandHeart className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">สุขลักษณะส่วนบุคคล</div>
-            <div className="text-[11px] text-gray-500">ตรวจก่อนเข้างาน{summary ? ` · ${date === bkkToday() ? 'วันนี้' : date} ${summary.hygTotal} คน${summary.hygFail ? ` · ไม่ผ่าน ${summary.hygFail}` : ''}` : ''}</div>
+            <div className="text-[11px] text-gray-500">{FORMS.HYGIENE.code} · ตรวจก่อนเข้างาน{summary ? ` · ${date === bkkToday() ? 'วันนี้' : date} ${summary.hygTotal} คน${summary.hygFail ? ` · ไม่ผ่าน ${summary.hygFail}` : ''}` : ''}</div>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
@@ -140,7 +140,7 @@ export default function QADashboardPage() {
           <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0"><PackageCheck className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">ตรวจรับวัตถุดิบ</div>
-            <div className="text-[11px] text-gray-500">FM-QC-001 · บันทึกการตรวจรับ</div>
+            <div className="text-[11px] text-gray-500">{FORMS.RECEIVING.code} · บันทึกการตรวจรับ</div>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </a>

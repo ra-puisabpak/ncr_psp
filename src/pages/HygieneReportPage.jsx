@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { hygApi } from '../api/d1Api'
-import { COMPANY_NAME, FORM_CODE_HYGIENE } from '../config'
+import { COMPANY_NAME, FORMS } from '../config'
 import { bkkToday } from '../qa/shared'
 import { ACTION_TH } from './HygienePage'
 
@@ -44,7 +44,7 @@ export default function HygieneReportPage() {
         <div className="print-area bg-white mx-auto my-4 shadow p-[10mm] text-black w-[210mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none" style={{ fontFamily: "'Sarabun', sans-serif" }}>
           <div className="flex justify-between items-start border-b-2 border-black pb-1.5 text-[12px]">
             <div><b className="text-[14px]">{COMPANY_NAME}</b><br />ฝ่ายประกันคุณภาพ (QA)</div>
-            <div className="text-right">รหัสแบบฟอร์ม: {FORM_CODE_HYGIENE || '(รอกำหนด)'}<br />GHPs / GMP 420</div>
+            <div className="text-right">รหัสแบบฟอร์ม: {FORMS.HYGIENE.code} Rev.{FORMS.HYGIENE.rev}<br />GHPs / GMP 420</div>
           </div>
           <h1 className="text-center text-[17px] font-bold mt-3">แบบบันทึกการตรวจสุขลักษณะส่วนบุคคลก่อนเข้าปฏิบัติงาน</h1>
           <div className="text-center text-[12px] text-gray-700 mb-2">Personal Hygiene Inspection Record</div>

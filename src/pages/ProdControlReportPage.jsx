@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { prodctlApi, oilApi, qaApi } from '../api/d1Api'
-import { COMPANY_NAME } from '../config'
+import { COMPANY_NAME, FORMS } from '../config'
 import { bkkToday } from '../qa/shared'
 
 const td = 'border border-black px-0.5 py-0.5'
@@ -11,7 +11,7 @@ const thai = (iso) => { const [y, m, d] = iso.split('-').map(Number); return `${
 const v = (x) => (x === null || x === undefined || x === '' ? '' : x)
 const STAGE = { BEFORE: 'ก่อนผลิต', DURING: 'ระหว่าง', AFTER: 'หลังผลิต' }
 
-// QC_08 for one production day on A4 landscape, in the column order of the paper form.
+// The production control record for one day on A4 landscape, in the column order of the paper form.
 export default function ProdControlReportPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
@@ -53,15 +53,15 @@ export default function ProdControlReportPage() {
             <tbody>
               <tr>
                 <td className={`${td} w-[70%]`} rowSpan={2}><b className="text-[12px]">{COMPANY_NAME}</b> · ประเภทเอกสาร: เอกสารในหน่วยควบคุมคุณภาพ<br /><b>ชื่อเอกสาร: แบบฟอร์มควบคุมการผลิต</b></td>
-                <td className={td}>รหัสเอกสาร: QC_08</td>
+                <td className={td}>รหัสเอกสาร: {FORMS.PRODCTL.code}</td>
               </tr>
-              <tr><td className={td}>แก้ไขครั้งที่: 00</td></tr>
+              <tr><td className={td}>แก้ไขครั้งที่: {FORMS.PRODCTL.rev}</td></tr>
             </tbody>
           </table>
           <div className="flex flex-wrap gap-x-6 mb-1 text-[10.5px]">
             <div><b>วันที่ผลิต:</b> {thai(date)}</div>
             <div><b>ชนิดน้ำมัน:</b> {oils.join(', ') || '-'}</div>
-            <div><b>ค่า Polar (FM-QC-07):</b> {oil.length ? oil.map((o) => `${o.check_time || STAGE[o.stage]} ${o.tpm_max}%`).join(' · ') : 'ไม่มีบันทึก'}</div>
+            <div><b>ค่า Polar ({FORMS.OIL.code}):</b> {oil.length ? oil.map((o) => `${o.check_time || STAGE[o.stage]} ${o.tpm_max}%`).join(' · ') : 'ไม่มีบันทึก'}</div>
             <div className="text-[9px]">Good Polar &lt; 20% · Risk 20–24% · Reject ≥ 25%</div>
           </div>
           <table className="w-full border-collapse text-center">

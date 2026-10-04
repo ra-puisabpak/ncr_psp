@@ -6,6 +6,7 @@ import { qaApi } from '../api/d1Api'
 import { MATERIALS, byCode } from '../data/masterData'
 import { ResultBadge } from '../qa/shared'
 import { ReleaseRow } from './FGReleasePage'
+import { FORMS } from '../config'
 
 const MAT_LABEL = byCode(MATERIALS)
 
@@ -64,7 +65,7 @@ export default function TracePage() {
               </div>
             ))}
           </Section>
-          <Section icon={Scale} title="ใช้ในการผลิต (บันทึกการชั่ง PD_03)" count={(res.weighings || []).length}>
+          <Section icon={Scale} title={`ใช้ในการผลิต (บันทึกการชั่ง ${FORMS.WEIGH.code})`} count={(res.weighings || []).length}>
             {(res.weighings || []).map((w) => (
               <Link key={w.wr_id} to={`/qa/weigh/${w.wr_id}/print`} className="block p-3 text-sm hover:bg-gray-50">
                 <div className="font-semibold text-gray-800">{w.product_name} · Batch {w.batch_no}</div>

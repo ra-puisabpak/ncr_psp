@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { weighApi } from '../api/d1Api'
-import { COMPANY_NAME } from '../config'
+import { COMPANY_NAME, FORMS } from '../config'
 
 const td = 'border border-black px-1 py-0.5'
 const TH_M = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 const thai = (iso) => { const [y, m, d] = iso.split('-').map(Number); return `${d} ${TH_M[m - 1]} ${y + 543}` }
 const kg = (n) => (n == null ? '' : Number(n).toLocaleString('th-TH', { maximumFractionDigits: 3 }))
 
-// PD_03 for one batch, laid out like the paper form: one row per raw material, sets 1–12 across.
+// The weighing record for one batch, laid out like the paper form: one row per raw material, sets 1–12 across.
 export default function WeighPrintPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -24,7 +24,7 @@ export default function WeighPrintPage() {
       <style>{'@media print { @page { size: A4 landscape; margin: 8mm; } }'}</style>
       <div className="no-print bg-blue-900 text-white px-4 py-3 flex items-center justify-between shadow-lg sticky top-0 z-50">
         <button onClick={() => navigate('/qa/weigh')} className="flex items-center gap-2 hover:bg-blue-800 px-3 py-2 rounded-lg text-sm"><ArrowLeft className="w-4 h-4" />กลับ</button>
-        <div className="text-sm">{r ? `${r.wr_id} · ${r.product_name}` : 'PD_03'}</div>
+        <div className="text-sm">{r ? `${r.wr_id} · ${r.product_name}` : FORMS.WEIGH.code}</div>
         <button onClick={() => window.print()} disabled={!r} className="flex items-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-semibold"><Printer className="w-4 h-4" />พิมพ์ A4</button>
       </div>
       {error && <div className="no-print max-w-lg mx-auto mt-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>}
@@ -34,9 +34,9 @@ export default function WeighPrintPage() {
             <tbody>
               <tr>
                 <td className={`${td} w-[60%]`} rowSpan={3}><b className="text-[13px]">{COMPANY_NAME}</b><br />ประเภทเอกสาร: เอกสารในหน่วยผลิต<br /><b>ชื่อเอกสาร: บันทึกการชั่งวัตถุดิบ</b></td>
-                <td className={td}>รหัสเอกสาร: PD_03</td>
+                <td className={td}>รหัสเอกสาร: {FORMS.WEIGH.code}</td>
               </tr>
-              <tr><td className={td}>แก้ไขครั้งที่: 01</td></tr>
+              <tr><td className={td}>แก้ไขครั้งที่: {FORMS.WEIGH.rev}</td></tr>
               <tr><td className={td}>เลขที่บันทึก: {r.wr_id}</td></tr>
             </tbody>
           </table>

@@ -148,14 +148,14 @@ export const hygApi = {
   save: (body) => post('/api/hyg/records', body),
 }
 
-// FM-QC-07 frying oil quality and temperature.
+// FM-QC-005 frying oil quality and temperature.
 export const oilApi = {
   list: (params = {}) => request(`/api/oil?${new URLSearchParams(params)}`),
   save: (body) => post('/api/oil', body),
   verify: (id, body) => post(`/api/oil/${enc(id)}/verify`, body),
 }
 
-// FM-QC-05 refrigerator / freezer temperature.
+// FM-QC-006 refrigerator / freezer temperature.
 export const coldApi = {
   units: () => request('/api/cold/units'),
   createUnit: (body) => post('/api/cold/units', body),
@@ -164,7 +164,7 @@ export const coldApi = {
   save: (body) => post('/api/cold/readings', body),
 }
 
-// Production formulas and PD_03 raw-material weighing.
+// Production formulas and FM-QC-004 raw-material weighing.
 export const formulaApi = {
   list: () => request('/api/formulas'),
   create: (body) => post('/api/formulas', body),
@@ -175,7 +175,7 @@ export const weighApi = {
   save: (body) => post('/api/weigh', body),
 }
 
-// QC_08 production control (derives CCP-01 / CCP-02 / OPRP-05 records).
+// FM-QC-002 production control (derives CCP-01 / CCP-02 / OPRP-05 records).
 export const prodctlApi = {
   list: (params = {}) => request(`/api/prodctl?${new URLSearchParams(params)}`),
   save: (body) => post('/api/prodctl', body),
