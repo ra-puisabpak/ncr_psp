@@ -266,6 +266,53 @@ function evaluate(params, values) {
   return { values: out, failed };
 }
 
+// ---------- Smart QA: finished-goods release gate ----------
+const NCR_DONE = ['Closed', 'Cancelled'];
+const NCR_DISCARD = { DESTROY: 'ทำลาย', RECALL: 'เรียกคืน', RETURN_SUPPLIER: 'คืนผู้ขาย' };
+const cleanBatch = (v) => { const s = String(v ?? '').trim(); if (!s || s.length > 60) fail(400, 'กรุณาระบุเลขที่ Batch'); return s; };
+
+// Everything QA needs to see before deciding on one batch, worked out on the server so the
+// decision rests on the records themselves and not on what a screen showed.
+async function batchGate(DB, productCode, batchNo) {
+  const { results: cps } = await DB.prepare(
+    `SELECT c.cp_id, c.name, c.cp_type, c.status, c.products FROM control_points c JOIN cp_release r ON r.cp_id = c.cp_id
+      WHERE r.release_required = 1 AND c.status <> 'RETIRED' ORDER BY c.process_ref, c.cp_id`).all();
+  const applies = cps.filter((c) => !c.products || JSON.parse(c.products).includes(productCode));
+  const { results: ncrs } = await DB.prepare(
+    `SELECT ncr_id, status, severity, disposition, source_type, source_ref FROM ncr_records
+      WHERE product_lot_no = ? AND (material_code = ? OR material_code IS NULL OR material_code = '') ORDER BY ncr_id`).bind(batchNo, productCode).all();
+  const ncrById = Object.fromEntries(ncrs.map((n) => [n.ncr_id, n]));
+  const reasons = [];
+  const requirements = [];
+  for (const c of applies) {
+    const rec = await DB.prepare(
+      `SELECT rec_id, result, ncr_id, record_date, record_time, cp_status FROM qc_records
+        WHERE cp_id = ? AND batch_no = ? AND (product_code = ? OR product_code IS NULL OR product_code = '')
+        ORDER BY created_at DESC, rec_id DESC LIMIT 1`).bind(c.cp_id, batchNo, productCode).first();
+    let state = 'MISSING';
+    if (rec?.result === 'PASS') state = 'PASS';
+    else if (rec) {
+      // A failed check stands until a newer passing record, or QA closes its NCR deciding to release.
+      const n = ncrById[rec.ncr_id];
+      state = n && n.status === 'Closed' && n.disposition === 'RELEASE' ? 'CONCESSION' : 'FAIL';
+    }
+    if (state === 'MISSING') reasons.push(`ยังไม่มีบันทึก ${c.cp_id} ${c.name}`);
+    if (state === 'FAIL') reasons.push(`${c.cp_id} ไม่ผ่านเกณฑ์ (บันทึก ${rec.rec_id}${rec.ncr_id ? ' · ' + rec.ncr_id : ''})`);
+    requirements.push({ cp_id: c.cp_id, name: c.name, cp_type: c.cp_type, cp_status: c.status, state,
+      rec_id: rec?.rec_id || null, ncr_id: rec?.ncr_id || null, record_date: rec?.record_date || null, record_time: rec?.record_time || null });
+  }
+  if (!applies.length) reasons.push('ผลิตภัณฑ์นี้ยังไม่มีจุดควบคุมที่ต้องตรวจก่อนปล่อย (ยังไม่อยู่ในแผน HACCP) ให้ QA กำหนดในทะเบียนจุดควบคุมก่อน');
+  for (const n of ncrs) {
+    if (!NCR_DONE.includes(n.status)) reasons.push(`${n.ncr_id} ยังไม่ปิด (${n.status})`);
+    else if (n.status === 'Closed' && NCR_DISCARD[n.disposition]) reasons.push(`${n.ncr_id} ตัดสินให้${NCR_DISCARD[n.disposition]}สินค้า`);
+  }
+  const released = await DB.prepare("SELECT rel_id FROM fg_releases WHERE product_code=? AND batch_no=? AND decision='RELEASE'").bind(productCode, batchNo).first();
+  if (released) reasons.push(`Batch นี้ปล่อยแล้ว (${released.rel_id})`);
+  return { product_code: productCode, batch_no: batchNo, requirements, ncrs, reasons, releasable: !reasons.length };
+}
+const relRow = (r) => ({ ...r, rm_lots: r.rm_lots ? JSON.parse(r.rm_lots) : [], checks: r.checks ? JSON.parse(r.checks) : {}, gate: JSON.parse(r.gate) });
+const RELEASE_CHECKS = ['label_ok', 'pack_ok', 'spec_ok'];
+
 // ---------- router ----------
 export default {
   async fetch(req, env) {
@@ -989,7 +1036,8 @@ export default {
 
       // ===== Smart QA: control point register =====
       if (path === '/api/control-points' && method === 'GET') {
-        const { results } = await DB.prepare("SELECT * FROM control_points ORDER BY status='RETIRED', process_ref, cp_id").all();
+        const { results } = await DB.prepare(
+          "SELECT c.*, COALESCE(r.release_required, 0) AS release_required FROM control_points c LEFT JOIN cp_release r ON r.cp_id = c.cp_id ORDER BY c.status='RETIRED', c.process_ref, c.cp_id").all();
         return json(results.map(cpRow));
       }
       if (path === '/api/control-points' && method === 'POST') {
@@ -1005,7 +1053,8 @@ export default {
         const cols = Object.keys(rec);
         await DB.prepare(`INSERT INTO control_points (cp_id,${cols.join(',')},version,created_by,created_at,updated_by,updated_at)
           VALUES (?,${cols.map(() => '?').join(',')},1,?,?,?,?)`).bind(id, ...cols.map((k) => rec[k]), user.username, nowIso(), user.username, nowIso()).run();
-        await audit(DB, user.username, 'user', 'create', 'control_point', id, { name: rec.name, cp_type: rec.cp_type });
+        if (b.release_required) await DB.prepare('INSERT OR REPLACE INTO cp_release (cp_id, release_required) VALUES (?,1)').bind(id).run();
+        await audit(DB, user.username, 'user', 'create', 'control_point', id, { name: rec.name, cp_type: rec.cp_type, release_required: b.release_required ? 1 : 0 });
         return json({ success: true, cp_id: id }, 201);
       }
       const cpm = path.match(/^\/api\/control-points\/([A-Z][A-Z0-9]{1,5}-[A-Z0-9-]{1,20})$/);
@@ -1029,6 +1078,15 @@ export default {
         }
         const fields = [...CP_TEXT, 'cp_type', 'status', 'params', 'products'];
         const changes = diff(row, next, fields);
+        if ('release_required' in b) {
+          const want = b.release_required ? 1 : 0;
+          const cur = (await DB.prepare('SELECT release_required FROM cp_release WHERE cp_id=?').bind(row.cp_id).first())?.release_required ?? 0;
+          if (want !== cur) {
+            await DB.prepare('INSERT INTO cp_release (cp_id, release_required) VALUES (?,?) ON CONFLICT(cp_id) DO UPDATE SET release_required=excluded.release_required')
+              .bind(row.cp_id, want).run();
+            changes.release_required = { from: cur, to: want };
+          }
+        }
         if (!Object.keys(changes).length) return json({ success: true, version: row.version });
         // A new version whenever what a record is judged against changes, so old records keep their meaning.
         const bump = ['params', 'products', 'status', 'cp_type'].some((k) => k in changes);
@@ -1136,6 +1194,121 @@ export default {
           if (ncrId) await audit(DB, user.username, 'user', 'create', 'ncr', ncrId, { source_type: cp.cp_type === 'CCP' ? 'CCP' : 'IN_PROCESS', qc_record: recId });
           return json({ rec_id: recId, result, ncr_id: ncrId, failed }, 201);
         }
+      }
+
+      // Raw-material lots received recently (FM-QC-001), for picking the lots a batch used.
+      if (path === '/api/recv/lots' && method === 'GET') {
+        const days = Math.min(Math.max(parseInt(url.searchParams.get('days') || '120', 10) || 120, 1), 730);
+        const since = new Date(Date.parse(today()) - days * 86400e3).toISOString().slice(0, 10);
+        const { results } = await DB.prepare('SELECT doc_no, recv_date, supplier, data FROM recv_records WHERE recv_date >= ? ORDER BY recv_date DESC, doc_no DESC LIMIT 500').bind(since).all();
+        const lots = [];
+        for (const r of results) {
+          for (const m of JSON.parse(r.data).mats || []) {
+            if (blank(m.lot) || m.result === 'REJECT') continue; // a rejected lot never entered the store
+            lots.push({ doc_no: r.doc_no, recv_date: r.recv_date, supplier: r.supplier, code: m.code || '', lot: String(m.lot), exp: m.exp || '', result: m.result || '' });
+          }
+        }
+        return json(lots);
+      }
+
+      // ===== Smart QA: finished-goods release =====
+      if (path === '/api/release/check' && method === 'GET') {
+        const product = String(url.searchParams.get('product_code') || '');
+        if (!product) fail(400, 'กรุณาเลือกผลิตภัณฑ์');
+        const batch = cleanBatch(url.searchParams.get('batch_no'));
+        const gate = await batchGate(DB, product, batch);
+        const { results } = await DB.prepare('SELECT * FROM fg_releases WHERE product_code=? AND batch_no=? ORDER BY created_at DESC').bind(product, batch).all();
+        return json({ ...gate, history: results.map(relRow) });
+      }
+      if (path === '/api/release' && method === 'GET') {
+        const sp = url.searchParams, where = ['1=1'], p = [];
+        if (sp.get('from')) { where.push('substr(created_at,1,10)>=?'); p.push(sp.get('from')); }
+        if (sp.get('to')) { where.push('substr(created_at,1,10)<=?'); p.push(sp.get('to')); }
+        if (sp.get('decision')) { where.push('decision=?'); p.push(sp.get('decision')); }
+        if (sp.get('q')) { where.push('(batch_no LIKE ? OR rel_id LIKE ? OR product_name LIKE ? OR rm_lots LIKE ?)'); const l = `%${sp.get('q')}%`; p.push(l, l, l, l); }
+        const limit = Math.min(parseInt(sp.get('limit') || '200', 10) || 200, 500);
+        const { results } = await DB.prepare(`SELECT * FROM fg_releases WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT ?`).bind(...p, limit).all();
+        return json(results.map(relRow));
+      }
+      if (path === '/api/release' && method === 'POST') {
+        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่ตัดสินการปล่อยสินค้าได้');
+        const b = await body();
+        const uid = recvUid(b.uid);
+        const done = await DB.prepare('SELECT rel_id, decision FROM fg_releases WHERE uid=?').bind(uid).first();
+        if (done) return json(done);
+        const product = String(b.product_code || '');
+        if (!product) fail(400, 'กรุณาเลือกผลิตภัณฑ์');
+        const batch = cleanBatch(b.batch_no);
+        if (!['RELEASE', 'HOLD', 'REJECT'].includes(b.decision)) fail(400, 'กรุณาเลือกผลการตัดสิน');
+        for (const k of ['mfg_date', 'exp_date']) if (!blank(b[k]) && !/^\d{4}-\d{2}-\d{2}$/.test(String(b[k]))) fail(400, 'รูปแบบวันที่ไม่ถูกต้อง');
+        if (!blank(b.mfg_date) && !blank(b.exp_date) && b.exp_date <= b.mfg_date) fail(400, 'วันหมดอายุต้องหลังวันผลิต');
+        const qty = blank(b.qty) ? null : Number(b.qty);
+        if (qty !== null && !(Number.isFinite(qty) && qty >= 0)) fail(400, 'จำนวนต้องเป็นตัวเลข');
+        const checks = {};
+        for (const k of RELEASE_CHECKS) checks[k] = b.checks?.[k] === true;
+        const lots = Array.isArray(b.rm_lots) ? b.rm_lots.slice(0, 100).map((l) => ({
+          code: String(l?.code || '').slice(0, 40), name: String(l?.name || '').slice(0, 200),
+          lot: String(l?.lot || '').trim().slice(0, 60), doc_no: String(l?.doc_no || '').slice(0, 40),
+        })).filter((l) => l.lot) : [];
+        if (blank(b.note) && b.decision !== 'RELEASE') fail(400, 'กรุณาระบุเหตุผลของการกักหรือไม่ปล่อย');
+        const gate = await batchGate(DB, product, batch);
+        if (b.decision === 'RELEASE') {
+          // Release is the last line of defence: every record, every NCR and every check must be in order.
+          const problems = [...gate.reasons];
+          if (RELEASE_CHECKS.some((k) => !checks[k])) problems.push('ต้องยืนยันการตรวจก่อนปล่อยครบทุกข้อ');
+          if (blank(b.mfg_date) || blank(b.exp_date)) problems.push('ต้องระบุวันผลิตและวันหมดอายุ');
+          if (!lots.length) problems.push('ต้องระบุล็อตวัตถุดิบที่ใช้อย่างน้อย 1 รายการ (เพื่อการสอบย้อนกลับ)');
+          if (problems.length) return json({ error: 'ยังปล่อยสินค้าไม่ได้', reasons: problems }, 422);
+        }
+        const productName = blank(b.product_name) ? null : String(b.product_name).trim().slice(0, 200);
+        for (let attempt = 0; ; attempt++) {
+          const day = today().slice(2).replace(/-/g, '');
+          const last = await DB.prepare('SELECT rel_id FROM fg_releases WHERE rel_id LIKE ? ORDER BY rel_id DESC LIMIT 1').bind(`REL-${day}-%`).first();
+          const relId = `REL-${day}-${String((last ? parseInt(last.rel_id.slice(-3), 10) : 0) + 1).padStart(3, '0')}`;
+          try {
+            await DB.prepare(`INSERT INTO fg_releases (rel_id,uid,product_code,product_name,batch_no,decision,qty,unit,mfg_date,exp_date,rm_lots,checks,gate,note,decided_by,created_by,created_at)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(relId, uid, product, productName, batch, b.decision, qty, nz(blank(b.unit) ? null : String(b.unit).slice(0, 20)),
+              nz(b.mfg_date), nz(b.exp_date), JSON.stringify(lots), JSON.stringify(checks),
+              JSON.stringify({ requirements: gate.requirements, ncrs: gate.ncrs, reasons: gate.reasons }),
+              nz(blank(b.note) ? null : String(b.note).trim().slice(0, 1000)), user.display_name, user.username, nowIso()).run();
+          } catch (e) {
+            if (/idx_rel_once|fg_releases\.product_code/i.test(e.message)) fail(409, 'Batch นี้ปล่อยแล้ว');
+            if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
+              const again = await DB.prepare('SELECT rel_id, decision FROM fg_releases WHERE uid=?').bind(uid).first();
+              if (again) return json(again);
+              continue;
+            }
+            throw e;
+          }
+          await audit(DB, user.username, 'user', b.decision === 'RELEASE' ? 'release' : b.decision === 'HOLD' ? 'hold' : 'reject', 'fg_release', relId,
+            { product_code: product, batch_no: batch, decision: b.decision, rm_lots: lots.map((l) => l.lot), open_reasons: gate.reasons });
+          return json({ rel_id: relId, decision: b.decision }, 201);
+        }
+      }
+
+      // ===== Smart QA: traceability =====
+      // One search across raw-material lots, batches and finished-goods lots: what went in, what came out, and what went wrong.
+      if (path === '/api/trace' && method === 'GET') {
+        const q = String(url.searchParams.get('q') || '').trim();
+        if (q.length < 2) fail(400, 'กรุณาระบุเลขล็อตหรือเลข Batch อย่างน้อย 2 ตัวอักษร');
+        const like = `%${q}%`;
+        const { results: rels } = await DB.prepare('SELECT * FROM fg_releases WHERE batch_no LIKE ? OR rm_lots LIKE ? ORDER BY created_at DESC LIMIT 100').bind(like, like).all();
+        const { results: recvRows } = await DB.prepare('SELECT doc_no, recv_date, supplier, result, data FROM recv_records WHERE data LIKE ? ORDER BY recv_date DESC LIMIT 100').bind(like).all();
+        const received = [];
+        for (const r of recvRows) {
+          for (const m of JSON.parse(r.data).mats || []) {
+            if (String(m.lot || '').toLowerCase().includes(q.toLowerCase())) {
+              received.push({ doc_no: r.doc_no, recv_date: r.recv_date, supplier: r.supplier, code: m.code || '', lot: m.lot, qty: m.qty ?? null, unit: m.unit || '', mfg: m.mfg || '', exp: m.exp || '', result: m.result || r.result });
+            }
+          }
+        }
+        const batches = [...new Set([...rels.map((r) => r.batch_no), ...[q]])];
+        const ph = batches.map(() => '?').join(',');
+        const { results: qc } = await DB.prepare(`SELECT rec_id, cp_id, record_date, product_code, product_name, batch_no, result, ncr_id FROM qc_records WHERE batch_no IN (${ph}) ORDER BY record_date, rec_id`).bind(...batches).all();
+        const { results: ncrs } = await DB.prepare(
+          `SELECT ncr_id, issue_date, status, severity, disposition, source_type, lot_no, product_lot_no, material_name, nc_description FROM ncr_records
+            WHERE lot_no LIKE ? OR product_lot_no LIKE ? OR product_lot_no IN (${ph}) ORDER BY ncr_id LIMIT 200`).bind(like, like, ...batches).all();
+        return json({ q, received, releases: rels.map(relRow), qc, ncrs: ncrs.map((n) => ({ ...n, nc_description: String(n.nc_description || '').slice(0, 200) })) });
       }
 
       fail(404, `Not found: ${method} ${path}`);

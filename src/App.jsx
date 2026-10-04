@@ -17,6 +17,8 @@ import QADashboardPage from './pages/QADashboardPage'
 import QCRecordPage from './pages/QCRecordPage'
 import QCRecordsPage from './pages/QCRecordsPage'
 import ControlPointsPage from './pages/ControlPointsPage'
+import FGReleasePage from './pages/FGReleasePage'
+import TracePage from './pages/TracePage'
 
 const Private = ({ children, role }) => <RequireAuth role={role}>{children}</RequireAuth>
 
@@ -45,6 +47,8 @@ export default function App() {
           <Route path="/qa/record/:cpId" element={<Private><QCRecordPage /></Private>} />
           <Route path="/qa/records" element={<Private><QCRecordsPage /></Private>} />
           <Route path="/qa/control-points" element={<Private><ControlPointsPage /></Private>} />
+          <Route path="/qa/release" element={<Private><FGReleasePage /></Private>} />
+          <Route path="/qa/trace" element={<Private><TracePage /></Private>} />
           <Route path="/account" element={<Private><AccountPage /></Private>} />
           <Route path="/users" element={<Private role="QA_MANAGER"><UsersPage /></Private>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

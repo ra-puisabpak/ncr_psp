@@ -16,7 +16,7 @@ const TEXT_FIELDS = [
   ['corrective_action', 'การแก้ไขเมื่อเบี่ยงเบน'], ['verification', 'การทวนสอบ'], ['form_code', 'รหัสแบบฟอร์ม'],
 ]
 const PARAM_TYPE_TH = { number: 'ตัวเลข', check: 'ใช่ / ไม่ใช่', text: 'ข้อความ' }
-const blankCp = () => ({ cp_id: '', name: '', cp_type: 'TBD', status: 'DRAFT', process_ref: '', products: [], params: [{ key: '', label: '', type: 'number', unit: '', min: '', max: '' }] })
+const blankCp = () => ({ cp_id: '', name: '', cp_type: 'TBD', status: 'DRAFT', release_required: 0, process_ref: '', products: [], params: [{ key: '', label: '', type: 'number', unit: '', min: '', max: '' }] })
 
 function Editor({ value, isNew, onCancel, onSaved }) {
   const [cp, setCp] = useState(() => ({
@@ -36,7 +36,7 @@ function Editor({ value, isNew, onCancel, onSaved }) {
       if (p.type === 'number') Object.assign(o, { unit: p.unit, min: p.min === '' ? undefined : p.min, max: p.max === '' ? undefined : p.max })
       return o
     })
-    const body = { name: cp.name, cp_type: cp.cp_type, process_ref: cp.process_ref || null, products: cp.products, params,
+    const body = { name: cp.name, cp_type: cp.cp_type, process_ref: cp.process_ref || null, products: cp.products, params, release_required: !!cp.release_required,
       ...Object.fromEntries(TEXT_FIELDS.map(([k]) => [k, cp[k] || null])) }
     try {
       if (isNew) await qaApi.createControlPoint({ ...body, cp_id: cp.cp_id })
@@ -73,6 +73,11 @@ function Editor({ value, isNew, onCancel, onSaved }) {
           </select>
         </label>
       </div>
+
+      <label className="flex items-start gap-2 text-sm cursor-pointer bg-teal-50 rounded-lg p-2.5">
+        <input type="checkbox" checked={!!cp.release_required} onChange={(e) => set('release_required', e.target.checked ? 1 : 0)} className="mt-0.5 w-4 h-4 accent-teal-600" />
+        <span>ต้องมีบันทึกที่ผ่านของ Batch ก่อนปล่อยสินค้า (FG Release)<span className="block text-[11px] text-gray-500">ใช้กับจุดที่ตรวจทุก Batch เช่น CCP-01 ไม่ใช้กับจุดที่ตรวจรายวันหรือรายล็อตวัตถุดิบ</span></span>
+      </label>
 
       <div>
         <div className="text-xs text-gray-600 mb-1">ผลิตภัณฑ์ที่ใช้ (ไม่เลือก = ทุกผลิตภัณฑ์)</div>
@@ -173,6 +178,7 @@ export default function ControlPointsPage() {
                   <span className="text-xs font-mono text-gray-500">{c.cp_id} · v{c.version}</span>
                   <Badge cls={CP_TYPE_CLS[c.cp_type]}>{CP_TYPE_TH[c.cp_type]}</Badge>
                   <Badge cls={CP_STATUS_CLS[c.status]}>{CP_STATUS_TH[c.status]}</Badge>
+                  {c.release_required ? <Badge cls="bg-teal-100 text-teal-800">ต้องผ่านก่อนปล่อยสินค้า</Badge> : null}
                 </div>
                 <div className="font-semibold text-gray-800 mt-0.5">{c.name}</div>
                 <div className="text-xs text-gray-500">

@@ -317,3 +317,38 @@ INSERT INTO audit_log (ts,actor,actor_type,action,entity,entity_id,changes)
    FROM control_points WHERE cp_id IN ('CP-HEAT','CP-COOL','CP-BONE','CP-ALLERGEN','CP-VEG','CP-SEAL') AND updated_by='system' AND status='DRAFT';
 UPDATE control_points SET status='RETIRED', version=version+1, updated_at=datetime('now')
  WHERE cp_id IN ('CP-HEAT','CP-COOL','CP-BONE','CP-ALLERGEN','CP-VEG','CP-SEAL') AND updated_by='system' AND status='DRAFT';
+
+-- ===== Smart QA: finished-goods release =====
+-- Which control points must have a passing record for a batch before QA may release it.
+-- Kept apart from control_points so the seeds below never overwrite a choice QA has made.
+CREATE TABLE IF NOT EXISTS cp_release (
+  cp_id            TEXT PRIMARY KEY,
+  release_required INTEGER NOT NULL DEFAULT 0
+);
+-- Per-batch points in QP-HA-001 sheet 7: CCP-01, CCP-02, OPRP-04, OPRP-05, OPRP-06.
+INSERT OR IGNORE INTO cp_release (cp_id, release_required) VALUES
+ ('CCP-01',1),('CCP-02',1),('OPRP-01',0),('OPRP-02',0),('OPRP-03',0),('OPRP-04',1),('OPRP-05',1),('OPRP-06',1);
+
+-- QA decision on one finished-goods batch. `gate` is the state of every requirement when the
+-- decision was taken; `rm_lots` the raw-material lots used, for tracing forward and back.
+CREATE TABLE IF NOT EXISTS fg_releases (
+  rel_id       TEXT PRIMARY KEY,
+  uid          TEXT NOT NULL UNIQUE,
+  product_code TEXT NOT NULL,
+  product_name TEXT,
+  batch_no     TEXT NOT NULL,
+  decision     TEXT NOT NULL CHECK(decision IN ('RELEASE','HOLD','REJECT')),
+  qty          REAL,
+  unit         TEXT,
+  mfg_date     TEXT,
+  exp_date     TEXT,
+  rm_lots      TEXT,
+  checks       TEXT,
+  gate         TEXT NOT NULL,
+  note         TEXT,
+  decided_by   TEXT NOT NULL,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rel_batch ON fg_releases(batch_no);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rel_once ON fg_releases(product_code, batch_no) WHERE decision = 'RELEASE';

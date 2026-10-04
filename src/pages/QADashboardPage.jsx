@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight,
+  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, Boxes, Route,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { qaApi } from '../api/d1Api'
@@ -81,6 +81,17 @@ export default function QADashboardPage() {
         <Tile icon={AlertTriangle} label="ไม่ผ่านเกณฑ์" sub="เปิด NCR อัตโนมัติ" value={summary?.fail ?? '–'} tone={summary?.fail ? 'red' : 'green'} to="/qa/records?result=FAIL" />
         <Tile icon={FileText} label="NCR ค้างอยู่" sub={`จากการผลิต ${summary?.ncrProcessOpen ?? 0} รายการ`} value={summary?.ncrOpen ?? '–'} tone={summary?.ncrOpen ? 'orange' : 'green'} to="/ncr" />
         <Tile icon={ListChecks} label="จุดควบคุมที่อนุมัติแล้ว" sub="ที่เหลือรอ validate" value={`${approved}/${active.length}`} tone={approved === active.length && active.length ? 'green' : 'orange'} to="/qa/control-points" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mb-6">
+        <Link to="/qa/release" className="bg-teal-600 text-white rounded-xl shadow p-4 flex items-center gap-3 hover:bg-teal-700 transition">
+          <Boxes className="w-6 h-6 shrink-0" />
+          <div className="min-w-0"><div className="font-semibold text-sm">FG Release</div><div className="text-[11px] opacity-80">ตรวจและตัดสินปล่อย Batch</div></div>
+        </Link>
+        <Link to="/qa/trace" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <Route className="w-6 h-6 shrink-0 text-teal-700" />
+          <div className="min-w-0"><div className="font-semibold text-sm text-gray-800">สอบย้อนกลับ</div><div className="text-[11px] text-gray-500">ค้นด้วยล็อตหรือ Batch</div></div>
+        </Link>
       </div>
 
       <h2 className="text-sm font-bold text-gray-700 mb-2">บันทึกตรวจ</h2>

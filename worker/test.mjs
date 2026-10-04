@@ -365,6 +365,67 @@ r = await call('POST', '/api/qc', { token: qc, body: qcBody({ cp_id: 'PRP-UV', p
 check('a retired control point takes no records', r.status === 409, r);
 r = await call('GET', '/api/audit?entity_id=CCP-01', { token: qa });
 check('control point changes are in the audit trail', r.status === 200 && r.j.some((a) => a.action === 'approve'), r.j);
+// ----- Smart QA: finished-goods release and traceability -----
+const gateOf = (p, b) => call('GET', `/api/release/check?product_code=${p}&batch_no=${encodeURIComponent(b)}`, { token: qc });
+r = await gateOf('FG0002', 'B260915-01');
+const st = (g, id) => g.requirements.find((x) => x.cp_id === id)?.state;
+check('the gate lists the per-batch points for the product and what blocks release', r.status === 200 && !r.j.releasable
+  && st(r.j, 'CCP-01') === 'FAIL' && st(r.j, 'OPRP-05') === 'MISSING' && !st(r.j, 'CCP-02') && !st(r.j, 'OPRP-04')
+  && r.j.reasons.some((x) => x.includes(failRec.ncr_id)), r.j);
+r = await gateOf('FG0004', 'B1');
+check('a product outside the HACCP plan cannot be released', r.status === 200 && !r.j.releasable && r.j.requirements.length === 0, r.j);
+const relBody = (o = {}) => ({ uid: 'rel-uid-' + Math.random().toString(36).slice(2, 10), product_code: 'FG0002', product_name: 'น้ำพริกตาแดงมันกุ้ง', batch_no: 'B260915-01',
+  decision: 'RELEASE', qty: 120, unit: 'กระปุก', mfg_date: '2026-09-15', exp_date: '2027-03-15',
+  rm_lots: [{ code: 'RM-010', name: 'กุ้งแห้ง', lot: 'LOT-SHRIMP-77', doc_no: 'FM-QC-001-20260910-001' }],
+  checks: { label_ok: true, pack_ok: true, spec_ok: true }, ...o });
+r = await call('POST', '/api/release', { token: qc, body: relBody() });
+check('only QA decides on release', r.status === 403, r);
+r = await call('POST', '/api/release', { token: qa, body: relBody() });
+check('a batch with a failed CCP and an open NCR cannot be released', r.status === 422 && r.j.reasons.length >= 2, r.j);
+r = await call('POST', '/api/release', { token: qa, body: relBody({ decision: 'HOLD' }) });
+check('holding a batch needs a reason', r.status === 400, r);
+r = await call('POST', '/api/release', { token: qa, body: relBody({ decision: 'HOLD', note: 'รอผล NCR' }) });
+check('QA can hold a batch with a reason, and the gate is kept with the decision', r.status === 201 && r.j.decision === 'HOLD', r);
+// a clean batch: both per-batch points pass
+await call('POST', '/api/qc', { token: qc, body: qcBody({ batch_no: 'B260916-01', record_date: '2026-09-16' }) });
+await call('POST', '/api/qc', { token: qc, body: qcBody({ cp_id: 'OPRP-05', batch_no: 'B260916-01', record_date: '2026-09-16', values: { to_cap_min: 35, fill_temp: 55, cap_temp: 45, chilled: true } }) });
+r = await gateOf('FG0002', 'B260916-01');
+check('a batch whose records all pass is releasable', r.status === 200 && r.j.releasable && r.j.requirements.every((x) => x.state === 'PASS'), r.j);
+r = await call('POST', '/api/release', { token: qa, body: relBody({ batch_no: 'B260916-01', rm_lots: [] }) });
+check('release needs the raw-material lots used', r.status === 422 && r.j.reasons.some((x) => /ล็อตวัตถุดิบ/.test(x)), r.j);
+r = await call('POST', '/api/release', { token: qa, body: relBody({ batch_no: 'B260916-01', checks: { label_ok: true, pack_ok: false, spec_ok: true } }) });
+check('release needs every release check confirmed', r.status === 422, r.j);
+r = await call('POST', '/api/release', { token: qa, body: relBody({ batch_no: 'B260916-01', exp_date: '2026-09-01' }) });
+check('expiry must come after manufacture', r.status === 400, r);
+const relOk = relBody({ batch_no: 'B260916-01' });
+r = await call('POST', '/api/release', { token: qa, body: relOk });
+check('QA releases a clean batch', r.status === 201 && /^REL-\d{6}-002$/.test(r.j.rel_id) && r.j.decision === 'RELEASE', r);
+const relId = r.j.rel_id;
+r = await call('POST', '/api/release', { token: qa, body: relOk });
+check('the same release sent twice is stored once', r.status === 200 && r.j.rel_id === relId, r);
+r = await call('POST', '/api/release', { token: qa, body: relBody({ batch_no: 'B260916-01' }) });
+check('a batch is released only once', r.status === 422 && r.j.reasons.some((x) => x.includes(relId)), r.j);
+// a failed CCP can be released only through a closed NCR that decided so
+await call('POST', '/api/qc', { token: qc, body: qcBody({ cp_id: 'OPRP-05', values: { to_cap_min: 35, fill_temp: 55, cap_temp: 45, chilled: true } }) });
+await call('PATCH', `/api/ncr/${failRec.ncr_id}`, { token: qa, body: { disposition: 'RELEASE', disposition_reason: 'ให้ความร้อนซ้ำครบ 120 นาที ผลจุลินทรีย์ผ่าน', root_cause: 'แก๊สหมด', corrective_action: 'ตรวจถังแก๊สก่อนเริ่ม', verification_result: 'Effective' } });
+r = await call('PATCH', `/api/ncr/${failRec.ncr_id}`, { token: qa, body: { status: 'Closed' } });
+r = await gateOf('FG0002', 'B260915-01');
+check('a failed CCP whose NCR QA closed with "release" counts as a concession', r.status === 200 && st(r.j, 'CCP-01') === 'CONCESSION' && r.j.releasable, r.j);
+r = await call('GET', '/api/release?decision=RELEASE', { token: qc });
+check('releases are listed with the lots and the gate', r.status === 200 && r.j.length === 1 && r.j[0].rm_lots[0].lot === 'LOT-SHRIMP-77' && r.j[0].gate.requirements.length === 2 && r.j[0].decided_by === 'QA Manager', r.j);
+r = await call('GET', '/api/trace?q=SHRIMP-77', { token: qc });
+check('tracing a raw-material lot finds the batches, their records and NCRs', r.status === 200 && r.j.releases.length === 2
+  && r.j.qc.some((x) => x.batch_no === 'B260916-01') && r.j.ncrs.some((x) => x.ncr_id === failRec.ncr_id), r.j);
+r = await call('GET', '/api/trace?q=B260916-01', { token: qc });
+check('tracing a batch finds its records and its raw-material lots', r.status === 200 && r.j.releases[0].rm_lots[0].lot === 'LOT-SHRIMP-77' && r.j.qc.length === 2, r.j);
+r = await call('GET', '/api/trace?q=x', { token: qc });
+check('a trace search needs at least two characters', r.status === 400, r);
+r = await call('PATCH', '/api/control-points/OPRP-05', { token: qa, body: { release_required: false } });
+r = await gateOf('FG0002', 'B999');
+check('QA can take a point off the release list', r.status === 200 && !r.j.requirements.some((x) => x.cp_id === 'OPRP-05'), r.j);
+r = await call('GET', '/api/control-points', { token: qc });
+check('the register shows which points are needed for release', r.j.find((c) => c.cp_id === 'CCP-01').release_required === 1 && r.j.find((c) => c.cp_id === 'OPRP-05').release_required === 0, r.j.map((c) => [c.cp_id, c.release_required]));
+
 // The schema runs at every deploy: running it again changes nothing people entered, and retires only untouched first-register entries.
 db.prepare("INSERT INTO control_points (cp_id,name,cp_type,status,params,version,created_by,created_at,updated_by,updated_at) VALUES ('CP-HEAT','old','TBD','DRAFT','[]',1,'system','x','system','x'),('CP-BONE','old','TBD','DRAFT','[]',2,'system','x','qam','x')").run();
 db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));

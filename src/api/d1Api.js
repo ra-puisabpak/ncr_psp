@@ -30,7 +30,11 @@ async function request(path, options = {}, { auth = true } = {}) {
     session.clear()
     window.dispatchEvent(new Event('auth:expired'))
   }
-  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`)
+  if (!res.ok) {
+    const err = new Error(data?.error || `HTTP ${res.status}`)
+    err.data = data // e.g. the list of reasons a release was refused
+    throw err
+  }
   return data
 }
 
@@ -125,4 +129,9 @@ export const qaApi = {
   records: (params = {}) => request(`/api/qc?${new URLSearchParams(params)}`),
   summary: (date) => request(`/api/qc/summary?${new URLSearchParams(date ? { date } : {})}`),
   saveRecord: (body) => post('/api/qc', body),
+  releaseCheck: (product_code, batch_no) => request(`/api/release/check?${new URLSearchParams({ product_code, batch_no })}`),
+  releases: (params = {}) => request(`/api/release?${new URLSearchParams(params)}`),
+  saveRelease: (body) => post('/api/release', body),
+  recvLots: (days = 120) => request(`/api/recv/lots?days=${days}`),
+  trace: (q) => request(`/api/trace?${new URLSearchParams({ q })}`),
 }
