@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { UserPlus } from 'lucide-react'
+import { UserPlus, Pencil } from 'lucide-react'
 import Layout from '../components/Layout'
 import { userApi } from '../api/d1Api'
 import { ROLE_TH, useAuth } from '../auth'
@@ -9,7 +9,8 @@ const ROLES = Object.keys(ROLE_TH)
 const EMPTY = { username: '', display_name: '', role: 'QC', password: '' }
 
 export default function UsersPage() {
-  const { user: me } = useAuth()
+  const { user: me, refresh } = useAuth()
+  const [edit, setEdit] = useState(null)
   const [users, setUsers] = useState([])
   const [f, setF] = useState(EMPTY)
   const [error, setError] = useState(null)
@@ -32,6 +33,16 @@ export default function UsersPage() {
   const resetPassword = (u) => {
     const pw = window.prompt(`รหัสผ่านใหม่ของ ${u.username} (อย่างน้อย 8 ตัวอักษร)`)
     if (pw) run(() => userApi.update(u.username, { password: pw }), `ตั้งรหัสผ่านใหม่ให้ ${u.username} แล้ว`)
+  }
+
+  const saveEdit = (e) => {
+    e.preventDefault()
+    const u = edit.from
+    run(async () => {
+      await userApi.update(u.username, { username: edit.username, display_name: edit.display_name })
+      setEdit(null)
+      if (u.username === me?.username) await refresh()
+    }, `แก้ไขบัญชี ${edit.username.trim().toLowerCase()} แล้ว`)
   }
 
   return (
@@ -64,10 +75,29 @@ export default function UsersPage() {
         <div className="flex flex-col gap-3">
           {users.map((u) => (
             <div key={u.username} className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3 ${u.active ? '' : 'opacity-60'}`}>
-              <div>
-                <div className="font-semibold text-gray-800">{u.display_name} {!u.active && <span className="text-xs text-red-600">(ปิดใช้งาน)</span>}</div>
-                <div className="text-xs text-gray-500">{u.username}</div>
-              </div>
+              {edit?.from.username === u.username ? (
+                <form onSubmit={saveEdit} className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">ชื่อผู้ใช้ (ใช้เข้าสู่ระบบ)
+                    <input className={inputCls} value={edit.username} onChange={(e) => setEdit((x) => ({ ...x, username: e.target.value }))} required autoCapitalize="none" autoCorrect="off" />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">ชื่อ-นามสกุลที่แสดง
+                    <input className={inputCls} value={edit.display_name} onChange={(e) => setEdit((x) => ({ ...x, display_name: e.target.value }))} required />
+                  </label>
+                  <div className="sm:col-span-2 text-[11px] text-gray-500">บันทึกที่ลงไว้แล้วยังแสดงชื่อเดิม (ชื่อผู้ลงบันทึก ณ เวลานั้น) การเปลี่ยนชื่อถูกเก็บในประวัติการแก้ไข · ถ้าเปลี่ยนชื่อผู้ใช้ ครั้งต่อไปต้องเข้าสู่ระบบด้วยชื่อใหม่</div>
+                  <div className="sm:col-span-2 flex gap-2">
+                    <button type="submit" disabled={busy} className="bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-semibold">บันทึก</button>
+                    <button type="button" onClick={() => setEdit(null)} className="border border-gray-300 px-4 py-2 rounded-lg text-xs font-medium text-gray-700 bg-white">ยกเลิก</button>
+                  </div>
+                </form>
+              ) : (
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-gray-800">{u.display_name} {!u.active && <span className="text-xs text-red-600">(ปิดใช้งาน)</span>}</div>
+                    <div className="text-xs text-gray-500">{u.username}</div>
+                  </div>
+                  <button onClick={() => setEdit({ from: u, username: u.username, display_name: u.display_name })} disabled={busy} title="แก้ไขชื่อ" className="p-1.5 text-gray-400 hover:text-blue-700"><Pencil className="w-4 h-4" /></button>
+                </div>
+              )}
               <div className="flex flex-wrap gap-2 items-center">
                 <select className={inputCls + ' !w-auto'} value={u.role} disabled={busy}
                   onChange={(e) => run(() => userApi.update(u.username, { role: e.target.value }), `เปลี่ยนบทบาทของ ${u.username} แล้ว`)}>

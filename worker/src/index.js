@@ -163,9 +163,14 @@ async function currentUser(req, DB) {
 }
 const need = (user, set, msg = 'ไม่มีสิทธิ์ทำรายการนี้') => { if (!set.has(user.role)) fail(403, msg); };
 
+function cleanUsername(v) {
+  const u = String(v || '').trim().toLowerCase();
+  if (!/^[a-z0-9._-]{3,32}$/.test(u)) fail(400, 'ชื่อผู้ใช้ต้องเป็น a-z 0-9 . _ - ยาว 3–32 ตัว');
+  return u;
+}
+
 async function createUser(DB, { username, display_name, role, password }, by) {
-  username = String(username || '').trim().toLowerCase();
-  if (!/^[a-z0-9._-]{3,32}$/.test(username)) fail(400, 'ชื่อผู้ใช้ต้องเป็น a-z 0-9 . _ - ยาว 3–32 ตัว');
+  username = cleanUsername(username);
   if (!ROLES.includes(role)) fail(400, 'บทบาทไม่ถูกต้อง');
   if (blank(display_name)) fail(400, 'กรุณาระบุชื่อที่แสดง');
   const p = passwordProblem(password);
@@ -681,7 +686,20 @@ export default {
         const b = await body();
         const sets = [], vals = [], ch = {};
         if ('role' in b) { if (!ROLES.includes(b.role)) fail(400, 'บทบาทไม่ถูกต้อง'); sets.push('role=?'); vals.push(b.role); ch.role = { from: target.role, to: b.role }; }
-        if ('display_name' in b && !blank(b.display_name)) { sets.push('display_name=?'); vals.push(String(b.display_name).trim()); }
+        if ('display_name' in b) {
+          if (blank(b.display_name)) fail(400, 'กรุณาระบุชื่อที่แสดง');
+          const dn = String(b.display_name).trim().slice(0, 100);
+          if (dn !== target.display_name) { sets.push('display_name=?'); vals.push(dn); ch.display_name = { from: target.display_name, to: dn }; }
+        }
+        // A new login name. Records already saved keep the old one (it is who signed them then); the audit entry links both.
+        let rename = null;
+        if ('username' in b) {
+          const nu = cleanUsername(b.username);
+          if (nu !== target.username) {
+            if (await DB.prepare('SELECT 1 FROM users WHERE username=?').bind(nu).first()) fail(409, 'มีชื่อผู้ใช้นี้แล้ว');
+            rename = nu; sets.push('username=?'); vals.push(nu); ch.username = { from: target.username, to: nu };
+          }
+        }
         if ('active' in b) {
           const act = b.active ? 1 : 0;
           if (!act && target.username === user.username) fail(400, 'ไม่สามารถปิดบัญชีของตนเองได้');
@@ -694,7 +712,10 @@ export default {
           sets.push('pass_hash=?', 'salt=?', 'failed_count=0', 'locked_until=NULL');
           vals.push(await hashPassword(b.password, salt), salt); ch.password = 'reset';
         }
-        if (!sets.length) fail(400, 'ไม่มีข้อมูลให้แก้ไข');
+        if (!sets.length) {
+          if ('display_name' in b || 'username' in b) return json({ success: true, username: target.username });
+          fail(400, 'ไม่มีข้อมูลให้แก้ไข');
+        }
         if (target.role === 'QA_MANAGER' && ((b.role && b.role !== 'QA_MANAGER') || b.active === false || b.active === 0)) {
           const { n } = await DB.prepare("SELECT COUNT(*) AS n FROM users WHERE role='QA_MANAGER' AND active=1 AND username<>?").bind(target.username).first();
           if (n === 0) fail(400, 'ต้องมี QA Manager ที่ใช้งานได้อย่างน้อย 1 คน');
@@ -702,9 +723,10 @@ export default {
         vals.push(target.username);
         const stmts = [DB.prepare(`UPDATE users SET ${sets.join(',')} WHERE username=?`).bind(...vals)];
         if ('password' in b || b.active === false || b.active === 0) stmts.push(DB.prepare('DELETE FROM sessions WHERE username=?').bind(target.username));
+        else if (rename) stmts.push(DB.prepare('UPDATE sessions SET username=? WHERE username=?').bind(rename, target.username));
         await DB.batch(stmts);
-        await audit(DB, user.username, 'user', 'update', 'user', target.username, ch);
-        return json({ success: true });
+        await audit(DB, user.username, 'user', 'update', 'user', rename || target.username, ch);
+        return json({ success: true, username: rename || target.username });
       }
 
       // ----- audit trail (QA only) -----

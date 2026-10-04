@@ -33,13 +33,20 @@ export function AuthProvider({ children }) {
     setUser(res.user)
   }, [])
 
+  // Reload the signed-in account after its login or display name changed.
+  const refresh = useCallback(async () => {
+    const u = await authApi.me()
+    session.save(session.token(), u)
+    setUser(u)
+  }, [])
+
   const logout = useCallback(async () => {
     try { await authApi.logout() } catch { /* session may already be gone */ }
     session.clear()
     setUser(null)
   }, [])
 
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, login, logout, refresh }}>{children}</AuthContext.Provider>
 }
 
 export const useAuth = () => useContext(AuthContext)

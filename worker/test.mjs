@@ -61,6 +61,31 @@ check('QC cannot create users', r.status === 403, r);
 r = await call('GET', '/api/audit', { token: qc });
 check('QC cannot read audit log', r.status === 403, r);
 
+// Rename a login and its display name
+await call('POST', '/api/users', { token: qa, body: { username: 'ren1', display_name: 'Old Name', role: 'QC', password: 'password4' } });
+r = await call('POST', '/api/login', { body: { username: 'ren1', password: 'password4' } });
+const renTok = r.j.token;
+r = await call('PATCH', '/api/users/ren1', { token: qc, body: { username: 'ren2' } });
+check('QC cannot rename users', r.status === 403, r);
+r = await call('PATCH', '/api/users/ren1', { token: qa, body: { username: 'qc1' } });
+check('rename to a taken username is refused', r.status === 409, r);
+r = await call('PATCH', '/api/users/ren1', { token: qa, body: { username: 'Bad Name!' } });
+check('rename to an invalid username is refused', r.status === 400, r);
+r = await call('PATCH', '/api/users/ren1', { token: qa, body: { display_name: '  ' } });
+check('blank display name is refused', r.status === 400, r);
+r = await call('PATCH', '/api/users/ren1', { token: qa, body: { username: ' Ren2 ', display_name: 'New Name' } });
+check('QA manager renames login and display name', r.status === 200 && r.j.username === 'ren2', r);
+r = await call('GET', '/api/me', { token: renTok });
+check('renamed user stays signed in under the new name', r.status === 200 && r.j.username === 'ren2' && r.j.display_name === 'New Name', r);
+r = await call('POST', '/api/login', { body: { username: 'ren1', password: 'password4' } });
+check('old username no longer logs in', r.status === 401, r);
+r = await call('POST', '/api/login', { body: { username: 'ren2', password: 'password4' } });
+check('new username logs in', r.status === 200, r);
+r = await call('GET', '/api/audit?entity_id=ren2', { token: qa });
+check('rename is in the audit log', r.j.some((a) => a.action === 'update' && JSON.parse(a.changes).username?.from === 'ren1'), r);
+r = await call('PATCH', '/api/users/ren2', { token: qa, body: { username: 'ren2', display_name: 'New Name' } });
+check('saving unchanged names is a no-op', r.status === 200, r);
+
 r = await call('POST', '/api/ncr', { token: qc, body: { nc_description: 'พบเศษพลาสติกในพริกแห้ง', source_type: 'RM_RECEIVING', severity: 'Major', supplier_name: 'ABC Supply', material_name: 'พริกแห้ง', lot_no: 'L001', defect_qty: 20, defect_unit: 'kg', ncr_id: 'HACK-1' } });
 check('QC creates NCR with server-made number', r.status === 201 && /^NCR-\d{4}-001$/.test(r.j.ncr_id), r);
 const id = r.j.ncr_id;
