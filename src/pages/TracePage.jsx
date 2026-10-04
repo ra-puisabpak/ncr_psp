@@ -38,7 +38,7 @@ export default function TracePage() {
 
   return (
     <Layout>
-      <Link to="/qa" className="text-sm text-blue-700 flex items-center gap-1 mb-3"><ArrowLeft className="w-4 h-4" />Smart QA</Link>
+      <Link to="/qa" className="text-sm text-blue-700 flex items-center gap-1 mb-3"><ArrowLeft className="w-4 h-4" />PSP QUALITY APP</Link>
       <h1 className="text-lg font-bold text-gray-800 mb-1">สอบย้อนกลับ (Traceability)</h1>
       <div className="text-xs text-gray-500 mb-3">ค้นด้วยเลขล็อตวัตถุดิบหรือเลข Batch สินค้า: รับเข้าเมื่อไร ใช้ใน Batch ไหน ผลตรวจ และ NCR ที่เกี่ยวข้อง สำหรับการเรียกคืนและการซ้อมสอบย้อนกลับ</div>
 

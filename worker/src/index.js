@@ -199,7 +199,7 @@ function closeProblems(r) {
   return p;
 }
 
-// ---------- Smart QA: control points ----------
+// ---------- PSP QUALITY APP: control points ----------
 const CP_TYPES = ['CCP', 'OPRP', 'PRP', 'TBD'];
 const CP_STATUS = ['DRAFT', 'APPROVED', 'RETIRED'];
 const CP_TEXT = ['name', 'process_ref', 'hazard', 'monitoring', 'frequency', 'corrective_action', 'verification', 'form_code'];
@@ -266,7 +266,7 @@ function evaluate(params, values) {
   return { values: out, failed };
 }
 
-// ---------- Smart QA: finished-goods release gate ----------
+// ---------- PSP QUALITY APP: finished-goods release gate ----------
 const NCR_DONE = ['Closed', 'Cancelled'];
 const NCR_DISCARD = { DESTROY: 'ทำลาย', RECALL: 'เรียกคืน', RETURN_SUPPLIER: 'คืนผู้ขาย' };
 const cleanBatch = (v) => { const s = String(v ?? '').trim(); if (!s || s.length > 60) fail(400, 'กรุณาระบุเลขที่ Batch'); return s; };
@@ -1034,7 +1034,7 @@ export default {
         return json({ success: true, status: next.status, closedDate: next.closed_date || '', ncrId: next.ncr_id || '' });
       }
 
-      // ===== Smart QA: control point register =====
+      // ===== PSP QUALITY APP: control point register =====
       if (path === '/api/control-points' && method === 'GET') {
         const { results } = await DB.prepare(
           "SELECT c.*, COALESCE(r.release_required, 0) AS release_required FROM control_points c LEFT JOIN cp_release r ON r.cp_id = c.cp_id ORDER BY c.status='RETIRED', c.process_ref, c.cp_id").all();
@@ -1098,7 +1098,7 @@ export default {
         return json({ success: true, version: next.version });
       }
 
-      // ===== Smart QA: monitoring records =====
+      // ===== PSP QUALITY APP: monitoring records =====
       if (path === '/api/qc' && method === 'GET') {
         const sp = url.searchParams, where = ['1=1'], p = [];
         if (sp.get('from')) { where.push('record_date>=?'); p.push(sp.get('from')); }
@@ -1212,7 +1212,7 @@ export default {
         return json(lots);
       }
 
-      // ===== Smart QA: finished-goods release =====
+      // ===== PSP QUALITY APP: finished-goods release =====
       if (path === '/api/release/check' && method === 'GET') {
         const product = String(url.searchParams.get('product_code') || '');
         if (!product) fail(400, 'กรุณาเลือกผลิตภัณฑ์');
@@ -1287,7 +1287,7 @@ export default {
         }
       }
 
-      // ===== Smart QA: traceability =====
+      // ===== PSP QUALITY APP: traceability =====
       // One search across raw-material lots, batches and finished-goods lots: what went in, what came out, and what went wrong.
       if (path === '/api/trace' && method === 'GET') {
         const q = String(url.searchParams.get('q') || '').trim();
@@ -1312,7 +1312,7 @@ export default {
         return json({ q, received, releases: rels.map(relRow), qc, ncrs: ncrs.map((n) => ({ ...n, nc_description: String(n.nc_description || '').slice(0, 200) })) });
       }
 
-      // ===== Smart QA: personal hygiene check before work =====
+      // ===== PSP QUALITY APP: personal hygiene check before work =====
       if (path === '/api/hyg/items' && method === 'GET') {
         return json((await DB.prepare('SELECT * FROM hyg_items ORDER BY active DESC, sort, item_key').all()).results);
       }

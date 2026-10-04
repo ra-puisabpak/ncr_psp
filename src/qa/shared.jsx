@@ -1,4 +1,4 @@
-// Shared bits of the Smart QA pages: labels, limits and the client-side preview of a check.
+// Shared bits of the PSP QUALITY APP pages: labels, limits and the client-side preview of a check.
 // The server makes the real PASS/FAIL decision; this only colours the form while it is filled in.
 
 export const CP_TYPE_TH = { CCP: 'CCP', OPRP: 'OPRP', PRP: 'PRP', TBD: 'รอตัดสิน' }

@@ -152,7 +152,7 @@ export default function ControlPointsPage() {
 
   return (
     <Layout>
-      <Link to="/qa" className="text-sm text-blue-700 flex items-center gap-1 mb-3"><ArrowLeft className="w-4 h-4" />Smart QA</Link>
+      <Link to="/qa" className="text-sm text-blue-700 flex items-center gap-1 mb-3"><ArrowLeft className="w-4 h-4" />PSP QUALITY APP</Link>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div>
           <h1 className="text-lg font-bold text-gray-800">ทะเบียนจุดควบคุม</h1>

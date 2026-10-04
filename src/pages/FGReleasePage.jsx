@@ -236,7 +236,7 @@ export default function FGReleasePage() {
 
   return (
     <Layout>
-      <Link to="/qa" className="text-sm text-blue-700 flex items-center gap-1 mb-3"><ArrowLeft className="w-4 h-4" />Smart QA</Link>
+      <Link to="/qa" className="text-sm text-blue-700 flex items-center gap-1 mb-3"><ArrowLeft className="w-4 h-4" />PSP QUALITY APP</Link>
       <h1 className="text-lg font-bold text-gray-800 mb-1">FG Release — ตรวจปล่อยสินค้าสำเร็จรูป</h1>
       <div className="text-xs text-gray-500 mb-3">ปล่อยได้เมื่อจุดควบคุมที่กำหนดของ Batch ผ่านครบ และไม่มี NCR ค้าง · ตัดสินได้เฉพาะ QA Manager / FSTL</div>
 

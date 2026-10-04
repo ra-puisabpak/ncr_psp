@@ -63,7 +63,7 @@ export default function QADashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
         <div>
           <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <ShieldCheck className="w-6 h-6 text-teal-600" />Smart QA
+            <ShieldCheck className="w-6 h-6 text-teal-600" />PSP QUALITY APP
           </h1>
           <div className="text-xs text-gray-500">บันทึกการเฝ้าระวังจุดควบคุม · GHPs · HACCP · Codex</div>
         </div>

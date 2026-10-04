@@ -55,7 +55,7 @@ export default function QCRecordsPage() {
 
   return (
     <Layout pageActions={pageActions}>
-      <Link to="/qa" className="text-sm text-blue-700 flex items-center gap-1 mb-3"><ArrowLeft className="w-4 h-4" />Smart QA</Link>
+      <Link to="/qa" className="text-sm text-blue-700 flex items-center gap-1 mb-3"><ArrowLeft className="w-4 h-4" />PSP QUALITY APP</Link>
       <h1 className="text-lg font-bold text-gray-800 mb-3">ประวัติบันทึกตรวจ</h1>
 
       <div className="bg-white rounded-xl shadow p-3 mb-4 flex flex-wrap gap-2 items-end">

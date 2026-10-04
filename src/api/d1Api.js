@@ -121,7 +121,7 @@ export const supplierApi = {
   }),
 }
 
-// Smart QA: control point register and monitoring records.
+// PSP QUALITY APP: control point register and monitoring records.
 export const qaApi = {
   controlPoints: () => request('/api/control-points'),
   createControlPoint: (body) => post('/api/control-points', body),
@@ -136,7 +136,7 @@ export const qaApi = {
   trace: (q) => request(`/api/trace?${new URLSearchParams({ q })}`),
 }
 
-// Smart QA: personal hygiene check before work.
+// PSP QUALITY APP: personal hygiene check before work.
 export const hygApi = {
   items: () => request('/api/hyg/items'),
   createItem: (body) => post('/api/hyg/items', body),

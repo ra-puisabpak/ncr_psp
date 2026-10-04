@@ -213,7 +213,7 @@ CREATE TABLE IF NOT EXISTS print_docs (
   PRIMARY KEY (token_hash, seq)
 );
 
--- ===== Smart QA: control points and in-process QC records =====
+-- ===== PSP QUALITY APP: control points and in-process QC records =====
 -- Register of HACCP control points. Limits live here, not in code, so the HACCP Team can set them
 -- once validated; status DRAFT means the limits are provisional ("รอ validate").
 -- params: JSON list of checks, each {key,label,type:'number'|'check',unit?,min?,max?}.
@@ -318,7 +318,7 @@ INSERT INTO audit_log (ts,actor,actor_type,action,entity,entity_id,changes)
 UPDATE control_points SET status='RETIRED', version=version+1, updated_at=datetime('now')
  WHERE cp_id IN ('CP-HEAT','CP-COOL','CP-BONE','CP-ALLERGEN','CP-VEG','CP-SEAL') AND updated_by='system' AND status='DRAFT';
 
--- ===== Smart QA: finished-goods release =====
+-- ===== PSP QUALITY APP: finished-goods release =====
 -- Which control points must have a passing record for a batch before QA may release it.
 -- Kept apart from control_points so the seeds below never overwrite a choice QA has made.
 CREATE TABLE IF NOT EXISTS cp_release (
@@ -353,7 +353,7 @@ CREATE TABLE IF NOT EXISTS fg_releases (
 CREATE INDEX IF NOT EXISTS idx_rel_batch ON fg_releases(batch_no);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_rel_once ON fg_releases(product_code, batch_no) WHERE decision = 'RELEASE';
 
--- ===== Smart QA: personal hygiene check before work (GHPs) =====
+-- ===== PSP QUALITY APP: personal hygiene check before work (GHPs) =====
 -- Check items: QA edits the wording; `critical` items, when failed, keep the person out of production.
 CREATE TABLE IF NOT EXISTS hyg_items (
   item_key   TEXT PRIMARY KEY,
