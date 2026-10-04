@@ -13,6 +13,10 @@ import LoginPage from './pages/LoginPage'
 import SetupPage from './pages/SetupPage'
 import UsersPage from './pages/UsersPage'
 import AccountPage from './pages/AccountPage'
+import QADashboardPage from './pages/QADashboardPage'
+import QCRecordPage from './pages/QCRecordPage'
+import QCRecordsPage from './pages/QCRecordsPage'
+import ControlPointsPage from './pages/ControlPointsPage'
 
 const Private = ({ children, role }) => <RequireAuth role={role}>{children}</RequireAuth>
 
@@ -37,6 +41,10 @@ export default function App() {
           <Route path="/capa/new" element={<Private><CAPADetailPage /></Private>} />
           <Route path="/capa/:id" element={<Private><CAPADetailPage /></Private>} />
           <Route path="/capa/:id/print" element={<Private><CAPAPrintPage /></Private>} />
+          <Route path="/qa" element={<Private><QADashboardPage /></Private>} />
+          <Route path="/qa/record/:cpId" element={<Private><QCRecordPage /></Private>} />
+          <Route path="/qa/records" element={<Private><QCRecordsPage /></Private>} />
+          <Route path="/qa/control-points" element={<Private><ControlPointsPage /></Private>} />
           <Route path="/account" element={<Private><AccountPage /></Private>} />
           <Route path="/users" element={<Private role="QA_MANAGER"><UsersPage /></Private>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

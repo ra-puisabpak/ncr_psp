@@ -3,7 +3,7 @@ import { History } from 'lucide-react'
 import { auditApi } from '../api/d1Api'
 
 const ACTION_TH = {
-  create: 'สร้าง', update: 'แก้ไข', close: 'ปิด', reopen: 'เปิดใหม่',
+  create: 'สร้าง', update: 'แก้ไข', approve: 'อนุมัติ', close: 'ปิด', reopen: 'เปิดใหม่',
   supplier_reply: 'ผู้ส่งมอบตอบกลับ', create_supplier_link: 'สร้างลิงก์ผู้ส่งมอบ',
   revoke_supplier_link: 'ยกเลิกลิงก์ผู้ส่งมอบ',
 }

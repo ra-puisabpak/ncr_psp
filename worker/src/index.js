@@ -199,6 +199,73 @@ function closeProblems(r) {
   return p;
 }
 
+// ---------- Smart QA: control points ----------
+const CP_TYPES = ['CCP', 'OPRP', 'PRP', 'TBD'];
+const CP_STATUS = ['DRAFT', 'APPROVED', 'RETIRED'];
+const CP_TEXT = ['name', 'process_ref', 'hazard', 'monitoring', 'frequency', 'corrective_action', 'verification', 'form_code'];
+const PARAM_TYPES = ['number', 'check', 'text'];
+
+const cpRow = (r) => r && { ...r, params: JSON.parse(r.params), products: r.products ? JSON.parse(r.products) : [] };
+
+function cleanParams(list) {
+  if (!Array.isArray(list) || !list.length || list.length > 20) fail(400, 'ต้องมีรายการตรวจ 1–20 รายการ');
+  const seen = new Set();
+  return list.map((p) => {
+    const key = String(p?.key || '').trim();
+    if (!/^[a-z0-9_]{1,30}$/.test(key) || seen.has(key)) fail(400, `รหัสรายการตรวจไม่ถูกต้องหรือซ้ำ: ${key || '(ว่าง)'}`);
+    seen.add(key);
+    if (blank(p.label) || String(p.label).length > 120) fail(400, `กรุณาระบุชื่อรายการตรวจ ${key}`);
+    if (!PARAM_TYPES.includes(p.type)) fail(400, `ชนิดของรายการตรวจ ${key} ไม่ถูกต้อง`);
+    const out = { key, label: String(p.label).trim(), type: p.type };
+    if (p.type === 'number') {
+      if (!blank(p.unit)) out.unit = String(p.unit).trim().slice(0, 20);
+      for (const k of ['min', 'max']) {
+        if (blank(p[k])) continue;
+        const n = Number(p[k]);
+        if (!Number.isFinite(n)) fail(400, `ค่า ${k} ของ ${out.label} ต้องเป็นตัวเลข`);
+        out[k] = n;
+      }
+      if (out.min !== undefined && out.max !== undefined && out.min > out.max) fail(400, `ค่าต่ำสุดของ ${out.label} มากกว่าค่าสูงสุด`);
+    }
+    return out;
+  });
+}
+function cleanProducts(list) {
+  if (list === null || list === undefined || list === '') return null;
+  if (!Array.isArray(list) || list.length > 100 || list.some((c) => !/^[A-Za-z0-9_-]{1,30}$/.test(String(c)))) fail(400, 'รายการผลิตภัณฑ์ไม่ถูกต้อง');
+  return list.length ? JSON.stringify([...new Set(list.map(String))]) : null;
+}
+const limitText = (p) => {
+  const u = p.unit ? ` ${p.unit}` : '';
+  if (p.min !== undefined && p.max !== undefined) return `${p.min}–${p.max}${u}`;
+  if (p.min !== undefined) return `≥ ${p.min}${u}`;
+  if (p.max !== undefined) return `≤ ${p.max}${u}`;
+  return p.type === 'check' ? 'ต้องเป็น "ใช่"' : 'บันทึกค่า';
+};
+// Checks one entry against the limits in force. Every number and every check must be answered.
+function evaluate(params, values) {
+  const out = {}, failed = [];
+  for (const p of params) {
+    const v = values?.[p.key];
+    if (p.type === 'number') {
+      if (blank(v)) fail(400, `กรุณากรอก ${p.label}`);
+      const n = Number(v);
+      if (!Number.isFinite(n)) fail(400, `${p.label} ต้องเป็นตัวเลข`);
+      out[p.key] = n;
+      if ((p.min !== undefined && n < p.min) || (p.max !== undefined && n > p.max)) {
+        failed.push({ key: p.key, label: p.label, value: `${n}${p.unit ? ' ' + p.unit : ''}`, limit: limitText(p) });
+      }
+    } else if (p.type === 'check') {
+      if (v !== true && v !== false) fail(400, `กรุณาเลือกผลของ "${p.label}"`);
+      out[p.key] = v;
+      if (!v) failed.push({ key: p.key, label: p.label, value: 'ไม่ใช่', limit: limitText(p) });
+    } else if (!blank(v)) {
+      out[p.key] = String(v).trim().slice(0, 200);
+    }
+  }
+  return { values: out, failed };
+}
+
 // ---------- router ----------
 export default {
   async fetch(req, env) {
@@ -920,6 +987,156 @@ export default {
         return json({ success: true, status: next.status, closedDate: next.closed_date || '', ncrId: next.ncr_id || '' });
       }
 
+      // ===== Smart QA: control point register =====
+      if (path === '/api/control-points' && method === 'GET') {
+        const { results } = await DB.prepare("SELECT * FROM control_points ORDER BY status='RETIRED', process_ref, cp_id").all();
+        return json(results.map(cpRow));
+      }
+      if (path === '/api/control-points' && method === 'POST') {
+        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่เพิ่มจุดควบคุมได้');
+        const b = await body();
+        const id = String(b.cp_id || '').trim().toUpperCase();
+        if (!/^CP-[A-Z0-9-]{2,20}$/.test(id)) fail(400, 'รหัสจุดควบคุมต้องขึ้นต้นด้วย CP- เช่น CP-UV');
+        if (blank(b.name)) fail(400, 'กรุณาระบุชื่อจุดควบคุม');
+        if (await DB.prepare('SELECT 1 FROM control_points WHERE cp_id=?').bind(id).first()) fail(409, 'มีรหัสจุดควบคุมนี้แล้ว');
+        const rec = { cp_type: CP_TYPES.includes(b.cp_type) ? b.cp_type : 'TBD', status: 'DRAFT',
+          params: JSON.stringify(cleanParams(b.params)), products: cleanProducts(b.products) };
+        for (const k of CP_TEXT) rec[k] = nz(typeof b[k] === 'string' ? b[k].trim().slice(0, 1000) : null);
+        const cols = Object.keys(rec);
+        await DB.prepare(`INSERT INTO control_points (cp_id,${cols.join(',')},version,created_by,created_at,updated_by,updated_at)
+          VALUES (?,${cols.map(() => '?').join(',')},1,?,?,?,?)`).bind(id, ...cols.map((k) => rec[k]), user.username, nowIso(), user.username, nowIso()).run();
+        await audit(DB, user.username, 'user', 'create', 'control_point', id, { name: rec.name, cp_type: rec.cp_type });
+        return json({ success: true, cp_id: id }, 201);
+      }
+      const cpm = path.match(/^\/api\/control-points\/(CP-[A-Z0-9-]{2,20})$/);
+      if (cpm && method === 'PATCH') {
+        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่แก้ไขจุดควบคุมได้');
+        const b = await body();
+        const row = await DB.prepare('SELECT * FROM control_points WHERE cp_id=?').bind(cpm[1]).first();
+        if (!row) fail(404, 'ไม่พบจุดควบคุม');
+        const next = { ...row };
+        for (const k of CP_TEXT) if (k in b) next[k] = nz(typeof b[k] === 'string' ? b[k].trim().slice(0, 1000) : null);
+        if (blank(next.name)) fail(400, 'กรุณาระบุชื่อจุดควบคุม');
+        if ('cp_type' in b) { if (!CP_TYPES.includes(b.cp_type)) fail(400, 'ประเภทจุดควบคุมไม่ถูกต้อง'); next.cp_type = b.cp_type; }
+        if ('status' in b) { if (!CP_STATUS.includes(b.status)) fail(400, 'สถานะไม่ถูกต้อง'); next.status = b.status; }
+        if ('params' in b) next.params = JSON.stringify(cleanParams(b.params));
+        if ('products' in b) next.products = cleanProducts(b.products);
+        // Approving says the limits are validated: every measured value then needs a limit to be judged against.
+        if (next.status === 'APPROVED') {
+          if (next.cp_type === 'TBD') fail(422, 'ต้องกำหนดประเภท (CCP / OPRP / PRP) ก่อนอนุมัติ');
+          const open = JSON.parse(next.params).filter((p) => p.type === 'number' && p.min === undefined && p.max === undefined);
+          if (open.length) fail(422, `ต้องกำหนดค่าเกณฑ์ก่อนอนุมัติ: ${open.map((p) => p.label).join(', ')}`);
+        }
+        const fields = [...CP_TEXT, 'cp_type', 'status', 'params', 'products'];
+        const changes = diff(row, next, fields);
+        if (!Object.keys(changes).length) return json({ success: true, version: row.version });
+        // A new version whenever what a record is judged against changes, so old records keep their meaning.
+        const bump = ['params', 'products', 'status', 'cp_type'].some((k) => k in changes);
+        next.version = row.version + (bump ? 1 : 0);
+        await DB.prepare(`UPDATE control_points SET ${fields.map((k) => `${k}=?`).join(',')}, version=?, updated_by=?, updated_at=? WHERE cp_id=?`)
+          .bind(...fields.map((k) => next[k]), next.version, user.username, nowIso(), row.cp_id).run();
+        await audit(DB, user.username, 'user', b.status === 'APPROVED' && row.status !== 'APPROVED' ? 'approve' : 'update',
+          'control_point', row.cp_id, { ...changes, version: { from: row.version, to: next.version } });
+        return json({ success: true, version: next.version });
+      }
+
+      // ===== Smart QA: monitoring records =====
+      if (path === '/api/qc' && method === 'GET') {
+        const sp = url.searchParams, where = ['1=1'], p = [];
+        if (sp.get('from')) { where.push('record_date>=?'); p.push(sp.get('from')); }
+        if (sp.get('to')) { where.push('record_date<=?'); p.push(sp.get('to')); }
+        for (const k of ['cp_id', 'result']) if (sp.get(k)) { where.push(`${k}=?`); p.push(sp.get(k)); }
+        if (sp.get('q')) { where.push('(batch_no LIKE ? OR rec_id LIKE ? OR product_name LIKE ? OR ncr_id LIKE ?)'); const l = `%${sp.get('q')}%`; p.push(l, l, l, l); }
+        const limit = Math.min(parseInt(sp.get('limit') || '200', 10) || 200, 500);
+        const { results } = await DB.prepare(
+          `SELECT * FROM qc_records WHERE ${where.join(' AND ')} ORDER BY record_date DESC, rec_id DESC LIMIT ?`).bind(...p, limit).all();
+        return json(results.map((r) => ({ ...r, values: JSON.parse(r.values), failed: r.failed ? JSON.parse(r.failed) : [] })));
+      }
+      if (path === '/api/qc/summary' && method === 'GET') {
+        const day = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('date') || '') ? url.searchParams.get('date') : today();
+        const { results: byCp } = await DB.prepare(
+          `SELECT cp_id, COUNT(*) AS total, SUM(result='FAIL') AS fail FROM qc_records WHERE record_date=? GROUP BY cp_id`).bind(day).all();
+        const ncr = await DB.prepare(
+          "SELECT COUNT(*) AS open, SUM(source_type IN ('CCP','IN_PROCESS')) AS process FROM ncr_records WHERE status NOT IN ('Closed','Cancelled')").first();
+        const { results: recent } = await DB.prepare(
+          'SELECT rec_id, cp_id, record_date, record_time, product_name, batch_no, result, ncr_id, inspector FROM qc_records ORDER BY created_at DESC LIMIT 10').all();
+        const total = byCp.reduce((s, r) => s + r.total, 0), failCount = byCp.reduce((s, r) => s + (r.fail || 0), 0);
+        return json({ date: day, total, fail: failCount, pass: total - failCount, byCp,
+          ncrOpen: ncr?.open || 0, ncrProcessOpen: ncr?.process || 0, recent });
+      }
+      if (path === '/api/qc' && method === 'POST') {
+        need(user, WRITERS);
+        const b = await body();
+        const uid = recvUid(b.uid);
+        const done = await DB.prepare('SELECT rec_id, result, ncr_id FROM qc_records WHERE uid=?').bind(uid).first();
+        if (done) return json(done); // the same save arriving twice
+        const cp = cpRow(await DB.prepare('SELECT * FROM control_points WHERE cp_id=?').bind(String(b.cp_id || '')).first());
+        if (!cp) fail(404, 'ไม่พบจุดควบคุม');
+        if (cp.status === 'RETIRED') fail(409, 'จุดควบคุมนี้ยกเลิกการใช้งานแล้ว');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(b.record_date || ''))) fail(400, 'กรุณาระบุวันที่ตรวจ');
+        if (b.record_date > today()) fail(400, 'วันที่ตรวจต้องไม่เป็นวันในอนาคต');
+        if (!blank(b.record_time) && !/^\d{2}:\d{2}$/.test(String(b.record_time))) fail(400, 'รูปแบบเวลาไม่ถูกต้อง');
+        if (blank(b.batch_no) || String(b.batch_no).length > 60) fail(400, 'กรุณาระบุเลขที่ Batch');
+        if (cp.products.length && !cp.products.includes(String(b.product_code || ''))) fail(400, 'ผลิตภัณฑ์นี้ไม่อยู่ในขอบเขตของจุดควบคุม');
+        const { values, failed } = evaluate(cp.params, b.values);
+        const result = failed.length ? 'FAIL' : 'PASS';
+        const rec = {
+          cp_id: cp.cp_id, cp_version: cp.version, cp_status: cp.status, record_date: b.record_date, record_time: nz(b.record_time),
+          shift: nz(blank(b.shift) ? null : String(b.shift).trim().slice(0, 20)), product_code: nz(b.product_code),
+          product_name: nz(blank(b.product_name) ? null : String(b.product_name).trim().slice(0, 200)),
+          batch_no: String(b.batch_no).trim(), result, values: JSON.stringify(values), failed: failed.length ? JSON.stringify(failed) : null,
+          note: nz(blank(b.note) ? null : String(b.note).trim().slice(0, 1000)), inspector: user.display_name,
+        };
+        for (let attempt = 0; ; attempt++) {
+          const day = rec.record_date.slice(2).replace(/-/g, '');
+          const last = await DB.prepare('SELECT rec_id FROM qc_records WHERE rec_id LIKE ? ORDER BY rec_id DESC LIMIT 1').bind(`QC-${day}-%`).first();
+          const recId = `QC-${day}-${String((last ? parseInt(last.rec_id.slice(-4), 10) : 0) + 1).padStart(4, '0')}`;
+          const ncrId = failed.length ? (await nextId(DB, 'ncr_records', 'ncr_id', 'NCR')) : null;
+          const stmts = [];
+          if (ncrId) {
+            // A failed check is a deviation: the batch is held and an NCR opened in the same write, so neither can be lost.
+            const ccp = cp.cp_type === 'CCP';
+            const f = {
+              source_type: ccp ? 'CCP' : 'IN_PROCESS', source_ref: recId, process_ref: cp.process_ref,
+              found_date: rec.record_date, found_time: rec.record_time, reported_by: user.display_name,
+              material_code: rec.product_code, material_name: rec.product_name, product_lot_no: rec.batch_no,
+              parameter_id: cp.cp_id, parameter_name: failed.map((x) => x.label).join(', ').slice(0, 300),
+              critical_limit: failed.map((x) => `${x.label}: ${x.limit}`).join('\n').slice(0, 1000),
+              actual_result: failed.map((x) => `${x.label}: ${x.value}`).join('\n').slice(0, 1000),
+              nc_description: [
+                `${cp.name} (${cp.cp_id}${cp.cp_type !== 'TBD' ? ' · ' + cp.cp_type : ''}) ไม่ผ่านเกณฑ์ — บันทึก ${recId}`,
+                `ผลิตภัณฑ์: ${[rec.product_code, rec.product_name].filter(Boolean).join(' ') || '-'} · Batch ${rec.batch_no}`,
+                ...failed.map((x) => `• ${x.label}: ${x.value} (เกณฑ์ ${x.limit})`),
+                cp.status === 'DRAFT' ? 'หมายเหตุ: เกณฑ์ของจุดควบคุมนี้ยังเป็นฉบับร่าง รอ validate' : '',
+                rec.note ? `หมายเหตุผู้ตรวจ: ${rec.note}` : '',
+              ].filter(Boolean).join('\n').slice(0, 2000),
+              immediate_action: `กักกัน Batch ${rec.batch_no} รอ QA ตัดสิน${cp.corrective_action ? ' — ' + cp.corrective_action : ''}`.slice(0, 1000),
+              hold_location: null, severity: ccp ? 'Critical' : 'Major', shipped_status: 'NOT_SHIPPED',
+            };
+            const cols = Object.keys(f);
+            stmts.push(DB.prepare(
+              `INSERT INTO ncr_records (ncr_id,issue_date,status,created_by,updated_by,created_at,updated_at,${cols.join(',')})
+               VALUES (?,?,?,?,?,?,?,${cols.map(() => '?').join(',')})`
+            ).bind(ncrId, today(), 'Open', user.username, user.username, nowIso(), nowIso(), ...cols.map((k) => f[k])));
+          }
+          const cols = Object.keys(rec);
+          stmts.push(DB.prepare(
+            `INSERT INTO qc_records (rec_id,uid,${cols.map((c) => (c === 'values' ? '"values"' : c)).join(',')},ncr_id,created_by,created_at)
+             VALUES (?,?,${cols.map(() => '?').join(',')},?,?,?)`
+          ).bind(recId, uid, ...cols.map((k) => rec[k]), ncrId, user.username, nowIso()));
+          try { await DB.batch(stmts); } catch (e) {
+            if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
+              const again = await DB.prepare('SELECT rec_id, result, ncr_id FROM qc_records WHERE uid=?').bind(uid).first();
+              if (again) return json(again);
+              continue;
+            }
+            throw e;
+          }
+          await audit(DB, user.username, 'user', 'create', 'qc_record', recId, { cp_id: cp.cp_id, batch_no: rec.batch_no, result, ncr_id: ncrId });
+          if (ncrId) await audit(DB, user.username, 'user', 'create', 'ncr', ncrId, { source_type: cp.cp_type === 'CCP' ? 'CCP' : 'IN_PROCESS', qc_record: recId });
+          return json({ rec_id: recId, result, ncr_id: ncrId, failed }, 201);
+        }
+      }
 
       fail(404, `Not found: ${method} ${path}`);
     } catch (e) {

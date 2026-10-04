@@ -7,3 +7,5 @@ export const LOGO_URL = '/logo.png'
 export const FORM_CODE_NCR = 'FM-QA-001'
 export const FORM_CODE_CAPA = 'FM-QA-005'
 export const FORM_REVISION = '00'
+// FM-QC-001 receiving inspection app (separate Worker, same login).
+export const RECEIVING_URL = 'https://puisabpak-receiving.rapuisabpak.workers.dev'

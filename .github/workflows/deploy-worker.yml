@@ -24,6 +24,16 @@ jobs:
         working-directory: worker
         run: node --no-warnings test.mjs
 
+      # Every statement in schema.sql is CREATE ... IF NOT EXISTS or INSERT OR IGNORE,
+      # so applying it again only adds what is new and never touches existing records.
+      - name: Apply database schema
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: d1 execute puisabpak-ncr --remote --file=schema.sql
+
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
         with:

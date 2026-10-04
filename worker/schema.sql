@@ -212,3 +212,77 @@ CREATE TABLE IF NOT EXISTS print_docs (
   created_at TEXT NOT NULL,
   PRIMARY KEY (token_hash, seq)
 );
+
+-- ===== Smart QA: control points and in-process QC records =====
+-- Register of HACCP control points. Limits live here, not in code, so the HACCP Team can set them
+-- once validated; status DRAFT means the limits are provisional ("รอ validate").
+-- params: JSON list of checks, each {key,label,type:'number'|'check',unit?,min?,max?}.
+CREATE TABLE IF NOT EXISTS control_points (
+  cp_id        TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  process_ref  TEXT,
+  hazard       TEXT,
+  cp_type      TEXT NOT NULL DEFAULT 'TBD' CHECK(cp_type IN ('CCP','OPRP','PRP','TBD')),
+  status       TEXT NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','APPROVED','RETIRED')),
+  products     TEXT,
+  params       TEXT NOT NULL,
+  monitoring   TEXT,
+  frequency    TEXT,
+  corrective_action TEXT,
+  verification TEXT,
+  form_code    TEXT,
+  version      INTEGER NOT NULL DEFAULT 1,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  updated_by   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+
+-- One monitoring record per check. Kept as entered (append-only); the server decides PASS/FAIL
+-- against the limits in force (cp_version), and a FAIL opens an NCR in the same write.
+CREATE TABLE IF NOT EXISTS qc_records (
+  rec_id       TEXT PRIMARY KEY,
+  uid          TEXT NOT NULL UNIQUE,
+  cp_id        TEXT NOT NULL,
+  cp_version   INTEGER NOT NULL,
+  cp_status    TEXT NOT NULL,
+  record_date  TEXT NOT NULL,
+  record_time  TEXT,
+  shift        TEXT,
+  product_code TEXT,
+  product_name TEXT,
+  batch_no     TEXT NOT NULL,
+  result       TEXT NOT NULL CHECK(result IN ('PASS','FAIL')),
+  "values"     TEXT NOT NULL,
+  failed       TEXT,
+  note         TEXT,
+  ncr_id       TEXT,
+  inspector    TEXT NOT NULL,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_qc_date ON qc_records(record_date);
+CREATE INDEX IF NOT EXISTS idx_qc_batch ON qc_records(batch_no);
+CREATE INDEX IF NOT EXISTS idx_qc_cp ON qc_records(cp_id);
+
+-- Starting register, taken from HACCP CCP/OPRP Decision Tree Rev.01 (น้ำพริก คลอง 9).
+-- Every entry is DRAFT: the plan has not approved any CCP yet and the limits still need validation.
+INSERT OR IGNORE INTO control_points (cp_id,name,process_ref,hazard,cp_type,status,products,params,monitoring,frequency,corrective_action,verification,created_by,created_at,updated_by,updated_at) VALUES
+('CP-HEAT','การให้ความร้อน (ผัด/กวน)','PC0007','B – จุลินทรีย์ก่อโรค','TBD','DRAFT','["FG0001","FG0002","FG0003","FG0005"]',
+ '[{"key":"core_temp","label":"อุณหภูมิผลิตภัณฑ์","type":"number","unit":"°C","min":85},{"key":"hold_min","label":"เวลาที่คงอุณหภูมิ","type":"number","unit":"นาที","min":120},{"key":"thermometer","label":"ใช้เทอร์โมมิเตอร์ที่สอบเทียบแล้ว","type":"check"}]',
+ 'วัดอุณหภูมิและจับเวลาด้วยเทอร์โมมิเตอร์/นาฬิกาที่สอบเทียบแล้ว','ทุก Batch / ตาม WI','หยุดกระบวนการ กักกัน Batch ประเมินตามเกณฑ์ deviation ห้ามปล่อยจนกว่า QA ตัดสิน','สอบเทียบเครื่องมือ + ทบทวนบันทึก + Thermal validation','system',datetime('now'),'system',datetime('now')),
+('CP-COOL','การพักให้เย็น','PC0009','B – การเจริญของจุลินทรีย์','TBD','DRAFT',NULL,
+ '[{"key":"end_temp","label":"อุณหภูมิเมื่อสิ้นสุดการพัก","type":"number","unit":"°C"},{"key":"cool_min","label":"เวลาที่ใช้พัก","type":"number","unit":"นาที"}]',
+ 'วัดอุณหภูมิและเวลาตาม Cooling Profile','ทุก Batch','กักกัน Batch และประเมินความเสี่ยง','Cooling profile verification','system',datetime('now'),'system',datetime('now')),
+('CP-BONE','การคัดก้างปลา','PC0003','P – ก้างปลา','TBD','DRAFT','["FG0005","FG0008"]',
+ '[{"key":"no_bone","label":"ไม่พบก้างเกินเกณฑ์ยอมรับ","type":"check"},{"key":"sample_g","label":"น้ำหนักตัวอย่างที่ตรวจ","type":"number","unit":"กรัม"}]',
+ 'ตรวจด้วยวิธีที่อนุมัติ','ตาม WI','หยุดและคัดแยกซ้ำ 100% กักกันผลิตภัณฑ์ที่เกี่ยวข้อง','Trend + ประสิทธิผลของวิธีตรวจ','system',datetime('now'),'system',datetime('now')),
+('CP-ALLERGEN','Line clearance สารก่อภูมิแพ้ (กุ้ง)','PC0008','C – สารก่อภูมิแพ้','TBD','DRAFT','["FG0002"]',
+ '[{"key":"formula","label":"วัตถุดิบตรงตามสูตรที่อนุมัติ","type":"check"},{"key":"label","label":"ฉลากระบุสารก่อภูมิแพ้ถูกต้อง","type":"check"},{"key":"line_clean","label":"ทำความสะอาดไลน์ก่อนเปลี่ยนสินค้าแล้ว","type":"check"}]',
+ 'ตรวจสูตร ฉลาก และ Line clearance ตาม Checklist','ทุก Batch / ทุกครั้งที่เปลี่ยนสินค้า','หยุดไลน์ กักกันสินค้า แก้ไขฉลากเมื่อ QA อนุมัติเท่านั้น','Line clearance / cleaning verification','system',datetime('now'),'system',datetime('now')),
+('CP-VEG','การควบคุมมังสวิรัติ','PC0005','C – ปนเปื้อนวัตถุดิบที่ไม่ใช่มังสวิรัติ','TBD','DRAFT','["FG0003","FG0012"]',
+ '[{"key":"approved_list","label":"ใช้เฉพาะวัตถุดิบใน Approved Ingredient List","type":"check"},{"key":"line_clean","label":"Line clearance ก่อนผลิตแล้ว","type":"check"}]',
+ 'ตรวจวัตถุดิบและ Line clearance ตาม Checklist','ทุก Batch / ทุกครั้งที่เปลี่ยนสินค้า','กักกัน ประเมินความเสี่ยงโดย QA','Vegetarian verification','system',datetime('now'),'system',datetime('now')),
+('CP-SEAL','การซีลซอง / ปิดฝา','PC0008','B/P – การปนเปื้อนหลังการให้ความร้อน','TBD','DRAFT',NULL,
+ '[{"key":"seal_ok","label":"ซีลสมบูรณ์ ไม่รั่ว / ฝาปิดแน่น","type":"check"},{"key":"position","label":"ช่วงที่ตรวจ (ต้น/กลาง/ท้าย Batch)","type":"text"}]',
+ 'ตรวจด้วยสายตาและวิธีทดสอบที่ validate แล้ว','ต้น / กลาง / ท้าย Batch','หยุดเครื่อง แยกช่วงผลิตที่เกี่ยวข้อง','Seal/closure verification','system',datetime('now'),'system',datetime('now'));

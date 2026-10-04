@@ -305,6 +305,61 @@ r = await call('GET', '/api/health', { headers: { Origin: 'https://app.example' 
 check('allowed origin gets CORS header', r.res.headers.get('Access-Control-Allow-Origin') === 'https://app.example');
 r = await call('DELETE', `/api/ncr/${id}`, { token: qa });
 check('no delete route', r.status === 404, r);
+// ----- Smart QA: control points and monitoring records -----
+r = await call('GET', '/api/control-points', { token: qc });
+check('control point register starts from the HACCP plan, all draft', r.status === 200 && r.j.length === 6 && r.j.every((c) => c.status === 'DRAFT') && r.j.find((c) => c.cp_id === 'CP-HEAT').params[0].min === 85, r.j);
+r = await call('PATCH', '/api/control-points/CP-HEAT', { token: qc, body: { status: 'APPROVED' } });
+check('QC cannot change a control point', r.status === 403, r);
+r = await call('PATCH', '/api/control-points/CP-COOL', { token: qa, body: { cp_type: 'OPRP', status: 'APPROVED' } });
+check('a control point without limits cannot be approved', r.status === 422 && /อุณหภูมิ/.test(r.j.error), r);
+r = await call('PATCH', '/api/control-points/CP-HEAT', { token: qa, body: { status: 'APPROVED' } });
+check('a control point must be classified before approval', r.status === 422, r);
+r = await call('PATCH', '/api/control-points/CP-HEAT', { token: qa, body: { params: [{ key: 'a', label: 'x', type: 'number', min: 5, max: 1 }] } });
+check('min above max is refused', r.status === 400, r);
+r = await call('PATCH', '/api/control-points/CP-HEAT', { token: qa, body: { cp_type: 'CCP', status: 'APPROVED' } });
+check('QA approves a classified control point and its version moves on', r.status === 200 && r.j.version === 2, r);
+r = await call('POST', '/api/control-points', { token: qa, body: { cp_id: 'cp-uv', name: 'UV ฆ่าเชื้อบรรจุภัณฑ์', params: [{ key: 'uv_min', label: 'เวลาฉาย UV', type: 'number', unit: 'นาที' }] } });
+check('QA adds a control point', r.status === 201 && r.j.cp_id === 'CP-UV', r);
+r = await call('POST', '/api/control-points', { token: qa, body: { cp_id: 'CP-UV', name: 'x', params: [{ key: 'a', label: 'a', type: 'check' }] } });
+check('duplicate control point is refused', r.status === 409, r);
+
+const qcBody = (o = {}) => ({ uid: 'qc-uid-' + Math.random().toString(36).slice(2, 10), cp_id: 'CP-HEAT', record_date: '2026-09-15', record_time: '10:30',
+  product_code: 'FG0002', product_name: 'น้ำพริกตาแดงมันกุ้ง', batch_no: 'B260915-01', values: { core_temp: 88.5, hold_min: 125, thermometer: true }, ...o });
+r = await call('POST', '/api/qc', { token: qc, body: qcBody({ values: { core_temp: 88 } }) });
+check('a record must answer every check', r.status === 400, r);
+r = await call('POST', '/api/qc', { token: qc, body: qcBody({ product_code: 'FG0007' }) });
+check('a product outside the control point is refused', r.status === 400, r);
+r = await call('POST', '/api/qc', { token: qc, body: qcBody({ batch_no: '' }) });
+check('a record needs a batch number', r.status === 400, r);
+const passBody = qcBody();
+r = await call('POST', '/api/qc', { token: qc, body: passBody });
+check('a passing record is saved without an NCR', r.status === 201 && r.j.result === 'PASS' && !r.j.ncr_id && /^QC-260915-0001$/.test(r.j.rec_id), r);
+const passId = r.j.rec_id;
+r = await call('POST', '/api/qc', { token: qc, body: passBody });
+check('the same save sent twice is stored once', r.status === 200 && r.j.rec_id === passId, r);
+r = await call('POST', '/api/qc', { token: qc, body: qcBody({ result: 'PASS', inspector: 'someone else', values: { core_temp: 80.2, hold_min: 125, thermometer: true } }) });
+check('a failing CCP record opens a critical NCR, whatever the device claims', r.status === 201 && r.j.result === 'FAIL' && /^NCR-\d{4}-\d{3}$/.test(r.j.ncr_id) && r.j.failed[0].key === 'core_temp', r);
+const failRec = r.j;
+r = await call('GET', `/api/ncr/${failRec.ncr_id}`, { token: qa });
+check('the NCR carries the batch, limit, value and record', r.status === 200 && r.j.source_type === 'CCP' && r.j.severity === 'Critical' && r.j.product_lot_no === 'B260915-01'
+  && r.j.source_ref === failRec.rec_id && /85/.test(r.j.critical_limit) && /80.2/.test(r.j.actual_result) && /กักกัน Batch/.test(r.j.immediate_action), r.j);
+r = await call('POST', '/api/qc', { token: qc, body: qcBody({ cp_id: 'CP-SEAL', product_code: 'FG0007', values: { seal_ok: false, position: 'ท้าย Batch' } }) });
+check('a failed check on a draft point opens a major in-process NCR', r.status === 201 && r.j.result === 'FAIL' && r.j.ncr_id, r);
+const sealNcr = r.j.ncr_id;
+r = await call('GET', `/api/ncr/${sealNcr}`, { token: qa });
+check('the NCR says the limits are still draft', r.j.source_type === 'IN_PROCESS' && r.j.severity === 'Major' && /รอ validate/.test(r.j.nc_description), r.j);
+r = await call('GET', '/api/qc?from=2026-09-15&to=2026-09-15', { token: qc });
+check('records are listed with the inspector from the login', r.status === 200 && r.j.length === 3 && r.j.every((x) => x.inspector === 'QC One') && r.j.find((x) => x.rec_id === failRec.rec_id).cp_version === 2, r.j);
+r = await call('GET', '/api/qc/summary?date=2026-09-15', { token: qc });
+check('daily summary counts passes, fails and open NCRs', r.status === 200 && r.j.total === 3 && r.j.fail === 2 && r.j.ncrOpen >= 2, r.j);
+r = await call('POST', '/api/qc', { token: qc, body: qcBody({ record_date: '2999-01-01' }) });
+check('a record cannot be dated in the future', r.status === 400, r);
+r = await call('PATCH', '/api/control-points/CP-UV', { token: qa, body: { status: 'RETIRED' } });
+r = await call('POST', '/api/qc', { token: qc, body: qcBody({ cp_id: 'CP-UV', product_code: '', values: { uv_min: 15 } }) });
+check('a retired control point takes no records', r.status === 409, r);
+r = await call('GET', '/api/audit?entity_id=CP-HEAT', { token: qa });
+check('control point changes are in the audit trail', r.status === 200 && r.j.some((a) => a.action === 'approve'), r.j);
+
 await call('POST', '/api/logout', { token: qa });
 r = await call('GET', '/api/me', { token: qa });
 check('logout ends the session', r.status === 401, r);

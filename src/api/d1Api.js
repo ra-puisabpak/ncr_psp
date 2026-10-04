@@ -116,3 +116,13 @@ export const supplierApi = {
     blob: (photoId) => requestBlob(`/api/supplier/${enc(token)}/photos/${photoId}`, { auth: false }),
   }),
 }
+
+// Smart QA: control point register and monitoring records.
+export const qaApi = {
+  controlPoints: () => request('/api/control-points'),
+  createControlPoint: (body) => post('/api/control-points', body),
+  updateControlPoint: (id, body) => patch(`/api/control-points/${enc(id)}`, body),
+  records: (params = {}) => request(`/api/qc?${new URLSearchParams(params)}`),
+  summary: (date) => request(`/api/qc/summary?${new URLSearchParams(date ? { date } : {})}`),
+  saveRecord: (body) => post('/api/qc', body),
+}
