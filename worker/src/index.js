@@ -996,7 +996,7 @@ export default {
         need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่เพิ่มจุดควบคุมได้');
         const b = await body();
         const id = String(b.cp_id || '').trim().toUpperCase();
-        if (!/^CP-[A-Z0-9-]{2,20}$/.test(id)) fail(400, 'รหัสจุดควบคุมต้องขึ้นต้นด้วย CP- เช่น CP-UV');
+        if (!/^[A-Z][A-Z0-9]{1,5}-[A-Z0-9-]{1,20}$/.test(id)) fail(400, 'รหัสจุดควบคุมต้องเป็นรูปแบบ CCP-03, OPRP-07 หรือ PRP-01');
         if (blank(b.name)) fail(400, 'กรุณาระบุชื่อจุดควบคุม');
         if (await DB.prepare('SELECT 1 FROM control_points WHERE cp_id=?').bind(id).first()) fail(409, 'มีรหัสจุดควบคุมนี้แล้ว');
         const rec = { cp_type: CP_TYPES.includes(b.cp_type) ? b.cp_type : 'TBD', status: 'DRAFT',
@@ -1008,7 +1008,7 @@ export default {
         await audit(DB, user.username, 'user', 'create', 'control_point', id, { name: rec.name, cp_type: rec.cp_type });
         return json({ success: true, cp_id: id }, 201);
       }
-      const cpm = path.match(/^\/api\/control-points\/(CP-[A-Z0-9-]{2,20})$/);
+      const cpm = path.match(/^\/api\/control-points\/([A-Z][A-Z0-9]{1,5}-[A-Z0-9-]{1,20})$/);
       if (cpm && method === 'PATCH') {
         need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่แก้ไขจุดควบคุมได้');
         const b = await body();

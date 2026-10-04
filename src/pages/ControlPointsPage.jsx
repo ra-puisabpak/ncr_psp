@@ -16,7 +16,7 @@ const TEXT_FIELDS = [
   ['corrective_action', 'การแก้ไขเมื่อเบี่ยงเบน'], ['verification', 'การทวนสอบ'], ['form_code', 'รหัสแบบฟอร์ม'],
 ]
 const PARAM_TYPE_TH = { number: 'ตัวเลข', check: 'ใช่ / ไม่ใช่', text: 'ข้อความ' }
-const blankCp = () => ({ cp_id: 'CP-', name: '', cp_type: 'TBD', status: 'DRAFT', process_ref: '', products: [], params: [{ key: '', label: '', type: 'number', unit: '', min: '', max: '' }] })
+const blankCp = () => ({ cp_id: '', name: '', cp_type: 'TBD', status: 'DRAFT', process_ref: '', products: [], params: [{ key: '', label: '', type: 'number', unit: '', min: '', max: '' }] })
 
 function Editor({ value, isNew, onCancel, onSaved }) {
   const [cp, setCp] = useState(() => ({
@@ -50,7 +50,7 @@ function Editor({ value, isNew, onCancel, onSaved }) {
     <div className="bg-white rounded-xl shadow p-4 space-y-3 border-2 border-teal-300">
       <div className="grid sm:grid-cols-4 gap-3">
         <label className="text-xs text-gray-600">รหัส
-          <input value={cp.cp_id} disabled={!isNew} onChange={(e) => set('cp_id', e.target.value.toUpperCase())} className={`${input} font-mono`} />
+          <input value={cp.cp_id} disabled={!isNew} placeholder="เช่น PRP-01" onChange={(e) => set('cp_id', e.target.value.toUpperCase())} className={`${input} font-mono`} />
         </label>
         <label className="text-xs text-gray-600 sm:col-span-3">ชื่อจุดควบคุม *
           <input value={cp.name} onChange={(e) => set('name', e.target.value)} className={input} />
@@ -151,7 +151,7 @@ export default function ControlPointsPage() {
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div>
           <h1 className="text-lg font-bold text-gray-800">ทะเบียนจุดควบคุม</h1>
-          <div className="text-xs text-gray-500">ตั้งต้นจาก HACCP CCP/OPRP Decision Tree Rev.01 · แก้ไขได้เฉพาะ QA Manager / FSTL</div>
+          <div className="text-xs text-gray-500">ตาม QP-HA-001 HACCP Manual Rev.01 (ร่าง) · แก้ไขได้เฉพาะ QA Manager / FSTL</div>
         </div>
         {qa && !editing && (
           <button onClick={() => setEditing('new')} className="flex items-center gap-1.5 bg-teal-600 text-white text-sm font-semibold px-3 py-1.5 rounded-lg">

@@ -24,8 +24,8 @@ jobs:
         working-directory: worker
         run: node --no-warnings test.mjs
 
-      # Every statement in schema.sql is CREATE ... IF NOT EXISTS or INSERT OR IGNORE,
-      # so applying it again only adds what is new and never touches existing records.
+      # schema.sql only uses CREATE ... IF NOT EXISTS, INSERT OR IGNORE and updates guarded to run once,
+      # so applying it again only adds what is new and never touches records people have entered.
       - name: Apply database schema
         uses: cloudflare/wrangler-action@v3
         with:

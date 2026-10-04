@@ -265,24 +265,55 @@ CREATE INDEX IF NOT EXISTS idx_qc_date ON qc_records(record_date);
 CREATE INDEX IF NOT EXISTS idx_qc_batch ON qc_records(batch_no);
 CREATE INDEX IF NOT EXISTS idx_qc_cp ON qc_records(cp_id);
 
--- Starting register, taken from HACCP CCP/OPRP Decision Tree Rev.01 (น้ำพริก คลอง 9).
--- Every entry is DRAFT: the plan has not approved any CCP yet and the limits still need validation.
-INSERT OR IGNORE INTO control_points (cp_id,name,process_ref,hazard,cp_type,status,products,params,monitoring,frequency,corrective_action,verification,created_by,created_at,updated_by,updated_at) VALUES
-('CP-HEAT','การให้ความร้อน (ผัด/กวน)','PC0007','B – จุลินทรีย์ก่อโรค','TBD','DRAFT','["FG0001","FG0002","FG0003","FG0005"]',
- '[{"key":"core_temp","label":"อุณหภูมิผลิตภัณฑ์","type":"number","unit":"°C","min":85},{"key":"hold_min","label":"เวลาที่คงอุณหภูมิ","type":"number","unit":"นาที","min":120},{"key":"thermometer","label":"ใช้เทอร์โมมิเตอร์ที่สอบเทียบแล้ว","type":"check"}]',
- 'วัดอุณหภูมิและจับเวลาด้วยเทอร์โมมิเตอร์/นาฬิกาที่สอบเทียบแล้ว','ทุก Batch / ตาม WI','หยุดกระบวนการ กักกัน Batch ประเมินตามเกณฑ์ deviation ห้ามปล่อยจนกว่า QA ตัดสิน','สอบเทียบเครื่องมือ + ทบทวนบันทึก + Thermal validation','system',datetime('now'),'system',datetime('now')),
-('CP-COOL','การพักให้เย็น','PC0009','B – การเจริญของจุลินทรีย์','TBD','DRAFT',NULL,
- '[{"key":"end_temp","label":"อุณหภูมิเมื่อสิ้นสุดการพัก","type":"number","unit":"°C"},{"key":"cool_min","label":"เวลาที่ใช้พัก","type":"number","unit":"นาที"}]',
- 'วัดอุณหภูมิและเวลาตาม Cooling Profile','ทุก Batch','กักกัน Batch และประเมินความเสี่ยง','Cooling profile verification','system',datetime('now'),'system',datetime('now')),
-('CP-BONE','การคัดก้างปลา','PC0003','P – ก้างปลา','TBD','DRAFT','["FG0005","FG0008"]',
- '[{"key":"no_bone","label":"ไม่พบก้างเกินเกณฑ์ยอมรับ","type":"check"},{"key":"sample_g","label":"น้ำหนักตัวอย่างที่ตรวจ","type":"number","unit":"กรัม"}]',
- 'ตรวจด้วยวิธีที่อนุมัติ','ตาม WI','หยุดและคัดแยกซ้ำ 100% กักกันผลิตภัณฑ์ที่เกี่ยวข้อง','Trend + ประสิทธิผลของวิธีตรวจ','system',datetime('now'),'system',datetime('now')),
-('CP-ALLERGEN','Line clearance สารก่อภูมิแพ้ (กุ้ง)','PC0008','C – สารก่อภูมิแพ้','TBD','DRAFT','["FG0002"]',
- '[{"key":"formula","label":"วัตถุดิบตรงตามสูตรที่อนุมัติ","type":"check"},{"key":"label","label":"ฉลากระบุสารก่อภูมิแพ้ถูกต้อง","type":"check"},{"key":"line_clean","label":"ทำความสะอาดไลน์ก่อนเปลี่ยนสินค้าแล้ว","type":"check"}]',
- 'ตรวจสูตร ฉลาก และ Line clearance ตาม Checklist','ทุก Batch / ทุกครั้งที่เปลี่ยนสินค้า','หยุดไลน์ กักกันสินค้า แก้ไขฉลากเมื่อ QA อนุมัติเท่านั้น','Line clearance / cleaning verification','system',datetime('now'),'system',datetime('now')),
-('CP-VEG','การควบคุมมังสวิรัติ','PC0005','C – ปนเปื้อนวัตถุดิบที่ไม่ใช่มังสวิรัติ','TBD','DRAFT','["FG0003","FG0012"]',
- '[{"key":"approved_list","label":"ใช้เฉพาะวัตถุดิบใน Approved Ingredient List","type":"check"},{"key":"line_clean","label":"Line clearance ก่อนผลิตแล้ว","type":"check"}]',
- 'ตรวจวัตถุดิบและ Line clearance ตาม Checklist','ทุก Batch / ทุกครั้งที่เปลี่ยนสินค้า','กักกัน ประเมินความเสี่ยงโดย QA','Vegetarian verification','system',datetime('now'),'system',datetime('now')),
-('CP-SEAL','การซีลซอง / ปิดฝา','PC0008','B/P – การปนเปื้อนหลังการให้ความร้อน','TBD','DRAFT',NULL,
- '[{"key":"seal_ok","label":"ซีลสมบูรณ์ ไม่รั่ว / ฝาปิดแน่น","type":"check"},{"key":"position","label":"ช่วงที่ตรวจ (ต้น/กลาง/ท้าย Batch)","type":"text"}]',
- 'ตรวจด้วยสายตาและวิธีทดสอบที่ validate แล้ว','ต้น / กลาง / ท้าย Batch','หยุดเครื่อง แยกช่วงผลิตที่เกี่ยวข้อง','Seal/closure verification','system',datetime('now'),'system',datetime('now'));
+-- Register from QP-HA-001 HACCP Manual Rev.01 (draft), sheet 7 "CCP-OPRP Control Plan".
+-- Every entry is DRAFT: the manual awaits approval and the limits await validation (V-01 to V-12).
+-- Limits marked "รอ Validation" are left open; values the manual states (Rev.00) are kept as provisional limits.
+-- Group A (heat at CCP-01): FG0001 FG0002 FG0003 FG0005 · Group B (fried, mixed without heat): FG0007 FG0008 FG0009 FG0010.
+INSERT OR IGNORE INTO control_points (cp_id,name,process_ref,hazard,cp_type,status,products,params,monitoring,frequency,corrective_action,verification,form_code,created_by,created_at,updated_by,updated_at) VALUES
+('CCP-01','ผัดคลุกเคล้าและฆ่าเชื้อ (M01) — กลุ่ม A','PC0007','B – เชื้อก่อโรครอดชีวิตหากอุณหภูมิ/เวลาไม่เพียงพอ','CCP','DRAFT','["FG0001","FG0002","FG0003","FG0005"]',
+ '[{"key":"temp_start","label":"อุณหภูมิแกนกลางเมื่อเริ่มนับเวลา (จุดร้อนช้าที่สุด)","type":"number","unit":"°C","min":85},{"key":"temp_min","label":"อุณหภูมิต่ำสุดที่วัดได้ระหว่างคงอุณหภูมิ (ทุก 30 นาที อย่างน้อย 2 จุด)","type":"number","unit":"°C","min":85},{"key":"temp_end","label":"อุณหภูมิแกนกลางเมื่อสิ้นสุด","type":"number","unit":"°C","min":85},{"key":"hold_min","label":"เวลาคงอุณหภูมิ นับเมื่อถึง 85°C","type":"number","unit":"นาที","min":120},{"key":"thermo_ok","label":"เทอร์โมมิเตอร์ผ่านการตรวจด้วยน้ำแข็ง (0°C) วันนี้","type":"check"},{"key":"times","label":"เวลาเริ่ม – สิ้นสุดการคงอุณหภูมิ","type":"text"}]',
+ 'Probe Thermometer ที่สอบเทียบแล้ว แทงวัดอย่างน้อย 2 จุด ณ จุดร้อนช้าที่สุด และนาฬิกาจับเวลา','ทุก Batch: เมื่อเริ่มนับเวลา ทุก 30 นาที และเมื่อสิ้นสุด (บันทึกสรุป 1 รายการต่อ Batch)',
+ 'อุณหภูมิต่ำกว่าเกณฑ์: เพิ่มความร้อนและเริ่มนับเวลาใหม่จนครบ 120 นาที หากทำไม่ได้ HOLD ทั้ง Batch ห้ามส่งผ่าน Pass Box แจ้งหัวหน้า QA ตัดสิน (ให้ความร้อนซ้ำหรือทำลาย) หาสาเหตุ เทอร์โมมิเตอร์ไม่ผ่านการตรวจประจำวัน: กักกันทุก Batch นับจากการตรวจครั้งล่าสุดที่ผ่าน',
+ 'QA ทบทวนและลงนามบันทึกทุกวันก่อนปล่อยสินค้า · ตรวจเทอร์โมมิเตอร์ด้วยน้ำแข็งทุกวัน สอบเทียบภายนอกปีละครั้ง · วิเคราะห์จุลินทรีย์ตามแผน · Validation V-01',NULL,'system',datetime('now'),'system',datetime('now')),
+('CCP-02','ทอดและเจียว (M02) — กลุ่ม B (เสนอ)','PC0006','B – เชื้อก่อโรคในหอม กระเทียม พริก รอดชีวิตหากอุณหภูมิน้ำมัน/เวลาไม่พอ','CCP','DRAFT','["FG0007","FG0008","FG0009","FG0010"]',
+ '[{"key":"oil_temp","label":"อุณหภูมิน้ำมันต่ำสุดขณะทอด (เกณฑ์รอ Validation V-03)","type":"number","unit":"°C"},{"key":"shallot_min","label":"เวลาเจียวหอม","type":"number","unit":"นาที","min":16},{"key":"garlic_min","label":"เวลาเจียวกระเทียม","type":"number","unit":"นาที","min":8},{"key":"chili_min","label":"เวลาทอดพริก","type":"number","unit":"นาที","min":2},{"key":"thermo_ok","label":"เทอร์โมมิเตอร์วัดน้ำมันผ่านการสอบเทียบ","type":"check"}]',
+ 'เทอร์โมมิเตอร์วัดน้ำมันที่สอบเทียบแล้ว และนาฬิกาจับเวลา','ทุกครั้งที่ทอด (บันทึกสรุป 1 รายการต่อ Batch)',
+ 'ไม่ถึงเกณฑ์: ทอดต่อจนครบ หากผสมไปแล้ว HOLD ทั้ง Batch แจ้ง QA ตัดสิน ออก NCR',
+ 'QA ทบทวนบันทึกทุกวัน · สอบเทียบเทอร์โมมิเตอร์ · วิเคราะห์จุลินทรีย์ตามแผน · Validation V-03, V-12',NULL,'system',datetime('now'),'system',datetime('now')),
+('OPRP-01','Allergen Control — จัดเก็บ ลำดับการผลิต/การล้าง และฉลาก',NULL,'A – สารก่อภูมิแพ้ปนเปื้อนข้าม / ฉลากไม่แสดงสารก่อภูมิแพ้ (ขั้นตอน 1-5, 9, 11)','OPRP','DRAFT',NULL,
+ '[{"key":"storage","label":"วัตถุดิบ Allergen อยู่ในห้อง Allergen เท่านั้น มีป้ายชี้บ่ง","type":"check"},{"key":"sequence","label":"ผลิตและล้างตามลำดับ (มังสวิรัติ/เจก่อน กลุ่ม Allergen ล้างลำดับสุดท้ายของวัน)","type":"check"},{"key":"clean","label":"หลังเปลี่ยนสูตร ผิวสัมผัสอาหารสะอาดด้วยสายตา","type":"check"},{"key":"label","label":"ฉลากตรงกับสูตรที่บรรจุ และแสดงสารก่อภูมิแพ้ครบตามสูตรที่ใช้จริง","type":"check"},{"key":"changeover","label":"สูตรก่อนหน้า → สูตรที่ผลิต","type":"text"}]',
+ 'ตรวจเทียบตารางการผลิต ตรวจด้วยสายตา และตรวจฉลากเทียบสูตร','ทุกวัน และทุกครั้งที่เปลี่ยนสูตร',
+ 'จัดเก็บผิดห้อง: ย้ายทันที ตรวจการปนเปื้อน · ล้างหรือผลิตผิดลำดับ: Deep Cleaning ก่อนผลิตสูตรมังสวิรัติ · ผลิตภัณฑ์ที่ผลิตระหว่างเบี่ยงเบน: HOLD ให้ QA ประเมิน · ฉลากผิด: HOLD ติดฉลากใหม่ หากปล่อยแล้วเข้าขั้นตอนเรียกคืน',
+ 'QA สุ่มตรวจพื้นที่จัดเก็บ · Swab Test โปรตีนตกค้างหลังเปลี่ยนสูตร · Validation V-09','FM-RA-08','system',datetime('now'),'system',datetime('now')),
+('OPRP-02','Foreign Body Control — ใบมีดเครื่องบด/สับ (M05-M09)','PC0004','P – เศษโลหะจากใบมีดสึกหรอหรือแตกหัก (ขั้นตอน 5)','OPRP','DRAFT',NULL,
+ '[{"key":"machine","label":"เครื่อง (M05-M09)","type":"text"},{"key":"before_ok","label":"ใบมีดสมบูรณ์ ไม่บิ่น ไม่แตกหัก ก่อนใช้งาน","type":"check"},{"key":"after_ok","label":"ใบมีดสมบูรณ์ ไม่บิ่น ไม่แตกหัก หลังใช้งาน","type":"check"},{"key":"count_ok","label":"จำนวนใบมีดครบตามทะเบียนใบมีด","type":"check"}]',
+ 'ถอดตรวจใบมีดด้วยสายตา เทียบทะเบียนใบมีด','ก่อนและหลังใช้งานทุกกะ',
+ 'พบใบมีดบิ่น/หักหลังใช้งาน: HOLD ผลิตภัณฑ์ทุก Batch นับจากการตรวจครั้งล่าสุดที่ผ่าน ค้นหาเศษโลหะให้ครบ เปลี่ยนใบมีดทันที QA ตัดสินการจัดการผลิตภัณฑ์',
+ 'QA สุ่มตรวจประสิทธิภาพการตรวจใบมีด (ปัจจุบันควบคุมด้วยสายตาเท่านั้น)',NULL,'system',datetime('now'),'system',datetime('now')),
+('OPRP-03','วัตถุดิบเสี่ยงสารพิษทนความร้อน — ฮีสตามีน อะฟลาท็อกซิน (เสนอ)','PC0001','C – ฮีสตามีนในปลา อะฟลาท็อกซินในพริกแห้ง ถั่ว เครื่องเทศ (ขั้นตอน 1)','OPRP','DRAFT',NULL,
+ '[{"key":"avl","label":"ผู้ขายอยู่ใน AVL","type":"check"},{"key":"coa","label":"มี COA ตามความถี่ที่กำหนด","type":"check"},{"key":"histamine","label":"ฮีสตามีน (วัตถุดิบปลา) ตาม COA — เกณฑ์ตาม SD-QC รอยืนยัน","type":"number","unit":"mg/kg"},{"key":"aflatoxin","label":"อะฟลาท็อกซินทั้งหมด ตาม COA (รอยืนยันกับประกาศ สธ.)","type":"number","unit":"µg/kg","max":20},{"key":"temp","label":"อุณหภูมิรับเข้าปลาแช่เย็น/แช่แข็ง (เกณฑ์รอยืนยัน)","type":"number","unit":"°C"}]',
+ 'ตรวจ COA เทียบข้อกำหนด วัดอุณหภูมิ ตรวจพินิจตาม WI-QC-001 (ใช้ร่วมกับ FM-QC-001)','ทุกล็อตที่รับเข้า (ใส่เลขล็อตวัตถุดิบในช่อง Batch)',
+ 'ไม่ผ่านเกณฑ์หรือไม่มี COA: ปฏิเสธการรับ หรือ HOLD รอผลวิเคราะห์ แจ้งผู้ขายแก้ไข (CAR) ทบทวนสถานะผู้ขายใน AVL',
+ 'ส่งวิเคราะห์ห้องปฏิบัติการภายนอกอย่างน้อยปีละครั้งต่อผู้ขาย · ประเมินผู้ขายประจำปี · Validation V-08','FM-QC-001','system',datetime('now'),'system',datetime('now')),
+('OPRP-04','การคัดก้างปลา (เสนอ)','PC0003','P – ก้างปลา (แมคเคอเรล ปลาย่าง) (ขั้นตอน 3)','OPRP','DRAFT','["FG0005","FG0008"]',
+ '[{"key":"no_bone","label":"QC สุ่มตรวจซ้ำไม่พบก้างปลาที่เป็นอันตราย (เกณฑ์ขนาด/จำนวนรอ V-07)","type":"check"},{"key":"sample_g","label":"ปริมาณที่สุ่มตรวจ","type":"number","unit":"กรัม"}]',
+ 'ตรวจพินิจและใช้มือสัมผัสบนถาดสีตัดกับเนื้อปลา แสงสว่างเพียงพอ','ทุก Batch (100% โดยพนักงาน) และ QC สุ่มตรวจซ้ำ',
+ 'QC สุ่มพบก้าง: คัดซ้ำทั้ง Batch แล้วสุ่มตรวจใหม่ พบซ้ำ: ทบทวนวิธีการและอบรมพนักงาน',
+ 'QC สุ่มตรวจซ้ำและบันทึก · ทบทวนข้อร้องเรียนเรื่องก้างปลา · Validation V-07',NULL,'system',datetime('now'),'system',datetime('now')),
+('OPRP-05','เวลาและอุณหภูมิช่วงผึ่งเย็น บรรจุ และปิดฝา (เสนอ)','PC0009','B – สปอร์ทนความร้อนงอกและเจริญ / การปนเปื้อนซ้ำ (ขั้นตอน 7, 9, 10)','OPRP','DRAFT','["FG0001","FG0002","FG0003","FG0005"]',
+ '[{"key":"to_cap_min","label":"เวลาตั้งแต่สิ้นสุด CCP-01 ถึงปิดฝา/ซีลเสร็จ (เกณฑ์รอ V-05)","type":"number","unit":"นาที"},{"key":"fill_temp","label":"อุณหภูมิผลิตภัณฑ์ขณะบรรจุ (ต้องต่ำกว่า 60°C)","type":"number","unit":"°C","max":59.9},{"key":"cap_temp","label":"อุณหภูมิขณะปิดฝา (Rev.00 กำหนด 45°C รอ V-05)","type":"number","unit":"°C"},{"key":"chilled","label":"นำเข้าจัดเก็บแช่เย็น (ระหว่างรอผล V-04, V-11)","type":"check"}]',
+ 'บันทึกเวลาจากนาฬิกา และวัดอุณหภูมิด้วย Probe Thermometer','ทุก Batch',
+ 'เกินเวลาที่กำหนด: HOLD ทั้ง Batch แจ้ง QA ตัดสิน (ให้ความร้อนซ้ำที่ CCP-01 หรือทำลาย) หาสาเหตุ',
+ 'QA ทบทวนบันทึกทุกวัน · วิเคราะห์จุลินทรีย์และ aw ตามแผน · Validation V-04, V-05, V-11',NULL,'system',datetime('now'),'system',datetime('now')),
+('OPRP-06','ค่า aw ผลิตภัณฑ์สำเร็จรูป — กลุ่ม B (เสนอ)','PC0012','B – เชื้อก่อโรคและสปอร์เจริญระหว่างเก็บรักษาหาก aw สูง (ขั้นตอน 12B)','OPRP','DRAFT','["FG0007","FG0008","FG0009","FG0010"]',
+ '[{"key":"aw","label":"ค่า aw ผลิตภัณฑ์สำเร็จรูป (เสนอ ≤ 0.85 รอกำหนด)","type":"number","max":0.85},{"key":"meter_ok","label":"เครื่องวัด aw ผ่านการสอบเทียบ","type":"check"}]',
+ 'เครื่องวัด aw ที่สอบเทียบแล้ว (บันทึกคู่กับ QC_10)','ทุก Batch ก่อนปล่อยสินค้า',
+ 'เกินเกณฑ์: HOLD ทั้ง Batch QA ตัดสิน (ทอดซ้ำ ปรับสูตร หรือทำลาย) ทบทวนเวลาทอดและอัตราส่วนสูตร',
+ 'QA ทบทวนผลทุก Batch · สอบเทียบเครื่องวัด aw · Validation V-04, V-12','QC_10','system',datetime('now'),'system',datetime('now'));
+
+-- The first register (before QP-HA-001 Rev.01) is retired, but only entries nobody has edited yet.
+INSERT INTO audit_log (ts,actor,actor_type,action,entity,entity_id,changes)
+ SELECT datetime('now'),'system','system','update','control_point',cp_id,'{"status":{"from":"DRAFT","to":"RETIRED"},"reason":"แทนด้วยทะเบียนตาม QP-HA-001 Rev.01"}'
+   FROM control_points WHERE cp_id IN ('CP-HEAT','CP-COOL','CP-BONE','CP-ALLERGEN','CP-VEG','CP-SEAL') AND updated_by='system' AND status='DRAFT';
+UPDATE control_points SET status='RETIRED', version=version+1, updated_at=datetime('now')
+ WHERE cp_id IN ('CP-HEAT','CP-COOL','CP-BONE','CP-ALLERGEN','CP-VEG','CP-SEAL') AND updated_by='system' AND status='DRAFT';

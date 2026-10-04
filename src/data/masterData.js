@@ -182,6 +182,7 @@ export const PRODUCTS = [
   { code: 'FG0010', label: 'พริกผัดน้ำมันงา' },
   { code: 'FG0011', label: 'พริกคั่วป่น 100%' },
   { code: 'FG0012', label: 'น้ำพริกเห็ดหอม (สูตรเจ)' },
+  { code: 'FG0014', label: 'พริกน้ำมันธัญพืช (Olive Nut Crunch)' },
 ]
 
 // Everything an NCR can be raised against, in one searchable list.
