@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, Boxes, Route, HandHeart, Droplets, Thermometer, Scale,
+  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, Boxes, Route, HandHeart, Droplets, Thermometer, Scale, Flame,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { qaApi } from '../api/d1Api'
@@ -101,6 +101,14 @@ export default function QADashboardPage() {
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">บันทึกการชั่งวัตถุดิบ</div>
             <div className="text-[11px] text-gray-500">PD_03 · ตามสูตร พร้อม LOT วัตถุดิบ</div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-300" />
+        </Link>
+        <Link to="/qa/prodctl" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0"><Flame className="w-5 h-5" /></div>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-sm text-gray-800">แบบฟอร์มควบคุมการผลิต</div>
+            <div className="text-[11px] text-gray-500">QC_08 · ทอด/เจียว ผัดฆ่าเชื้อ พักเย็น → CCP อัตโนมัติ</div>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>

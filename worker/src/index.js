@@ -244,9 +244,10 @@ const limitText = (p) => {
   return p.type === 'check' ? 'ต้องเป็น "ใช่"' : 'บันทึกค่า';
 };
 // Checks one entry against the limits in force. Every number and every check must be answered.
-function evaluate(params, values) {
+function evaluate(params, values, na = []) {
   const out = {}, failed = [];
   for (const p of params) {
+    if (na.includes(p.key)) { out[p.key] = 'NA'; continue; }
     const v = values?.[p.key];
     if (p.type === 'number') {
       if (blank(v)) fail(400, `กรุณากรอก ${p.label}`);
@@ -265,6 +266,82 @@ function evaluate(params, values) {
     }
   }
   return { values: out, failed };
+}
+
+// Saves one monitoring record against the limits in force; a failed check opens an NCR in the same write.
+// Used by the monitoring form and by the forms that derive records from what they capture (QC_08).
+// `na`: checks that do not apply to this batch (recorded as NA, never judged).
+async function saveQcRecord(DB, user, b, na = []) {
+  const uid = String(b.uid || '');
+  if (!/^[A-Za-z0-9-]{8,80}$/.test(uid)) fail(400, 'รหัสอ้างอิงรายการไม่ถูกต้อง');
+  const done = await DB.prepare('SELECT rec_id, result, ncr_id FROM qc_records WHERE uid=?').bind(uid).first();
+  if (done) return { status: 200, body: done }; // the same save arriving twice
+  const cp = cpRow(await DB.prepare('SELECT * FROM control_points WHERE cp_id=?').bind(String(b.cp_id || '')).first());
+  if (!cp) fail(404, 'ไม่พบจุดควบคุม');
+  if (cp.status === 'RETIRED') fail(409, 'จุดควบคุมนี้ยกเลิกการใช้งานแล้ว');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(b.record_date || ''))) fail(400, 'กรุณาระบุวันที่ตรวจ');
+  if (b.record_date > today()) fail(400, 'วันที่ตรวจต้องไม่เป็นวันในอนาคต');
+  if (!blank(b.record_time) && !/^\d{2}:\d{2}$/.test(String(b.record_time))) fail(400, 'รูปแบบเวลาไม่ถูกต้อง');
+  if (blank(b.batch_no) || String(b.batch_no).length > 60) fail(400, 'กรุณาระบุเลขที่ Batch');
+  if (cp.products.length && !cp.products.includes(String(b.product_code || ''))) fail(400, 'ผลิตภัณฑ์นี้ไม่อยู่ในขอบเขตของจุดควบคุม');
+  const { values, failed } = evaluate(cp.params, b.values, na);
+  const result = failed.length ? 'FAIL' : 'PASS';
+  const rec = {
+    cp_id: cp.cp_id, cp_version: cp.version, cp_status: cp.status, record_date: b.record_date, record_time: nz(b.record_time),
+    shift: nz(blank(b.shift) ? null : String(b.shift).trim().slice(0, 20)), product_code: nz(b.product_code),
+    product_name: nz(blank(b.product_name) ? null : String(b.product_name).trim().slice(0, 200)),
+    batch_no: String(b.batch_no).trim(), result, values: JSON.stringify(values), failed: failed.length ? JSON.stringify(failed) : null,
+    note: nz(blank(b.note) ? null : String(b.note).trim().slice(0, 1000)), inspector: user.display_name,
+  };
+  for (let attempt = 0; ; attempt++) {
+    const day = rec.record_date.slice(2).replace(/-/g, '');
+    const last = await DB.prepare('SELECT rec_id FROM qc_records WHERE rec_id LIKE ? ORDER BY rec_id DESC LIMIT 1').bind(`QC-${day}-%`).first();
+    const recId = `QC-${day}-${String((last ? parseInt(last.rec_id.slice(-4), 10) : 0) + 1).padStart(4, '0')}`;
+    const ncrId = failed.length ? (await nextId(DB, 'ncr_records', 'ncr_id', 'NCR')) : null;
+    const stmts = [];
+    if (ncrId) {
+      // A failed check is a deviation: the batch is held and an NCR opened in the same write, so neither can be lost.
+      const ccp = cp.cp_type === 'CCP';
+      const f = {
+        source_type: ccp ? 'CCP' : 'IN_PROCESS', source_ref: recId, process_ref: cp.process_ref,
+        found_date: rec.record_date, found_time: rec.record_time, reported_by: user.display_name,
+        material_code: rec.product_code, material_name: rec.product_name, product_lot_no: rec.batch_no,
+        parameter_id: cp.cp_id, parameter_name: failed.map((x) => x.label).join(', ').slice(0, 300),
+        critical_limit: failed.map((x) => `${x.label}: ${x.limit}`).join('\n').slice(0, 1000),
+        actual_result: failed.map((x) => `${x.label}: ${x.value}`).join('\n').slice(0, 1000),
+        nc_description: [
+          `${cp.name} (${cp.cp_id}${cp.cp_type !== 'TBD' ? ' · ' + cp.cp_type : ''}) ไม่ผ่านเกณฑ์ — บันทึก ${recId}`,
+          `ผลิตภัณฑ์: ${[rec.product_code, rec.product_name].filter(Boolean).join(' ') || '-'} · Batch ${rec.batch_no}`,
+          ...failed.map((x) => `• ${x.label}: ${x.value} (เกณฑ์ ${x.limit})`),
+          cp.status === 'DRAFT' ? 'หมายเหตุ: เกณฑ์ของจุดควบคุมนี้ยังเป็นฉบับร่าง รอ validate' : '',
+          rec.note ? `หมายเหตุผู้ตรวจ: ${rec.note}` : '',
+        ].filter(Boolean).join('\n').slice(0, 2000),
+        immediate_action: `กักกัน Batch ${rec.batch_no} รอ QA ตัดสิน${cp.corrective_action ? ' — ' + cp.corrective_action : ''}`.slice(0, 1000),
+        hold_location: null, severity: ccp ? 'Critical' : 'Major', shipped_status: 'NOT_SHIPPED',
+      };
+      const cols = Object.keys(f);
+      stmts.push(DB.prepare(
+        `INSERT INTO ncr_records (ncr_id,issue_date,status,created_by,updated_by,created_at,updated_at,${cols.join(',')})
+         VALUES (?,?,?,?,?,?,?,${cols.map(() => '?').join(',')})`
+      ).bind(ncrId, today(), 'Open', user.username, user.username, nowIso(), nowIso(), ...cols.map((k) => f[k])));
+    }
+    const cols = Object.keys(rec);
+    stmts.push(DB.prepare(
+      `INSERT INTO qc_records (rec_id,uid,${cols.map((c) => (c === 'values' ? '"values"' : c)).join(',')},ncr_id,created_by,created_at)
+       VALUES (?,?,${cols.map(() => '?').join(',')},?,?,?)`
+    ).bind(recId, uid, ...cols.map((k) => rec[k]), ncrId, user.username, nowIso()));
+    try { await DB.batch(stmts); } catch (e) {
+      if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
+        const again = await DB.prepare('SELECT rec_id, result, ncr_id FROM qc_records WHERE uid=?').bind(uid).first();
+        if (again) return { status: 200, body: again };
+        continue;
+      }
+      throw e;
+    }
+    await audit(DB, user.username, 'user', 'create', 'qc_record', recId, { cp_id: cp.cp_id, batch_no: rec.batch_no, result, ncr_id: ncrId });
+    if (ncrId) await audit(DB, user.username, 'user', 'create', 'ncr', ncrId, { source_type: cp.cp_type === 'CCP' ? 'CCP' : 'IN_PROCESS', qc_record: recId });
+    return { status: 201, body: { rec_id: recId, result, ncr_id: ncrId, failed } };
+  }
 }
 
 // ---------- PSP QUALITY APP: finished-goods release gate ----------
@@ -332,6 +409,71 @@ async function dayId(DB, table, col, prefix, date, width = 3) {
 const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 const isTime = (v) => /^\d{2}:\d{2}$/.test(String(v || ''));
 const txt = (v, n) => (blank(v) ? null : String(v).trim().slice(0, n));
+
+// ---------- QC_08 production control: what it captures, and the control-point values derived from it ----------
+const FRY_STEPS = ['garlic', 'shallot', 'chili'];
+const FRY_TH = { garlic: 'กระเทียม', shallot: 'หอม', chili: 'พริก / เห็ด / หมูบด' };
+const minutesBetween = (a, b) => { const [h1, m1] = a.split(':').map(Number), [h2, m2] = b.split(':').map(Number); let d = h2 * 60 + m2 - (h1 * 60 + m1); if (d < 0) d += 1440; return d; };
+function cleanProdData(b) {
+  const num = (v, label, lo, hi) => {
+    if (blank(v)) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < lo || n > hi) fail(400, `${label} ต้องเป็นตัวเลข ${lo}–${hi}`);
+    return n;
+  };
+  const fry = {};
+  for (const k of FRY_STEPS) {
+    const s = b.fry?.[k] || {};
+    if (!s.done) { fry[k] = { done: false }; continue; }
+    fry[k] = { done: true, kind: k === 'chili' ? (['พริก', 'เห็ด', 'หมูบด'].includes(s.kind) ? s.kind : 'พริก') : undefined,
+      w_before: num(s.w_before, `น้ำหนักก่อน (${FRY_TH[k]})`, 0, 1000), w_after: num(s.w_after, `น้ำหนักหลัง (${FRY_TH[k]})`, 0, 1000),
+      temp: num(s.temp, `อุณหภูมิ (${FRY_TH[k]})`, 0, 300), min: num(s.min, `เวลาคั่ว/ทอด (${FRY_TH[k]})`, 0, 600) };
+    if (fry[k].temp === null || fry[k].min === null) fail(400, `กรุณากรอกอุณหภูมิและเวลาของ${FRY_TH[k]}`);
+  }
+  const c1 = b.ccp1 || {};
+  const ccp1 = (c1.reach_time || c1.end_time || (Array.isArray(c1.readings) && c1.readings.some((v) => !blank(v)))) ? {
+    reach_time: c1.reach_time, end_time: c1.end_time, thermo_ok: c1.thermo_ok === true ? true : c1.thermo_ok === false ? false : null,
+    readings: (Array.isArray(c1.readings) ? c1.readings : []).filter((v) => !blank(v)).slice(0, 12).map((v) => num(v, 'อุณหภูมิแกนกลาง', 0, 150)),
+  } : null;
+  if (ccp1) {
+    if (!isTime(ccp1.reach_time) || !isTime(ccp1.end_time)) fail(400, 'กรุณาระบุเวลาที่ถึง 85°C และเวลาสิ้นสุด');
+    if (ccp1.readings.length < 2) fail(400, 'บันทึกอุณหภูมิแกนกลางอย่างน้อย 2 ค่า (เริ่มนับเวลา และสิ้นสุด) และทุก 30 นาที');
+  }
+  const cool = b.cool || {};
+  return {
+    fry, fry_thermo_ok: b.fry_thermo_ok === true ? true : b.fry_thermo_ok === false ? false : null,
+    grind: { count: num(b.grind?.count, 'จำนวนครั้งที่บด', 0, 50), w_after: num(b.grind?.w_after, 'น้ำหนักหลังบด', 0, 1000) },
+    heat: { temp: num(b.heat?.temp, 'อุณหภูมิผัด/กวน', 0, 200), min: num(b.heat?.min, 'เวลาผัด/กวน', 0, 1000) },
+    ccp1,
+    cool: { temp: num(cool.temp, 'อุณหภูมิพักเย็น', 0, 150), min: num(cool.min, 'เวลาพักเย็น', 0, 2000), foreign_ok: cool.foreign_ok === true ? true : cool.foreign_ok === false ? false : null,
+      fill_temp: num(cool.fill_temp, 'อุณหภูมิขณะบรรจุ', 0, 150), to_cap_min: num(cool.to_cap_min, 'เวลาจนปิดฝา', 0, 3000), cap_temp: num(cool.cap_temp, 'อุณหภูมิขณะปิดฝา', 0, 150),
+      chilled: cool.chilled === true ? true : cool.chilled === false ? false : null },
+  };
+}
+// Values for each control point that applies to the product. Keys follow the register (QP-HA-001 sheet 7);
+// if QA renames a check there, the record asks for it by name, so the mismatch shows instead of passing silently.
+function deriveValues(cpId, d) {
+  if (cpId === 'CCP-01') {
+    if (!d.ccp1) fail(400, 'ผลิตภัณฑ์นี้ผ่าน CCP-01 ต้องบันทึกการผัดฆ่าเชื้อ (เวลาที่ถึง 85°C, อุณหภูมิทุก 30 นาที, เวลาสิ้นสุด)');
+    const r = d.ccp1.readings;
+    return { values: { temp_start: r[0], temp_min: Math.min(...r), temp_end: r[r.length - 1], hold_min: minutesBetween(d.ccp1.reach_time, d.ccp1.end_time),
+      thermo_ok: d.ccp1.thermo_ok, times: `${d.ccp1.reach_time}–${d.ccp1.end_time} · ${r.join(' / ')} °C` }, na: [], time: d.ccp1.end_time };
+  }
+  if (cpId === 'CCP-02') {
+    const done = FRY_STEPS.filter((k) => d.fry[k].done);
+    if (!done.length) fail(400, 'ผลิตภัณฑ์นี้ผ่าน CCP-02 ต้องบันทึกการทอด/เจียวอย่างน้อย 1 ขั้นตอน');
+    const chiliFried = d.fry.chili.done && d.fry.chili.kind === 'พริก';
+    const na = [!d.fry.garlic.done && 'garlic_min', !d.fry.shallot.done && 'shallot_min', !chiliFried && 'chili_min'].filter(Boolean);
+    return { values: { oil_temp: Math.min(...done.map((k) => d.fry[k].temp)), garlic_min: d.fry.garlic.min, shallot_min: d.fry.shallot.min,
+      chili_min: chiliFried ? d.fry.chili.min : null, thermo_ok: d.fry_thermo_ok }, na };
+  }
+  if (cpId === 'OPRP-05') {
+    const c = d.cool;
+    return { values: { to_cap_min: c.to_cap_min, fill_temp: c.fill_temp, cap_temp: c.cap_temp, chilled: c.chilled }, na: c.cap_temp === null ? ['cap_temp'] : [] };
+  }
+  return null;
+}
+const DERIVED_CPS = ['CCP-01', 'CCP-02', 'OPRP-05'];
 
 // ---------- router ----------
 export default {
@@ -1145,76 +1287,8 @@ export default {
       }
       if (path === '/api/qc' && method === 'POST') {
         need(user, WRITERS);
-        const b = await body();
-        const uid = recvUid(b.uid);
-        const done = await DB.prepare('SELECT rec_id, result, ncr_id FROM qc_records WHERE uid=?').bind(uid).first();
-        if (done) return json(done); // the same save arriving twice
-        const cp = cpRow(await DB.prepare('SELECT * FROM control_points WHERE cp_id=?').bind(String(b.cp_id || '')).first());
-        if (!cp) fail(404, 'ไม่พบจุดควบคุม');
-        if (cp.status === 'RETIRED') fail(409, 'จุดควบคุมนี้ยกเลิกการใช้งานแล้ว');
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(b.record_date || ''))) fail(400, 'กรุณาระบุวันที่ตรวจ');
-        if (b.record_date > today()) fail(400, 'วันที่ตรวจต้องไม่เป็นวันในอนาคต');
-        if (!blank(b.record_time) && !/^\d{2}:\d{2}$/.test(String(b.record_time))) fail(400, 'รูปแบบเวลาไม่ถูกต้อง');
-        if (blank(b.batch_no) || String(b.batch_no).length > 60) fail(400, 'กรุณาระบุเลขที่ Batch');
-        if (cp.products.length && !cp.products.includes(String(b.product_code || ''))) fail(400, 'ผลิตภัณฑ์นี้ไม่อยู่ในขอบเขตของจุดควบคุม');
-        const { values, failed } = evaluate(cp.params, b.values);
-        const result = failed.length ? 'FAIL' : 'PASS';
-        const rec = {
-          cp_id: cp.cp_id, cp_version: cp.version, cp_status: cp.status, record_date: b.record_date, record_time: nz(b.record_time),
-          shift: nz(blank(b.shift) ? null : String(b.shift).trim().slice(0, 20)), product_code: nz(b.product_code),
-          product_name: nz(blank(b.product_name) ? null : String(b.product_name).trim().slice(0, 200)),
-          batch_no: String(b.batch_no).trim(), result, values: JSON.stringify(values), failed: failed.length ? JSON.stringify(failed) : null,
-          note: nz(blank(b.note) ? null : String(b.note).trim().slice(0, 1000)), inspector: user.display_name,
-        };
-        for (let attempt = 0; ; attempt++) {
-          const day = rec.record_date.slice(2).replace(/-/g, '');
-          const last = await DB.prepare('SELECT rec_id FROM qc_records WHERE rec_id LIKE ? ORDER BY rec_id DESC LIMIT 1').bind(`QC-${day}-%`).first();
-          const recId = `QC-${day}-${String((last ? parseInt(last.rec_id.slice(-4), 10) : 0) + 1).padStart(4, '0')}`;
-          const ncrId = failed.length ? (await nextId(DB, 'ncr_records', 'ncr_id', 'NCR')) : null;
-          const stmts = [];
-          if (ncrId) {
-            // A failed check is a deviation: the batch is held and an NCR opened in the same write, so neither can be lost.
-            const ccp = cp.cp_type === 'CCP';
-            const f = {
-              source_type: ccp ? 'CCP' : 'IN_PROCESS', source_ref: recId, process_ref: cp.process_ref,
-              found_date: rec.record_date, found_time: rec.record_time, reported_by: user.display_name,
-              material_code: rec.product_code, material_name: rec.product_name, product_lot_no: rec.batch_no,
-              parameter_id: cp.cp_id, parameter_name: failed.map((x) => x.label).join(', ').slice(0, 300),
-              critical_limit: failed.map((x) => `${x.label}: ${x.limit}`).join('\n').slice(0, 1000),
-              actual_result: failed.map((x) => `${x.label}: ${x.value}`).join('\n').slice(0, 1000),
-              nc_description: [
-                `${cp.name} (${cp.cp_id}${cp.cp_type !== 'TBD' ? ' · ' + cp.cp_type : ''}) ไม่ผ่านเกณฑ์ — บันทึก ${recId}`,
-                `ผลิตภัณฑ์: ${[rec.product_code, rec.product_name].filter(Boolean).join(' ') || '-'} · Batch ${rec.batch_no}`,
-                ...failed.map((x) => `• ${x.label}: ${x.value} (เกณฑ์ ${x.limit})`),
-                cp.status === 'DRAFT' ? 'หมายเหตุ: เกณฑ์ของจุดควบคุมนี้ยังเป็นฉบับร่าง รอ validate' : '',
-                rec.note ? `หมายเหตุผู้ตรวจ: ${rec.note}` : '',
-              ].filter(Boolean).join('\n').slice(0, 2000),
-              immediate_action: `กักกัน Batch ${rec.batch_no} รอ QA ตัดสิน${cp.corrective_action ? ' — ' + cp.corrective_action : ''}`.slice(0, 1000),
-              hold_location: null, severity: ccp ? 'Critical' : 'Major', shipped_status: 'NOT_SHIPPED',
-            };
-            const cols = Object.keys(f);
-            stmts.push(DB.prepare(
-              `INSERT INTO ncr_records (ncr_id,issue_date,status,created_by,updated_by,created_at,updated_at,${cols.join(',')})
-               VALUES (?,?,?,?,?,?,?,${cols.map(() => '?').join(',')})`
-            ).bind(ncrId, today(), 'Open', user.username, user.username, nowIso(), nowIso(), ...cols.map((k) => f[k])));
-          }
-          const cols = Object.keys(rec);
-          stmts.push(DB.prepare(
-            `INSERT INTO qc_records (rec_id,uid,${cols.map((c) => (c === 'values' ? '"values"' : c)).join(',')},ncr_id,created_by,created_at)
-             VALUES (?,?,${cols.map(() => '?').join(',')},?,?,?)`
-          ).bind(recId, uid, ...cols.map((k) => rec[k]), ncrId, user.username, nowIso()));
-          try { await DB.batch(stmts); } catch (e) {
-            if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
-              const again = await DB.prepare('SELECT rec_id, result, ncr_id FROM qc_records WHERE uid=?').bind(uid).first();
-              if (again) return json(again);
-              continue;
-            }
-            throw e;
-          }
-          await audit(DB, user.username, 'user', 'create', 'qc_record', recId, { cp_id: cp.cp_id, batch_no: rec.batch_no, result, ncr_id: ncrId });
-          if (ncrId) await audit(DB, user.username, 'user', 'create', 'ncr', ncrId, { source_type: cp.cp_type === 'CCP' ? 'CCP' : 'IN_PROCESS', qc_record: recId });
-          return json({ rec_id: recId, result, ncr_id: ncrId, failed }, 201);
-        }
+        const r = await saveQcRecord(DB, user, await body());
+        return json(r.body, r.status);
       }
 
       // Raw-material lots received recently (FM-QC-001), for picking the lots a batch used.
@@ -1604,6 +1678,79 @@ export default {
           }
           await audit(DB, user.username, 'user', 'create', 'weigh_record', wrId, { product_code: f.product_code, batch_no: batch, sets, result, lots: lines.map((l) => l.lot) });
           return json({ wr_id: wrId, result, deviations }, 201);
+        }
+      }
+
+      // ===== PSP QUALITY APP: production control (QC_08) =====
+      if (path === '/api/prodctl' && method === 'GET') {
+        const sp = url.searchParams, where = ['1=1'], p = [];
+        if (isDate(sp.get('from'))) { where.push('prod_date>=?'); p.push(sp.get('from')); }
+        if (isDate(sp.get('to'))) { where.push('prod_date<=?'); p.push(sp.get('to')); }
+        for (const k of ['product_code', 'batch_no', 'pc_id']) if (sp.get(k)) { where.push(`${k}=?`); p.push(sp.get(k)); }
+        const { results } = await DB.prepare(`SELECT * FROM prod_controls WHERE ${where.join(' AND ')} ORDER BY prod_date DESC, pc_id DESC LIMIT 500`).bind(...p).all();
+        return json(results.map((r) => ({ ...r, data: JSON.parse(r.data), derived: r.derived ? JSON.parse(r.derived) : [] })));
+      }
+      if (path === '/api/prodctl' && method === 'POST') {
+        need(user, WRITERS);
+        const b = await body();
+        const uid = recvUid(b.uid);
+        const { results: cpRows } = await DB.prepare(`SELECT * FROM control_points WHERE cp_id IN (${DERIVED_CPS.map(() => '?').join(',')}) AND status <> 'RETIRED'`).bind(...DERIVED_CPS).all();
+        // Writes the control-point records for a saved QC_08; safe to run again (each derived record has its own fixed uid).
+        const derive = async (row, d) => {
+          const out = [];
+          for (const cp of cpRows.map(cpRow)) {
+            if (cp.products.length && !cp.products.includes(row.product_code)) continue;
+            const dv = deriveValues(cp.cp_id, d);
+            if (!dv) continue;
+            const r = await saveQcRecord(DB, user, { uid: `${row.uid}-${cp.cp_id}`, cp_id: cp.cp_id, record_date: row.prod_date, record_time: dv.time || null,
+              product_code: row.product_code, product_name: row.product_name, batch_no: row.batch_no, values: dv.values, note: `จากแบบฟอร์มควบคุมการผลิต QC_08 ${row.pc_id}` }, dv.na);
+            out.push({ cp_id: cp.cp_id, rec_id: r.body.rec_id, result: r.body.result, ncr_id: r.body.ncr_id || null });
+          }
+          const result = out.some((x) => x.result === 'FAIL') || row.ncr_id ? 'FAIL' : 'PASS';
+          await DB.prepare('UPDATE prod_controls SET derived=?, result=? WHERE pc_id=?').bind(JSON.stringify(out), result, row.pc_id).run();
+          return { pc_id: row.pc_id, result, derived: out, ncr_id: row.ncr_id || null };
+        };
+        const done = await DB.prepare('SELECT * FROM prod_controls WHERE uid=?').bind(uid).first();
+        if (done) return json(await derive(done, JSON.parse(done.data)));
+        if (!isDate(b.prod_date) || b.prod_date > today()) fail(400, 'กรุณาระบุวันที่ผลิต (ไม่เป็นวันในอนาคต)');
+        const batch = cleanBatch(b.batch_no);
+        const product = String(b.product_code || '');
+        if (!/^[A-Za-z0-9_-]{2,30}$/.test(product)) fail(400, 'กรุณาเลือกผลิตภัณฑ์');
+        if (await DB.prepare('SELECT 1 FROM prod_controls WHERE product_code=? AND batch_no=?').bind(product, batch).first()) fail(409, 'Batch นี้มีแบบฟอร์มควบคุมการผลิตแล้ว');
+        const d = cleanProdData(b);
+        if (d.cool.foreign_ok === null) fail(400, 'กรุณาตรวจ "ไม่มีสิ่งปลอมปน" หลังพักเย็น');
+        const note = txt(b.note, 1000);
+        if (d.cool.foreign_ok === false && !note) fail(400, 'พบสิ่งปลอมปน กรุณาระบุรายละเอียดและสิ่งที่ทำ');
+        // Check every derived record before writing anything, so a missing value never leaves half a batch saved.
+        for (const cp of cpRows.map(cpRow)) {
+          if (cp.products.length && !cp.products.includes(product)) continue;
+          const dv = deriveValues(cp.cp_id, d);
+          if (dv) evaluate(cp.params, dv.values, dv.na);
+        }
+        const productName = txt(b.product_name, 200);
+        for (let attempt = 0; ; attempt++) {
+          const pcId = await dayId(DB, 'prod_controls', 'pc_id', 'Q8', b.prod_date);
+          const ncrId = d.cool.foreign_ok === false ? await nextId(DB, 'ncr_records', 'ncr_id', 'NCR') : null;
+          const stmts = [];
+          if (ncrId) stmts.push(autoNcrStmt(DB, user, ncrId, {
+            source_type: 'IN_PROCESS', source_ref: pcId, process_ref: 'PC0009', severity: 'Major', found_date: b.prod_date,
+            material_code: product, material_name: productName, product_lot_no: batch, parameter_id: 'QC_08', parameter_name: 'สิ่งปลอมปนหลังพักเย็น',
+            critical_limit: 'ไม่มีสิ่งปลอมปน', actual_result: 'พบสิ่งปลอมปน',
+            nc_description: `พบสิ่งปลอมปนในผลิตภัณฑ์หลังพักเย็น — แบบฟอร์มควบคุมการผลิต QC_08 ${pcId}\nผลิตภัณฑ์: ${product} ${productName || ''} · Batch ${batch}\n${note}`.slice(0, 2000),
+            immediate_action: `กักกัน Batch ${batch} รอ QA ตัดสิน`,
+          }));
+          stmts.push(DB.prepare(`INSERT INTO prod_controls (pc_id,uid,product_code,product_name,prod_date,batch_no,oil_type,data,derived,result,note,ncr_id,inspector,created_by,created_at)
+            VALUES (?,?,?,?,?,?,?,?,NULL,'PENDING',?,?,?,?,?)`).bind(pcId, uid, product, productName, b.prod_date, batch, txt(b.oil_type, 60), JSON.stringify(d), note, ncrId,
+            user.display_name, user.username, nowIso()));
+          try { await DB.batch(stmts); } catch (e) {
+            if (/prod_controls\.product_code/.test(e.message)) fail(409, 'Batch นี้มีแบบฟอร์มควบคุมการผลิตแล้ว');
+            if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) continue;
+            throw e;
+          }
+          await audit(DB, user.username, 'user', 'create', 'prod_control', pcId, { product_code: product, batch_no: batch, ncr_id: ncrId });
+          if (ncrId) await audit(DB, user.username, 'user', 'create', 'ncr', ncrId, { source: 'QC_08', prod_control: pcId });
+          const row = await DB.prepare('SELECT * FROM prod_controls WHERE pc_id=?').bind(pcId).first();
+          return json(await derive(row, d), 201);
         }
       }
 

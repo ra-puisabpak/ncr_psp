@@ -541,3 +541,27 @@ CREATE TABLE IF NOT EXISTS weigh_records (
   UNIQUE(product_code, batch_no)
 );
 CREATE INDEX IF NOT EXISTS idx_weigh_date ON weigh_records(prod_date);
+
+-- ===== PSP QUALITY APP: production control (QC_08) =====
+-- One record per product batch: frying/roasting, grinding, stirring/heating and cooling, as on the paper form.
+-- The control-point records (CCP-01, CCP-02, OPRP-05) are derived from it, so nothing is entered twice;
+-- `derived` lists them with their result and any NCR.
+CREATE TABLE IF NOT EXISTS prod_controls (
+  pc_id        TEXT PRIMARY KEY,
+  uid          TEXT NOT NULL UNIQUE,
+  product_code TEXT NOT NULL,
+  product_name TEXT,
+  prod_date    TEXT NOT NULL,
+  batch_no     TEXT NOT NULL,
+  oil_type     TEXT,
+  data         TEXT NOT NULL,
+  derived      TEXT,
+  result       TEXT NOT NULL CHECK(result IN ('PASS','FAIL','PENDING')),
+  note         TEXT,
+  ncr_id       TEXT,
+  inspector    TEXT NOT NULL,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  UNIQUE(product_code, batch_no)
+);
+CREATE INDEX IF NOT EXISTS idx_prodctl_date ON prod_controls(prod_date);

@@ -30,6 +30,8 @@ import ColdReportPage from './pages/ColdReportPage'
 import WeighPage from './pages/WeighPage'
 import WeighPrintPage from './pages/WeighPrintPage'
 import FormulasPage from './pages/FormulasPage'
+import ProdControlPage from './pages/ProdControlPage'
+import ProdControlReportPage from './pages/ProdControlReportPage'
 
 const Private = ({ children, role }) => <RequireAuth role={role}>{children}</RequireAuth>
 
@@ -71,6 +73,8 @@ export default function App() {
           <Route path="/qa/weigh" element={<Private><WeighPage /></Private>} />
           <Route path="/qa/weigh/:id/print" element={<Private><WeighPrintPage /></Private>} />
           <Route path="/qa/formulas" element={<Private><FormulasPage /></Private>} />
+          <Route path="/qa/prodctl" element={<Private><ProdControlPage /></Private>} />
+          <Route path="/qa/prodctl/report" element={<Private><ProdControlReportPage /></Private>} />
           <Route path="/account" element={<Private><AccountPage /></Private>} />
           <Route path="/users" element={<Private role="QA_MANAGER"><UsersPage /></Private>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

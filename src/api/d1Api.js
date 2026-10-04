@@ -174,3 +174,9 @@ export const weighApi = {
   list: (params = {}) => request(`/api/weigh?${new URLSearchParams(params)}`),
   save: (body) => post('/api/weigh', body),
 }
+
+// QC_08 production control (derives CCP-01 / CCP-02 / OPRP-05 records).
+export const prodctlApi = {
+  list: (params = {}) => request(`/api/prodctl?${new URLSearchParams(params)}`),
+  save: (body) => post('/api/prodctl', body),
+}

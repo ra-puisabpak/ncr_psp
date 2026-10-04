@@ -576,6 +576,54 @@ check('a weighing keeps lots, weights, weigher and formula version', r.status ==
 r = await call('GET', '/api/trace?q=LOT-หมูบด', { token: qc });
 check('tracing a raw-material lot finds the batches that weighed it', r.status === 200 && r.j.weighings.length === 3 && r.j.weighings.some((w) => w.batch_no === 'B260922-02' && w.lots.some((l) => l.kg === 46.51)), r.j.weighings);
 
+// ----- QC_08 production control → CCP-01 / CCP-02 / OPRP-05 records -----
+const fryOff = { garlic: { done: false }, shallot: { done: false }, chili: { done: false } };
+const pcA = (o = {}) => ({ uid: 'pc-uid-' + Math.random().toString(36).slice(2, 10), product_code: 'FG0002', product_name: 'น้ำพริกตาแดงมันกุ้ง', prod_date: '2026-09-23', batch_no: 'B260923-01', oil_type: 'น้ำมันรำข้าว',
+  fry: { garlic: { done: true, temp: 87, min: 9 }, shallot: { done: true, w_before: 15.5, w_after: 6.2, temp: 93.6, min: 7 }, chili: { done: false } },
+  ccp1: { reach_time: '09:10', end_time: '11:15', readings: [86.5, 88, 87.2, 88.4, 89], thermo_ok: true },
+  heat: { temp: 88, min: 125 }, cool: { temp: 58, min: 40, foreign_ok: true, fill_temp: 55, to_cap_min: 60, cap_temp: 45, chilled: true }, ...o });
+r = await call('POST', '/api/prodctl', { token: qc, body: pcA({ ccp1: null }) });
+check('a group A batch must record the CCP-01 heating', r.status === 400 && /CCP-01/.test(r.j.error), r);
+r = await call('POST', '/api/prodctl', { token: qc, body: pcA({ cool: { temp: 58, min: 40, fill_temp: 55, to_cap_min: 60, chilled: true } }) });
+check('the foreign-matter check must be answered', r.status === 400, r);
+r = await call('POST', '/api/prodctl', { token: qc, body: pcA({ ccp1: { reach_time: '09:10', end_time: '11:15', readings: [86.5, 88, 89] } }) });
+check('nothing is saved while a derived check is unanswered', r.status === 400 && /เทอร์โมมิเตอร์/.test(r.j.error)
+  && !db.prepare("SELECT 1 FROM prod_controls WHERE batch_no='B260923-01'").get(), r);
+const goodA = pcA();
+r = await call('POST', '/api/prodctl', { token: qc, body: goodA });
+check('a passing group A batch derives CCP-01 and OPRP-05 records', r.status === 201 && r.j.result === 'PASS' && /^Q8-260923-001$/.test(r.j.pc_id)
+  && r.j.derived.map((x) => x.cp_id).sort().join() === 'CCP-01,OPRP-05' && r.j.derived.every((x) => x.result === 'PASS'), r.j);
+const a1 = r.j;
+r = await call('GET', `/api/qc?cp_id=CCP-01&q=B260923-01`, { token: qc });
+check('the CCP-01 record holds the hold time worked out from the clock times', r.j.length === 1 && r.j[0].values.hold_min === 125 && r.j[0].values.temp_min === 86.5, r.j);
+r = await call('POST', '/api/prodctl', { token: qc, body: goodA });
+check('the same QC_08 sent twice derives nothing twice', r.status === 200 && r.j.pc_id === a1.pc_id && r.j.derived.map((x) => x.rec_id).join() === a1.derived.map((x) => x.rec_id).join()
+  && db.prepare("SELECT COUNT(*) AS n FROM qc_records WHERE batch_no='B260923-01'").get().n === 2, r.j);
+r = await call('POST', '/api/prodctl', { token: qc, body: pcA({ uid: 'pc-uid-dup00001' }) });
+check('a batch has one QC_08', r.status === 409, r);
+r = await call('POST', '/api/prodctl', { token: qc, body: pcA({ batch_no: 'B260923-02', ccp1: { reach_time: '13:00', end_time: '14:40', readings: [86, 84.2, 88], thermo_ok: true } }) });
+check('heating held 100 min with a dip below 85 °C fails CCP-01 and opens a critical NCR', r.status === 201 && r.j.result === 'FAIL'
+  && r.j.derived.find((x) => x.cp_id === 'CCP-01').result === 'FAIL' && /^NCR-/.test(r.j.derived.find((x) => x.cp_id === 'CCP-01').ncr_id), r.j);
+r = await call('GET', `/api/ncr/${r.j.derived.find((x) => x.cp_id === 'CCP-01').ncr_id}`, { token: qa });
+check('that NCR names the dip and the short hold', r.j.severity === 'Critical' && /84.2/.test(r.j.actual_result) && /100/.test(r.j.actual_result), r.j.actual_result);
+const pcB = (o = {}) => pcA({ product_code: 'FG0007', product_name: 'พริกผัดน้ำมันมะกอก สูตรออริจินอล', batch_no: 'B260923-11', ccp1: null,
+  fry: { garlic: { done: true, w_after: 9.58, temp: 122.4, min: 8 }, shallot: { done: true, w_after: 15.92, temp: 132.2, min: 18 }, chili: { done: false } },
+  fry_thermo_ok: true, heat: { temp: 46.6, min: 21 }, cool: { temp: 39.5, min: 9, foreign_ok: true }, ...o });
+r = await call('POST', '/api/prodctl', { token: qc, body: pcB() });
+check('a group B batch derives only CCP-02, with chili frying not applicable', r.status === 201 && r.j.result === 'PASS' && r.j.derived.length === 1 && r.j.derived[0].cp_id === 'CCP-02', r.j);
+r = await call('GET', `/api/qc?cp_id=CCP-02&q=B260923-11`, { token: qc });
+check('the CCP-02 record marks chili as N/A and takes the lowest oil temperature', r.j[0].values.chili_min === 'NA' && r.j[0].values.oil_temp === 122.4, r.j[0].values);
+r = await call('POST', '/api/prodctl', { token: qc, body: pcB({ batch_no: 'B260923-12', fry: { garlic: { done: true, temp: 121.1, min: 6 }, shallot: { done: true, temp: 132.5, min: 20 }, chili: { done: false } } }) });
+check('garlic fried 6 min (as on the paper form of 02/10) fails CCP-02', r.status === 201 && r.j.result === 'FAIL' && r.j.derived[0].result === 'FAIL', r.j);
+r = await call('POST', '/api/prodctl', { token: qc, body: pcB({ batch_no: 'B260923-13', cool: { temp: 40, min: 9, foreign_ok: false } }) });
+check('foreign matter needs details', r.status === 400, r);
+r = await call('POST', '/api/prodctl', { token: qc, body: pcB({ batch_no: 'B260923-13', cool: { temp: 40, min: 9, foreign_ok: false }, note: 'พบเศษพลาสติกสีฟ้า' }) });
+check('foreign matter opens an NCR and fails the batch', r.status === 201 && r.j.result === 'FAIL' && /^NCR-/.test(r.j.ncr_id), r.j);
+r = await call('GET', '/api/prodctl?from=2026-09-23&to=2026-09-23', { token: qc });
+check('QC_08 records are listed with their derived checks', r.status === 200 && r.j.length === 5 && r.j.every((x) => x.inspector === 'QC One' && x.result !== 'PENDING'), r.j.map((x) => [x.pc_id, x.result]));
+r = await call('GET', '/api/release/check?product_code=FG0002&batch_no=B260923-01', { token: qc });
+check('FG Release sees the derived CCP records', r.status === 200 && r.j.requirements.find((x) => x.cp_id === 'CCP-01').state === 'PASS', r.j.requirements);
+
 // The schema runs at every deploy: running it again changes nothing people entered, and retires only untouched first-register entries.
 db.prepare("INSERT INTO control_points (cp_id,name,cp_type,status,params,version,created_by,created_at,updated_by,updated_at) VALUES ('CP-HEAT','old','TBD','DRAFT','[]',1,'system','x','system','x'),('CP-BONE','old','TBD','DRAFT','[]',2,'system','x','qam','x')").run();
 db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
