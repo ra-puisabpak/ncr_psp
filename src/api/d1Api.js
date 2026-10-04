@@ -147,3 +147,19 @@ export const hygApi = {
   records: (params = {}) => request(`/api/hyg/records?${new URLSearchParams(params)}`),
   save: (body) => post('/api/hyg/records', body),
 }
+
+// FM-QC-07 frying oil quality and temperature.
+export const oilApi = {
+  list: (params = {}) => request(`/api/oil?${new URLSearchParams(params)}`),
+  save: (body) => post('/api/oil', body),
+  verify: (id, body) => post(`/api/oil/${enc(id)}/verify`, body),
+}
+
+// FM-QC-05 refrigerator / freezer temperature.
+export const coldApi = {
+  units: () => request('/api/cold/units'),
+  createUnit: (body) => post('/api/cold/units', body),
+  updateUnit: (id, body) => patch(`/api/cold/units/${enc(id)}`, body),
+  readings: (params = {}) => request(`/api/cold/readings?${new URLSearchParams(params)}`),
+  save: (body) => post('/api/cold/readings', body),
+}

@@ -470,6 +470,76 @@ check('a deactivated employee cannot be checked', r.status === 409, r);
 r = await call('GET', '/api/hyg/records', { headers: {} });
 check('hygiene records need a login', r.status === 401, r);
 
+// ----- FM-QC-07 frying oil -----
+const oilBody = (o = {}) => ({ uid: 'oil-uid-' + Math.random().toString(36).slice(2, 10), check_date: '2026-09-21', check_time: '08:05', stage: 'BEFORE',
+  line: 'พริกผัดน้ำมันมะกอก', oil_type: 'น้ำมันรำข้าว', tank: 'T1', tpm: [12, 13], temps: [160], temp_result: 'PASS', tpm_meter: 'TPM-01', thermometer: 'TH-03', ...o });
+r = await call('POST', '/api/oil', { token: qc, body: oilBody({ tpm: [] }) });
+check('an oil check needs a TPM reading', r.status === 400, r);
+r = await call('POST', '/api/oil', { token: qc, body: oilBody() });
+check('oil under 20% TPM passes', r.status === 201 && r.j.result === 'PASS' && r.j.chk_id === 'OIL-260921-001' && !r.j.ncr_id, r);
+const oilId = r.j.chk_id;
+r = await call('POST', '/api/oil', { token: qc, body: oilBody({ tpm: [21.5] }) });
+check('20–25% TPM needs an assessment note', r.status === 400, r);
+r = await call('POST', '/api/oil', { token: qc, body: oilBody({ tpm: [21.5], note: 'เฝ้าระวัง ตรวจซ้ำหลังทอด 2 Batch' }) });
+check('20–25% TPM is recorded as watch', r.status === 201 && r.j.result === 'WATCH', r);
+r = await call('POST', '/api/oil', { token: qc, body: oilBody({ stage: 'AFTER', tpm: [24, 25.5] }) });
+check('25% TPM or more needs an immediate action', r.status === 400, r);
+r = await call('POST', '/api/oil', { token: qc, body: oilBody({ stage: 'AFTER', tpm: [24, 25.5], action: 'หยุดใช้ เปลี่ยนน้ำมันใหม่' }) });
+check('25% TPM or more fails and opens an NCR', r.status === 201 && r.j.result === 'FAIL' && /^NCR-/.test(r.j.ncr_id), r);
+r = await call('GET', `/api/ncr/${r.j.ncr_id}`, { token: qa });
+check('the oil NCR names the tank and the reading', r.j.lot_no === 'T1' && /25.5/.test(r.j.actual_result) && /กักกัน/.test(r.j.immediate_action), r.j);
+r = await call('POST', '/api/oil', { token: qc, body: oilBody({ temp_result: 'NA', temps: [] }) });
+check('N/A temperature needs a reason', r.status === 400, r);
+r = await call('POST', `/api/oil/${oilId}/verify`, { token: qc, body: { decision: 'APPROVE' } });
+check('QC cannot verify an oil check', r.status === 403, r);
+r = await call('POST', `/api/oil/${oilId}/verify`, { token: qa, body: { decision: 'APPROVE' } });
+check('QA verifies an oil check', r.status === 200, r);
+r = await call('POST', `/api/oil/${oilId}/verify`, { token: qa, body: { decision: 'REJECT', note: 'x' } });
+check('an oil check is verified once', r.status === 409, r);
+r = await call('GET', '/api/oil?from=2026-09-21&to=2026-09-21', { token: qc });
+check('oil checks are listed with readings and verification', r.status === 200 && r.j.length === 3 && r.j.find((x) => x.chk_id === oilId).verify_decision === 'APPROVE'
+  && r.j.find((x) => x.chk_id === oilId).tpm[1] === 13, r.j.map((x) => x.chk_id));
+
+// ----- FM-QC-05 refrigerator / freezer -----
+r = await call('POST', '/api/cold/units', { token: qc, body: { unit_id: 'FZ-01', name: 'ตู้แช่ FG', area: 'FG', unit_type: 'FREEZE' } });
+check('QC cannot register a cold unit', r.status === 403, r);
+r = await call('POST', '/api/cold/units', { token: qa, body: { unit_id: 'ch-01', name: 'ตู้เย็นวัตถุดิบ 1', area: 'RM', unit_type: 'CHILL', thermometer: 'TH-07', calib_due: '2026-12-31' } });
+check('QA registers a chill unit with the SOP limits', r.status === 201 && r.j.unit_id === 'CH-01', r);
+r = await call('POST', '/api/cold/units', { token: qa, body: { unit_id: 'FZ-01', name: 'ตู้แช่แข็ง FG', area: 'FG', unit_type: 'FREEZE', thermometer: 'TH-08', calib_due: '2026-01-31' } });
+r = await call('GET', '/api/cold/units', { token: qc });
+const ch = r.j.find((u) => u.unit_id === 'CH-01'), fz = r.j.find((u) => u.unit_id === 'FZ-01');
+check('default limits: chill 0–5 (escalate 8), freeze ≤-18 (escalate -12)', ch.spec_min === 0 && ch.spec_max === 5 && ch.escalate_at === 8 && fz.spec_min === null && fz.spec_max === -18 && fz.escalate_at === -12, r.j);
+r = await call('PATCH', '/api/cold/units/CH-01', { token: qa, body: { escalate_at: 4 } });
+check('the escalation limit must be above the specification', r.status === 400, r);
+const coldBody = (o = {}) => ({ uid: 'cold-uid-' + Math.random().toString(36).slice(2, 10), unit_id: 'CH-01', read_date: '2026-09-21', slot: '11:00', read_time: '11:02', temp: 3.5, ...o });
+const COND_OK = { clean: 'P', door: 'P', gasket: 'P', water: 'P', ice: 'P', general: 'P' };
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ slot: '08:00' }) });
+check('the 08:00 reading needs the condition check', r.status === 400, r);
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ slot: '08:00', condition: COND_OK }) });
+check('a reading within 0–5 °C passes', r.status === 201 && r.j.status === 'PASS' && r.j.rd_id === 'TMP-260921-0001', r);
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ slot: '08:00', condition: COND_OK }) });
+check('the same slot cannot be recorded twice', r.status === 409, r);
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ temp: 6.5 }) });
+check('out of spec needs an action and a cause', r.status === 400, r);
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ temp: 6.5, actions: ['RECHECK'], note: 'เพิ่งโหลดสินค้า เปิดประตูนาน' }) });
+check('out of spec below the escalation limit is a FAIL without NCR', r.status === 201 && r.j.status === 'FAIL' && !r.j.ncr_id, r);
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ slot: 'RECHECK', temp: 9.2, actions: ['RECHECK'], note: 'คอมเพรสเซอร์ไม่ทำงาน' }) });
+check('past the escalation limit the supervisor must be notified', r.status === 400, r);
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ slot: 'RECHECK', temp: 9.2, actions: ['NOTIFY', 'HOLD'], note: 'คอมเพรสเซอร์ไม่ทำงาน' }) });
+check('holding product needs the affected lot', r.status === 400, r);
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ slot: 'RECHECK', temp: 9.2, actions: ['NOTIFY', 'HOLD', 'ENGINEERING'], affected: 'หอมแขก LOT-SH-77', note: 'คอมเพรสเซอร์ไม่ทำงาน' }) });
+check('past the escalation limit opens an NCR', r.status === 201 && r.j.status === 'ESCALATE' && /^NCR-/.test(r.j.ncr_id), r);
+r = await call('GET', `/api/ncr/${r.j.ncr_id}`, { token: qa });
+check('the temperature NCR carries unit, limit, value and lot', r.j.source_type === 'WAREHOUSE' && r.j.hold_location === 'CH-01' && r.j.actual_result === '9.2 °C' && /LOT-SH-77/.test(r.j.nc_description), r.j);
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ unit_id: 'FZ-01', slot: '08:00', temp: -19, condition: { ...COND_OK, ice: 'F' } }) });
+check('a failed condition item needs a remark', r.status === 400, r);
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ unit_id: 'FZ-01', slot: '08:00', temp: -19, condition: { ...COND_OK, ice: 'F' }, note: 'น้ำแข็งเกาะหนา แจ้ง defrost' }) });
+check('a freezer reading flags an expired thermometer', r.status === 201 && r.j.status === 'PASS' && r.j.calib_expired === 1, r);
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ unit_id: 'FZ-01', slot: '11:00', temp: -16, actions: ['RECHECK'], note: 'defrost' }) });
+check('a freezer at -16 °C is out of spec but not escalated', r.status === 201 && r.j.status === 'FAIL', r);
+r = await call('GET', '/api/cold/readings?unit_id=CH-01&from=2026-09-01&to=2026-09-30', { token: qc });
+check('readings are listed per unit with the limits in force', r.status === 200 && r.j.length === 3 && r.j.every((x) => x.limits.spec_max === 5 && x.inspector === 'QC One'), r.j);
+
 // The schema runs at every deploy: running it again changes nothing people entered, and retires only untouched first-register entries.
 db.prepare("INSERT INTO control_points (cp_id,name,cp_type,status,params,version,created_by,created_at,updated_by,updated_at) VALUES ('CP-HEAT','old','TBD','DRAFT','[]',1,'system','x','system','x'),('CP-BONE','old','TBD','DRAFT','[]',2,'system','x','qam','x')").run();
 db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));

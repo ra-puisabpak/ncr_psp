@@ -22,6 +22,11 @@ import TracePage from './pages/TracePage'
 import HygienePage from './pages/HygienePage'
 import HygieneReportPage from './pages/HygieneReportPage'
 import HygieneSetupPage from './pages/HygieneSetupPage'
+import OilPage from './pages/OilPage'
+import OilReportPage from './pages/OilReportPage'
+import ColdPage from './pages/ColdPage'
+import ColdUnitsPage from './pages/ColdUnitsPage'
+import ColdReportPage from './pages/ColdReportPage'
 
 const Private = ({ children, role }) => <RequireAuth role={role}>{children}</RequireAuth>
 
@@ -55,6 +60,11 @@ export default function App() {
           <Route path="/qa/hygiene" element={<Private><HygienePage /></Private>} />
           <Route path="/qa/hygiene/report" element={<Private><HygieneReportPage /></Private>} />
           <Route path="/qa/hygiene/setup" element={<Private><HygieneSetupPage /></Private>} />
+          <Route path="/qa/oil" element={<Private><OilPage /></Private>} />
+          <Route path="/qa/oil/report" element={<Private><OilReportPage /></Private>} />
+          <Route path="/qa/cold" element={<Private><ColdPage /></Private>} />
+          <Route path="/qa/cold/units" element={<Private><ColdUnitsPage /></Private>} />
+          <Route path="/qa/cold/report" element={<Private><ColdReportPage /></Private>} />
           <Route path="/account" element={<Private><AccountPage /></Private>} />
           <Route path="/users" element={<Private role="QA_MANAGER"><UsersPage /></Private>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

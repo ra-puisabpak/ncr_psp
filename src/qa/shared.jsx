@@ -43,3 +43,13 @@ export const Badge = ({ cls, children }) => (
 export const ResultBadge = ({ result }) => (
   <Badge cls={result === 'PASS' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>{result === 'PASS' ? 'ผ่าน' : 'ไม่ผ่าน'}</Badge>
 )
+
+export const monthOf = (iso) => iso.slice(0, 7)
+export const monthRange = (ym) => {
+  const [y, m] = ym.split('-').map(Number)
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  return { from: `${ym}-01`, to: `${ym}-${String(last).padStart(2, '0')}`, days: last }
+}
+export const TH_MONTHS_FULL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
+export const thaiMonth = (ym) => { const [y, m] = ym.split('-').map(Number); return `${TH_MONTHS_FULL[m - 1]} ${y + 543}` }
+export const newUid = () => (crypto.randomUUID ? crypto.randomUUID() : `u-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`)

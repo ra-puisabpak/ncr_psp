@@ -313,6 +313,25 @@ async function batchGate(DB, productCode, batchNo) {
 const relRow = (r) => ({ ...r, rm_lots: r.rm_lots ? JSON.parse(r.rm_lots) : [], checks: r.checks ? JSON.parse(r.checks) : {}, gate: JSON.parse(r.gate) });
 const RELEASE_CHECKS = ['label_ok', 'pack_ok', 'spec_ok'];
 
+// An NCR opened by the system from a failed check, written in the same batch as the check itself.
+function autoNcrStmt(DB, user, ncrId, f) {
+  const rec = { shipped_status: 'NOT_SHIPPED', reported_by: user.display_name, ...f };
+  const cols = Object.keys(rec);
+  return DB.prepare(
+    `INSERT INTO ncr_records (ncr_id,issue_date,status,created_by,updated_by,created_at,updated_at,${cols.join(',')})
+     VALUES (?,?,?,?,?,?,?,${cols.map(() => '?').join(',')})`
+  ).bind(ncrId, today(), 'Open', user.username, user.username, nowIso(), nowIso(), ...cols.map((k) => rec[k]));
+}
+// Next number of the form PREFIX-YYMMDD-NNN for a day, from the highest one used.
+async function dayId(DB, table, col, prefix, date, width = 3) {
+  const day = date.slice(2).replace(/-/g, '');
+  const last = await DB.prepare(`SELECT ${col} AS id FROM ${table} WHERE ${col} LIKE ? ORDER BY ${col} DESC LIMIT 1`).bind(`${prefix}-${day}-%`).first();
+  return `${prefix}-${day}-${String((last ? parseInt(last.id.split('-').pop(), 10) : 0) + 1).padStart(width, '0')}`;
+}
+const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
+const isTime = (v) => /^\d{2}:\d{2}$/.test(String(v || ''));
+const txt = (v, n) => (blank(v) ? null : String(v).trim().slice(0, n));
+
 // ---------- router ----------
 export default {
   async fetch(req, env) {
@@ -1446,6 +1465,224 @@ export default {
           }
           await audit(DB, user.username, 'user', 'create', 'hyg_record', recId, { emp: emp.name, result, failed: failed.map((f) => f.key), action });
           return json({ rec_id: recId, result, failed, action }, 201);
+        }
+      }
+
+      // ===== PSP QUALITY APP: frying oil (FM-QC-07) =====
+      if (path === '/api/oil' && method === 'GET') {
+        const sp = url.searchParams, where = ['1=1'], p = [];
+        if (isDate(sp.get('from'))) { where.push('check_date>=?'); p.push(sp.get('from')); }
+        if (isDate(sp.get('to'))) { where.push('check_date<=?'); p.push(sp.get('to')); }
+        const { results } = await DB.prepare(`SELECT * FROM oil_checks WHERE ${where.join(' AND ')} ORDER BY check_date DESC, chk_id DESC LIMIT 1000`).bind(...p).all();
+        return json(results.map((r) => ({ ...r, tpm: JSON.parse(r.tpm), temps: r.temps ? JSON.parse(r.temps) : [] })));
+      }
+      if (path === '/api/oil' && method === 'POST') {
+        need(user, WRITERS);
+        const b = await body();
+        const uid = recvUid(b.uid);
+        const done = await DB.prepare('SELECT chk_id, result, ncr_id FROM oil_checks WHERE uid=?').bind(uid).first();
+        if (done) return json(done);
+        if (!isDate(b.check_date) || b.check_date > today()) fail(400, 'กรุณาระบุวันที่ตรวจ (ไม่เป็นวันในอนาคต)');
+        if (!blank(b.check_time) && !isTime(b.check_time)) fail(400, 'รูปแบบเวลาไม่ถูกต้อง');
+        if (!['BEFORE', 'DURING', 'AFTER'].includes(b.stage)) fail(400, 'กรุณาเลือกช่วงที่ตรวจ (ก่อน / ระหว่าง / หลังการผลิต)');
+        const nums = (list, label, lo, hi) => {
+          const out = (Array.isArray(list) ? list : []).filter((v) => !blank(v)).slice(0, 3).map(Number);
+          if (out.some((n) => !Number.isFinite(n) || n < lo || n > hi)) fail(400, `${label} ต้องเป็นตัวเลข ${lo}–${hi}`);
+          return out;
+        };
+        const tpm = nums(b.tpm, 'ค่า TPM', 0, 60);
+        if (!tpm.length) fail(400, 'กรุณากรอกค่า TPM อย่างน้อย 1 ค่า');
+        const temps = nums(b.temps, 'อุณหภูมิน้ำมัน', -10, 300);
+        if (!['PASS', 'FAIL', 'NA'].includes(b.temp_result)) fail(400, 'กรุณาเลือกผลอุณหภูมิ (ผ่าน / ไม่ผ่าน / N/A)');
+        if (b.temp_result !== 'NA' && !temps.length) fail(400, 'กรุณากรอกอุณหภูมิน้ำมัน หรือเลือก N/A พร้อมเหตุผล');
+        const tpmMax = Math.max(...tpm);
+        const result = tpmMax >= 25 || b.temp_result === 'FAIL' ? 'FAIL' : tpmMax >= 20 ? 'WATCH' : 'PASS';
+        const note = txt(b.note, 500), action = txt(b.action, 500);
+        if (b.temp_result === 'NA' && !note) fail(400, 'เลือก N/A ต้องระบุเหตุผลในหมายเหตุ');
+        if (result === 'WATCH' && !note) fail(400, 'TPM 20–25% อยู่ในช่วงเฝ้าระวัง กรุณาบันทึกการประเมิน');
+        if (result === 'FAIL' && !action) fail(400, 'กรุณาบันทึกสิ่งที่ทำทันที (หยุดใช้ / กักกัน / เปลี่ยนน้ำมัน)');
+        const rec = {
+          check_date: b.check_date, check_time: nz(b.check_time), stage: b.stage, line: txt(b.line, 100), oil_type: txt(b.oil_type, 60),
+          tank: txt(b.tank, 60), tpm: JSON.stringify(tpm), tpm_max: tpmMax, temps: JSON.stringify(temps), temp_result: b.temp_result,
+          tpm_meter: txt(b.tpm_meter, 40), thermometer: txt(b.thermometer, 40), result, action, note, inspector: user.display_name,
+        };
+        const STAGE_TH = { BEFORE: 'ก่อนการผลิต', DURING: 'ระหว่างการผลิต', AFTER: 'หลังการผลิต' };
+        for (let attempt = 0; ; attempt++) {
+          const chkId = await dayId(DB, 'oil_checks', 'chk_id', 'OIL', rec.check_date);
+          const ncrId = result === 'FAIL' ? await nextId(DB, 'ncr_records', 'ncr_id', 'NCR') : null;
+          const stmts = [];
+          if (ncrId) {
+            const why = [tpmMax >= 25 ? `TPM ${tpmMax}% (เกณฑ์ < 25%)` : '', b.temp_result === 'FAIL' ? `อุณหภูมิน้ำมัน ${temps.join(' / ')} °C ไม่ตรง Spec` : ''].filter(Boolean);
+            stmts.push(autoNcrStmt(DB, user, ncrId, {
+              source_type: 'IN_PROCESS', source_ref: chkId, process_ref: 'PC0006', severity: 'Major',
+              found_date: rec.check_date, found_time: rec.check_time, lot_no: rec.tank,
+              parameter_id: 'FM-QC-07', parameter_name: 'คุณภาพน้ำมันทอด (TPM) / อุณหภูมิน้ำมัน',
+              critical_limit: 'TPM < 25% (ประกาศ สธ.) · อุณหภูมิตาม WI ของผลิตภัณฑ์', actual_result: why.join('\n'),
+              nc_description: [`น้ำมันทอดไม่ผ่านเกณฑ์ (FM-QC-07 บันทึก ${chkId} · ${STAGE_TH[b.stage]})`, ...why,
+                rec.line ? `ผลิตภัณฑ์/ไลน์: ${rec.line}` : '', rec.oil_type ? `ชนิดน้ำมัน: ${rec.oil_type}` : '', rec.tank ? `ถัง/Lot: ${rec.tank}` : '', note ? `หมายเหตุ: ${note}` : '']
+                .filter(Boolean).join('\n').slice(0, 2000),
+              immediate_action: `หยุดใช้และกักกันน้ำมัน (HOLD) — ${action}`.slice(0, 1000),
+            }));
+          }
+          const cols = Object.keys(rec);
+          stmts.push(DB.prepare(`INSERT INTO oil_checks (chk_id,uid,${cols.join(',')},ncr_id,created_by,created_at) VALUES (?,?,${cols.map(() => '?').join(',')},?,?,?)`)
+            .bind(chkId, uid, ...cols.map((k) => rec[k]), ncrId, user.username, nowIso()));
+          try { await DB.batch(stmts); } catch (e) {
+            if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
+              const again = await DB.prepare('SELECT chk_id, result, ncr_id FROM oil_checks WHERE uid=?').bind(uid).first();
+              if (again) return json(again);
+              continue;
+            }
+            throw e;
+          }
+          await audit(DB, user.username, 'user', 'create', 'oil_check', chkId, { stage: b.stage, tpm_max: tpmMax, result, ncr_id: ncrId });
+          if (ncrId) await audit(DB, user.username, 'user', 'create', 'ncr', ncrId, { source_type: 'IN_PROCESS', oil_check: chkId });
+          return json({ chk_id: chkId, result, ncr_id: ncrId }, 201);
+        }
+      }
+      const ov = path.match(/^\/api\/oil\/(OIL-\d{6}-\d{3,})\/verify$/);
+      if (ov && method === 'POST') {
+        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่ทวนสอบได้');
+        const b = await body();
+        if (!['APPROVE', 'REJECT'].includes(b.decision)) fail(400, 'กรุณาเลือก APPROVE หรือ REJECT');
+        if (b.decision === 'REJECT' && blank(b.note)) fail(400, 'REJECT ต้องระบุเหตุผล');
+        const row = await DB.prepare('SELECT chk_id, verified_by FROM oil_checks WHERE chk_id=?').bind(ov[1]).first();
+        if (!row) fail(404, 'ไม่พบบันทึก');
+        if (row.verified_by) fail(409, 'บันทึกนี้ทวนสอบแล้ว');
+        await DB.prepare('UPDATE oil_checks SET verified_by=?, verified_at=?, verify_decision=?, verify_note=? WHERE chk_id=?')
+          .bind(user.display_name, nowIso(), b.decision, txt(b.note, 500), row.chk_id).run();
+        await audit(DB, user.username, 'user', 'verify', 'oil_check', row.chk_id, { decision: b.decision });
+        return json({ success: true });
+      }
+
+      // ===== PSP QUALITY APP: refrigerator / freezer temperature (FM-QC-05) =====
+      if (path === '/api/cold/units' && method === 'GET') {
+        return json((await DB.prepare('SELECT * FROM cold_units ORDER BY active DESC, area, unit_id').all()).results);
+      }
+      const cu = path.match(/^\/api\/cold\/units(?:\/([A-Za-z0-9_-]{1,30}))?$/);
+      if (cu && (method === 'POST' || (method === 'PATCH' && cu[1]))) {
+        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่จัดการทะเบียนตู้ได้');
+        const b = await body();
+        const row = cu[1] ? await DB.prepare('SELECT * FROM cold_units WHERE unit_id=?').bind(cu[1]).first() : null;
+        if (method === 'PATCH' && !row) fail(404, 'ไม่พบตู้');
+        const id = method === 'POST' ? String(b.unit_id || '').trim().toUpperCase() : row.unit_id;
+        if (method === 'POST') {
+          if (!/^[A-Z0-9_-]{2,30}$/.test(id)) fail(400, 'รหัสตู้ (Equipment ID) ใช้ A-Z 0-9 - _ ยาว 2–30 ตัว');
+          if (await DB.prepare('SELECT 1 FROM cold_units WHERE unit_id=?').bind(id).first()) fail(409, 'มีรหัสตู้นี้แล้ว');
+        }
+        const next = { ...(row || { active: 1 }) };
+        for (const [k, n] of [['name', 100], ['setting', 40], ['thermometer', 40]]) if (k in b || !row) next[k] = txt(b[k], n);
+        if ('area' in b || !row) next.area = b.area;
+        if ('unit_type' in b || !row) next.unit_type = b.unit_type;
+        if (!['RM', 'WIP', 'FG'].includes(next.area)) fail(400, 'กรุณาเลือกพื้นที่ (RM / WIP / FG)');
+        if (!['CHILL', 'FREEZE'].includes(next.unit_type)) fail(400, 'กรุณาเลือกชนิดตู้ (Chill / Freeze)');
+        if (blank(next.name)) fail(400, 'กรุณาระบุชื่อ/ตำแหน่งตู้');
+        // Limits default to the SOP values for the type; QA may tighten them per product specification.
+        const def = next.unit_type === 'CHILL' ? { spec_min: 0, spec_max: 5, escalate_at: 8 } : { spec_min: null, spec_max: -18, escalate_at: -12 };
+        for (const k of ['spec_min', 'spec_max', 'escalate_at']) {
+          if (k in b) next[k] = blank(b[k]) ? (k === 'spec_min' ? null : def[k]) : Number(b[k]);
+          else if (!row || ('unit_type' in b && b.unit_type !== row.unit_type)) next[k] = def[k];
+          if (next[k] !== null && !Number.isFinite(next[k])) fail(400, 'ค่าเกณฑ์อุณหภูมิต้องเป็นตัวเลข');
+        }
+        if (next.spec_min !== null && next.spec_min > next.spec_max) fail(400, 'ค่าต่ำสุดมากกว่าค่าสูงสุด');
+        if (next.escalate_at <= next.spec_max) fail(400, 'Escalation Limit ต้องสูงกว่าค่าสูงสุดของเกณฑ์');
+        if ('calib_due' in b || !row) { if (!blank(b.calib_due) && !isDate(b.calib_due)) fail(400, 'วันครบกำหนดสอบเทียบไม่ถูกต้อง'); next.calib_due = nz(b.calib_due); }
+        if ('active' in b) next.active = b.active ? 1 : 0;
+        const fields = ['name', 'area', 'unit_type', 'setting', 'spec_min', 'spec_max', 'escalate_at', 'thermometer', 'calib_due', 'active'];
+        if (method === 'POST') {
+          await DB.prepare(`INSERT INTO cold_units (unit_id,${fields.join(',')},updated_by,updated_at) VALUES (?,${fields.map(() => '?').join(',')},?,?)`)
+            .bind(id, ...fields.map((k) => next[k] ?? null), user.username, nowIso()).run();
+          await audit(DB, user.username, 'user', 'create', 'cold_unit', id, { name: next.name, unit_type: next.unit_type });
+          return json({ success: true, unit_id: id }, 201);
+        }
+        const changes = diff(row, next, fields);
+        if (Object.keys(changes).length) {
+          await DB.prepare(`UPDATE cold_units SET ${fields.map((k) => `${k}=?`).join(',')}, updated_by=?, updated_at=? WHERE unit_id=?`)
+            .bind(...fields.map((k) => next[k] ?? null), user.username, nowIso(), id).run();
+          await audit(DB, user.username, 'user', 'update', 'cold_unit', id, changes);
+        }
+        return json({ success: true });
+      }
+      if (path === '/api/cold/readings' && method === 'GET') {
+        const sp = url.searchParams, where = ['1=1'], p = [];
+        if (sp.get('unit_id')) { where.push('unit_id=?'); p.push(sp.get('unit_id')); }
+        if (isDate(sp.get('from'))) { where.push('read_date>=?'); p.push(sp.get('from')); }
+        if (isDate(sp.get('to'))) { where.push('read_date<=?'); p.push(sp.get('to')); }
+        const { results } = await DB.prepare(`SELECT * FROM cold_readings WHERE ${where.join(' AND ')} ORDER BY read_date DESC, rd_id DESC LIMIT 2000`).bind(...p).all();
+        return json(results.map((r) => ({ ...r, limits: JSON.parse(r.limits), condition: r.condition ? JSON.parse(r.condition) : null, actions: r.actions ? JSON.parse(r.actions) : [] })));
+      }
+      if (path === '/api/cold/readings' && method === 'POST') {
+        need(user, WRITERS);
+        const b = await body();
+        const uid = recvUid(b.uid);
+        const done = await DB.prepare('SELECT rd_id, status, ncr_id FROM cold_readings WHERE uid=?').bind(uid).first();
+        if (done) return json(done);
+        const unit = await DB.prepare('SELECT * FROM cold_units WHERE unit_id=?').bind(String(b.unit_id || '')).first();
+        if (!unit) fail(400, 'กรุณาเลือกตู้');
+        if (!unit.active) fail(409, 'ตู้นี้ปิดการใช้งานแล้ว');
+        if (!isDate(b.read_date) || b.read_date > today()) fail(400, 'กรุณาระบุวันที่ (ไม่เป็นวันในอนาคต)');
+        if (!['08:00', '11:00', '15:00', '17:00', 'RECHECK'].includes(b.slot)) fail(400, 'กรุณาเลือกรอบเวลาที่ตรวจ');
+        if (!blank(b.read_time) && !isTime(b.read_time)) fail(400, 'รูปแบบเวลาไม่ถูกต้อง');
+        if (b.slot !== 'RECHECK' && await DB.prepare('SELECT 1 FROM cold_readings WHERE unit_id=? AND read_date=? AND slot=?').bind(unit.unit_id, b.read_date, b.slot).first()) {
+          fail(409, `ตู้นี้บันทึกรอบ ${b.slot} ของวันนี้แล้ว ถ้าวัดซ้ำให้เลือกรอบ "ตรวจซ้ำ"`);
+        }
+        if (blank(b.temp) || !Number.isFinite(Number(b.temp))) fail(400, 'กรุณากรอกอุณหภูมิที่อ่านได้');
+        const temp = Number(b.temp);
+        if (temp < -60 || temp > 60) fail(400, 'อุณหภูมิอยู่นอกช่วงที่เป็นไปได้ (-60 ถึง 60 °C)');
+        const status = temp > unit.escalate_at ? 'ESCALATE' : (temp > unit.spec_max || (unit.spec_min !== null && temp < unit.spec_min)) ? 'FAIL' : 'PASS';
+        // Condition check of the unit: required with the first reading of the day.
+        const CONDITION = ['clean', 'door', 'gasket', 'water', 'ice', 'general'];
+        let condition = null;
+        if (b.condition && typeof b.condition === 'object') {
+          condition = {};
+          for (const k of CONDITION) { const v = b.condition[k]; if (v !== 'P' && v !== 'F') fail(400, 'กรุณาตรวจสภาพตู้ให้ครบ 6 ข้อ'); condition[k] = v; }
+        }
+        if (b.slot === '08:00' && !condition) fail(400, 'รอบ 08:00 ต้องตรวจสภาพตู้ 6 ข้อด้วย');
+        const condFail = condition && Object.values(condition).includes('F');
+        const ACTIONS = ['RECHECK', 'NOTIFY', 'ENGINEERING', 'HOLD', 'TRANSFER'];
+        const actions = (Array.isArray(b.actions) ? b.actions : []).filter((a) => ACTIONS.includes(a));
+        const note = txt(b.note, 500), affected = txt(b.affected, 300);
+        if (status !== 'PASS' && !actions.length) fail(400, 'อุณหภูมินอกเกณฑ์ กรุณาเลือกการดำเนินการเบื้องต้น');
+        if (status === 'ESCALATE' && !actions.includes('NOTIFY')) fail(400, 'เกิน Escalation Limit ต้องแจ้งหัวหน้างาน / QA');
+        if ((status !== 'PASS' || condFail) && !note) fail(400, 'กรุณาระบุสาเหตุเบื้องต้นหรือความผิดปกติในหมายเหตุ');
+        if (actions.includes('HOLD') && !affected) fail(400, 'กักสินค้า (HOLD) ต้องระบุสินค้า / Lot ที่ได้รับผลกระทบ');
+        const calibExpired = unit.calib_due && unit.calib_due < b.read_date ? 1 : 0;
+        const limits = { spec_min: unit.spec_min, spec_max: unit.spec_max, escalate_at: unit.escalate_at, unit_type: unit.unit_type };
+        const ACT_TH = { RECHECK: 'ตรวจซ้ำ', NOTIFY: 'แจ้งหัวหน้างาน/QA', ENGINEERING: 'แจ้งวิศวกรรม', HOLD: 'กักสินค้า (HOLD)', TRANSFER: 'ย้ายไปที่จัดเก็บที่เหมาะสม' };
+        const specTxt = unit.spec_min !== null ? `${unit.spec_min}–${unit.spec_max} °C` : `≤ ${unit.spec_max} °C`;
+        for (let attempt = 0; ; attempt++) {
+          const rdId = await dayId(DB, 'cold_readings', 'rd_id', 'TMP', b.read_date, 4);
+          const ncrId = status === 'ESCALATE' ? await nextId(DB, 'ncr_records', 'ncr_id', 'NCR') : null;
+          const stmts = [];
+          if (ncrId) {
+            stmts.push(autoNcrStmt(DB, user, ncrId, {
+              source_type: unit.area === 'WIP' ? 'IN_PROCESS' : 'WAREHOUSE', source_ref: rdId,
+              severity: 'Major', found_date: b.read_date, found_time: nz(b.read_time), hold_location: unit.unit_id,
+              parameter_id: 'FM-QC-05', parameter_name: `อุณหภูมิ${unit.unit_type === 'CHILL' ? 'ตู้เย็น' : 'ตู้แช่แข็ง'} ${unit.unit_id}`,
+              critical_limit: `เกณฑ์ ${specTxt} · Escalation > ${unit.escalate_at} °C`, actual_result: `${temp} °C`,
+              material_name: affected, lot_no: affected,
+              nc_description: [`Temperature Deviation: ${unit.unit_id} ${unit.name} (${unit.area}) อ่านได้ ${temp} °C เกิน Escalation Limit ${unit.escalate_at} °C — บันทึก ${rdId}`,
+                `รอบ ${b.slot}${b.read_time ? ' เวลา ' + b.read_time : ''} · เทอร์โมมิเตอร์ ${unit.thermometer || '-'}${calibExpired ? ' (หมดอายุสอบเทียบ)' : ''}`,
+                affected ? `สินค้า/Lot ที่ได้รับผลกระทบ: ${affected}` : '', `สาเหตุเบื้องต้น: ${note}`].filter(Boolean).join('\n').slice(0, 2000),
+              immediate_action: actions.map((a) => ACT_TH[a]).join(' · ').slice(0, 1000),
+              suggestion: 'QA ประเมิน Time × Temperature Exposure และตัดสินการจัดการสินค้า (RELEASE / TRANSFER / REWORK / DISPOSE)',
+            }));
+          }
+          stmts.push(DB.prepare(`INSERT INTO cold_readings (rd_id,uid,unit_id,read_date,slot,read_time,temp,limits,status,condition,thermometer,calib_expired,actions,affected,note,ncr_id,inspector,created_by,created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(rdId, uid, unit.unit_id, b.read_date, b.slot, nz(b.read_time), temp, JSON.stringify(limits), status,
+            condition ? JSON.stringify(condition) : null, unit.thermometer, calibExpired, actions.length ? JSON.stringify(actions) : null, affected, note, ncrId,
+            user.display_name, user.username, nowIso()));
+          try { await DB.batch(stmts); } catch (e) {
+            if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
+              const again = await DB.prepare('SELECT rd_id, status, ncr_id FROM cold_readings WHERE uid=?').bind(uid).first();
+              if (again) return json(again);
+              continue;
+            }
+            throw e;
+          }
+          await audit(DB, user.username, 'user', 'create', 'cold_reading', rdId, { unit_id: unit.unit_id, temp, status, ncr_id: ncrId });
+          if (ncrId) await audit(DB, user.username, 'user', 'create', 'ncr', ncrId, { source: 'FM-QC-05', cold_reading: rdId });
+          return json({ rd_id: rdId, status, ncr_id: ncrId, calib_expired: calibExpired }, 201);
         }
       }
 

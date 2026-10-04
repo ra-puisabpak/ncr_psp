@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, Boxes, Route, HandHeart,
+  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, Boxes, Route, HandHeart, Droplets, Thermometer,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { qaApi } from '../api/d1Api'
@@ -96,6 +96,22 @@ export default function QADashboardPage() {
 
       <h2 className="text-sm font-bold text-gray-700 mb-2">บันทึกตรวจ</h2>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+        <Link to="/qa/oil" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0"><Droplets className="w-5 h-5" /></div>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-sm text-gray-800">คุณภาพน้ำมันทอด</div>
+            <div className="text-[11px] text-gray-500">FM-QC-07 · TPM และอุณหภูมิ</div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-300" />
+        </Link>
+        <Link to="/qa/cold" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <div className="w-10 h-10 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center shrink-0"><Thermometer className="w-5 h-5" /></div>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-sm text-gray-800">อุณหภูมิตู้เย็น / ตู้แช่แข็ง</div>
+            <div className="text-[11px] text-gray-500">FM-QC-05 · 08:00 · 11:00 · 15:00 · 17:00</div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-300" />
+        </Link>
         <Link to="/qa/hygiene" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
           <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center shrink-0"><HandHeart className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">

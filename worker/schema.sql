@@ -414,3 +414,77 @@ CREATE TABLE IF NOT EXISTS hyg_records (
 );
 CREATE INDEX IF NOT EXISTS idx_hyg_date ON hyg_records(inspect_date);
 CREATE INDEX IF NOT EXISTS idx_hyg_emp ON hyg_records(emp_id);
+
+-- ===== PSP QUALITY APP: frying oil quality and temperature (FM-QC-07 Rev.02) =====
+-- TPM is judged by the server: <20% normal, 20–<25% watch, >=25% not to be used (Ministry of Public Health limit 25%).
+-- Oil temperature follows the product WI, so the inspector judges it (PASS / FAIL / NA with a reason).
+CREATE TABLE IF NOT EXISTS oil_checks (
+  chk_id       TEXT PRIMARY KEY,
+  uid          TEXT NOT NULL UNIQUE,
+  check_date   TEXT NOT NULL,
+  check_time   TEXT,
+  stage        TEXT NOT NULL CHECK(stage IN ('BEFORE','DURING','AFTER')),
+  line         TEXT,
+  oil_type     TEXT,
+  tank         TEXT,
+  tpm          TEXT NOT NULL,
+  tpm_max      REAL NOT NULL,
+  temps        TEXT,
+  temp_result  TEXT NOT NULL CHECK(temp_result IN ('PASS','FAIL','NA')),
+  tpm_meter    TEXT,
+  thermometer  TEXT,
+  result       TEXT NOT NULL CHECK(result IN ('PASS','WATCH','FAIL')),
+  action       TEXT,
+  note         TEXT,
+  ncr_id       TEXT,
+  inspector    TEXT NOT NULL,
+  verified_by  TEXT,
+  verified_at  TEXT,
+  verify_decision TEXT CHECK(verify_decision IN ('APPROVE','REJECT') OR verify_decision IS NULL),
+  verify_note  TEXT,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_oil_date ON oil_checks(check_date);
+
+-- ===== PSP QUALITY APP: refrigerator and freezer temperature (FM-QC-05 Rev.02) =====
+-- Units and their limits. Defaults per SOP-QC-XX: chill 0–5 °C (escalate >8), freeze <= -18 °C (escalate > -12).
+CREATE TABLE IF NOT EXISTS cold_units (
+  unit_id      TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  area         TEXT NOT NULL CHECK(area IN ('RM','WIP','FG')),
+  unit_type    TEXT NOT NULL CHECK(unit_type IN ('CHILL','FREEZE')),
+  setting      TEXT,
+  spec_min     REAL,
+  spec_max     REAL NOT NULL,
+  escalate_at  REAL NOT NULL,
+  thermometer  TEXT,
+  calib_due    TEXT,
+  active       INTEGER NOT NULL DEFAULT 1,
+  updated_by   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+
+-- One reading. status: PASS in spec, FAIL out of spec (recheck), ESCALATE past the escalation limit (NCR opened).
+CREATE TABLE IF NOT EXISTS cold_readings (
+  rd_id        TEXT PRIMARY KEY,
+  uid          TEXT NOT NULL UNIQUE,
+  unit_id      TEXT NOT NULL,
+  read_date    TEXT NOT NULL,
+  slot         TEXT NOT NULL CHECK(slot IN ('08:00','11:00','15:00','17:00','RECHECK')),
+  read_time    TEXT,
+  temp         REAL NOT NULL,
+  limits       TEXT NOT NULL,
+  status       TEXT NOT NULL CHECK(status IN ('PASS','FAIL','ESCALATE')),
+  condition    TEXT,
+  thermometer  TEXT,
+  calib_expired INTEGER NOT NULL DEFAULT 0,
+  actions      TEXT,
+  affected     TEXT,
+  note         TEXT,
+  ncr_id       TEXT,
+  inspector    TEXT NOT NULL,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cold_unit_date ON cold_readings(unit_id, read_date);
