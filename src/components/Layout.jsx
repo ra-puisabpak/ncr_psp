@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { FileText, ClipboardList, LayoutDashboard, UserCircle, ShieldCheck } from 'lucide-react'
-import { COMPANY_NAME, FORM_CODE_NCR, FORM_CODE_CAPA } from '../config'
+import { COMPANY_NAME, LOGO_URL } from '../config'
 import { useAuth, ROLE_TH } from '../auth'
 import InstallButton from './InstallButton'
 
@@ -16,9 +16,10 @@ export default function Layout({ children, pageActions }) {
     <div className="min-h-screen bg-slate-50 pb-16 sm:pb-0">
       <header className="bg-blue-900 text-white sticky top-0 z-40 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-4">
+          <Link to="/qa" className="shrink-0"><img src={LOGO_URL} alt="" className="w-9 h-9 rounded-lg bg-white p-0.5 object-contain" /></Link>
           <div className="min-w-0 flex-1">
             <div className="font-bold text-sm sm:text-base leading-tight truncate">{COMPANY_NAME}</div>
-            <div className="text-blue-300 text-[11px] hidden sm:block">QA eForm · {FORM_CODE_NCR} / {FORM_CODE_CAPA}</div>
+            <div className="text-blue-300 text-[11px] hidden sm:block">PSP Quality</div>
           </div>
           <nav className="hidden sm:flex items-center gap-1">
             <Link to="/dashboard" className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition ${isDashboard ? 'bg-white/20' : 'text-blue-200 hover:bg-white/10 hover:text-white'}`}>

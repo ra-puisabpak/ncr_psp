@@ -1,15 +1,18 @@
 {
-  "name": "NCR/CAPA eForm — บริษัท พระจันทร์๕๐ จำกัด (Puisabpak)",
-  "short_name": "NCR eForm",
-  "description": "ระบบบันทึก NCR และ CAPA สำหรับงานประกันคุณภาพ",
+  "name": "PSP Quality — บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak)",
+  "short_name": "PSP Quality",
+  "description": "ระบบงานคุณภาพ: ตรวจรับวัตถุดิบ บันทึก CCP/OPRP สุขลักษณะ ปล่อยสินค้า สอบย้อนกลับ NCR และ CAPA",
   "lang": "th",
-  "start_url": "/ncr",
+  "start_url": "/qa",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#f8fafc",
+  "background_color": "#ffffff",
   "theme_color": "#1e3a8a",
-  "categories": ["business", "productivity"],
+  "categories": [
+    "business",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -41,19 +44,34 @@
       "name": "ตรวจรับวัตถุดิบ FM-QC-001",
       "short_name": "ตรวจรับ",
       "url": "/receiving/",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
       "name": "สร้าง NCR ใหม่",
       "short_name": "NCR ใหม่",
       "url": "/ncr/new",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
       "name": "รายการ CAPA",
       "short_name": "CAPA",
       "url": "/capa",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }

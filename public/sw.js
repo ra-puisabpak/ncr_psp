@@ -1,5 +1,5 @@
-// NCR eForm service worker — app-shell caching for installable PWA
-const CACHE = 'puisabpak-ncr-v2'
+// PSP Quality service worker — app-shell caching for installable PWA
+const CACHE = 'puisabpak-ncr-v3'
 const APP_SHELL = ['/', '/ncr', '/receiving/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png']
 
 self.addEventListener('install', (event) => {
