@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Smart QA Factory v2 — Complete Master Data</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+:root{
+  --bg:#F2F1ED;--card:#FFFFFF;--card2:#F8F7F4;--border:rgba(0,0,0,0.08);--border2:rgba(0,0,0,0.14);
+  --text1:#111110;--text2:#4A4A46;--text3:#8A8A84;--text4:#B8B8B0;
+  --green:#1A5C2A;--green-bg:#E8F5EC;--green-mid:#2D8C45;--green-light:#D1EDDA;
+  --red:#8C1A1A;--red-bg:#FEF0F0;--red-mid:#D94040;--red-light:#FAD5D5;
+  --amber:#6B3A0A;--amber-bg:#FEF5E6;--amber-mid:#C27A1A;--amber-light:#FAE3B8;
+  --blue:#0F3D7A;--blue-bg:#EBF3FF;--blue-mid:#2563C4;--blue-light:#C8DEFF;
+  --teal:#0A4F3E;--teal-bg:#E4F5F0;--teal-mid:#178A6A;--teal-light:#B8E8DC;
+  --purple:#3A2D8C;--purple-bg:#F0EEFF;--purple-mid:#6255CC;--purple-light:#D4CFFF;
+  --r:14px;--r-sm:9px;--r-xs:6px;
+  --shadow-sm:0 1px 3px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04);
+  --shadow:0 2px 8px rgba(0,0,0,0.08),0 1px 3px rgba(0,0,0,0.05);
+}
+body{font-family:'IBM Plex Sans Thai',-apple-system,sans-serif;background:#D8D6D0;min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:20px 0 40px;}
+.phone{width:430px;background:var(--bg);min-height:100vh;position:relative;box-shadow:0 12px 60px rgba(0,0,0,0.25),0 4px 20px rgba(0,0,0,0.15);border-radius:22px;overflow:hidden;}
+.status-bar{background:#111110;color:rgba(255,255,255,0.9);display:flex;justify-content:space-between;align-items:center;padding:11px 20px 8px;font-size:12px;font-weight:500;font-family:'IBM Plex Mono',monospace;border-radius:22px 22px 0 0;}
+.status-icons{display:flex;gap:8px;align-items:center;font-size:11px;}
+.header{background:#111110;padding:4px 20px 18px;}
+.header-top{display:flex;justify-content:space-between;align-items:center;}
+.app-brand{display:flex;align-items:center;gap:10px;}
+.brand-icon{width:36px;height:36px;background:var(--teal-mid);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;}
+.app-title{font-size:17px;font-weight:700;color:#fff;letter-spacing:-0.3px;}
+.app-sub{font-size:10px;color:rgba(255,255,255,0.4);letter-spacing:1px;text-transform:uppercase;margin-top:1px;}
+.header-actions{display:flex;gap:8px;}
+.icon-btn{background:rgba(255,255,255,0.08);border:none;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative;transition:background 0.15s;}
+.icon-btn:active{background:rgba(255,255,255,0.15);}
+.badge-dot{position:absolute;top:6px;right:6px;width:8px;height:8px;background:var(--red-mid);border-radius:50%;border:2px solid #111110;}
+.tab-bar{background:#111110;display:flex;padding:0 12px 2px;gap:2px;overflow-x:auto;scrollbar-width:none;}
+.tab-bar::-webkit-scrollbar{display:none;}
+.tab{color:rgba(255,255,255,0.45);padding:7px 11px;font-size:11.5px;font-weight:500;border-radius:8px 8px 0 0;cursor:pointer;white-space:nowrap;transition:all 0.15s;border-bottom:2px solid transparent;}
+.tab.active{color:#fff;border-bottom-color:var(--teal-mid);}
+.content{padding:14px 14px 90px;}
+.panel{display:none;}
+.panel.active{display:block;}
+.bottom-nav{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);width:414px;background:#111110;border-radius:20px;display:flex;padding:8px 4px;gap:2px;box-shadow:0 4px 20px rgba(0,0,0,0.3);}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 4px;cursor:pointer;border-radius:12px;transition:background 0.15s;}
+.nav-item:active,.nav-item.active{background:rgba(255,255,255,0.1);}
+.nav-icon{font-size:18px;}
+.nav-label{font-size:9.5px;color:rgba(255,255,255,0.5);font-weight:500;text-align:center;}
+.nav-item.active .nav-label{color:var(--teal-light);}
+/* CARDS */
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.kpi-card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:var(--shadow-sm);}
+.kpi-label{font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;}
+.kpi-value{font-size:26px;font-weight:700;color:var(--text1);line-height:1.1;margin-top:2px;font-family:'IBM Plex Mono',monospace;}
+.kpi-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+.kpi-value.ok{color:var(--green-mid);}
+.kpi-value.warn{color:var(--amber-mid);}
+.kpi-value.fail{color:var(--red-mid);}
+.section-header{font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px;}
+.form-card{background:var(--card);border-radius:var(--r);padding:14px;box-shadow:var(--shadow-sm);margin-bottom:12px;}
+.form-title{font-size:14px;font-weight:700;color:var(--text1);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.form-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.field{margin-bottom:11px;}
+.field-label{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px;}
+.req{color:var(--red-mid);}
+.field-input,.field-select,.field-textarea{width:100%;padding:10px 12px;font-size:13.5px;font-family:'IBM Plex Sans Thai',sans-serif;color:var(--text1);background:var(--card2);border:1.5px solid var(--border2);border-radius:var(--r-sm);outline:none;transition:border 0.15s;appearance:none;-webkit-appearance:none;}
+.field-textarea{resize:none;min-height:76px;}
+.field-input:focus,.field-select:focus{border-color:var(--teal-mid);}
+.field-input.fail,.field-select.fail{border-color:var(--red-mid);background:var(--red-bg);}
+.field-input.in-spec{border-color:var(--green-mid);background:var(--green-bg);}
+.field-input.out-of-spec{border-color:var(--red-mid);background:var(--red-bg);}
+.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.field-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.btn{width:100%;padding:13px;font-size:14px;font-weight:700;font-family:'IBM Plex Sans Thai',sans-serif;border:none;border-radius:var(--r-sm);cursor:pointer;transition:all 0.15s;margin-top:4px;}
+.btn-teal{background:var(--teal-mid);color:#fff;}
+.btn-amber{background:var(--amber-mid);color:#fff;}
+.btn-red{background:var(--red-mid);color:#fff;}
+.btn-blue{background:var(--blue-mid);color:#fff;}
+.btn-green{background:var(--green-mid);color:#fff;}
+.btn-purple{background:var(--purple-mid);color:#fff;}
+.btn-outline{background:transparent;color:var(--text2);border:1.5px solid var(--border2);margin-top:8px;}
+.btn:active{opacity:0.85;transform:scale(0.99);}
+.btn-sm{padding:7px 12px;font-size:11.5px;width:auto;margin-top:0;}
+.badge{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:20px;flex-shrink:0;}
+.badge-pass{background:var(--green-bg);color:var(--green);}
+.badge-fail{background:var(--red-bg);color:var(--red);}
+.badge-ncr{background:var(--amber-bg);color:var(--amber);}
+.badge-hold{background:var(--purple-bg);color:var(--purple);}
+.badge-approved{background:var(--green-bg);color:var(--green);}
+.badge-conditional{background:var(--amber-bg);color:var(--amber);}
+.badge-high{background:var(--red-bg);color:var(--red);}
+.badge-medium{background:var(--amber-bg);color:var(--amber);}
+.badge-low{background:var(--green-bg);color:var(--green);}
+.ccp-banner{background:var(--amber-bg);border:1px solid var(--amber-light);border-radius:var(--r-xs);padding:10px 12px;font-size:12px;color:var(--amber);font-weight:500;margin-bottom:12px;}
+.alert-banner{background:var(--red-bg);border:1px solid var(--red-light);border-radius:var(--r-xs);padding:10px 12px;font-size:12px;color:var(--red);display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;}
+.alert-icon{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;}
+.alert-icon.red{background:var(--red-mid);color:#fff;}
+.alert-title{font-weight:700;font-size:12.5px;margin-bottom:2px;}
+.alert-sub{font-size:11.5px;color:var(--red);}
+.temp-wrap{position:relative;}
+.temp-unit{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text3);font-family:'IBM Plex Mono',monospace;}
+.spec-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
+.spec-chip{background:var(--teal-bg);color:var(--teal);font-size:11px;padding:4px 9px;border-radius:20px;font-weight:500;}
+.w-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.w-input{width:100%;padding:10px 8px;font-size:13px;text-align:center;font-family:'IBM Plex Mono',monospace;color:var(--text1);background:var(--card2);border:1.5px solid var(--border2);border-radius:var(--r-sm);outline:none;}
+.result-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+.result-box{border-radius:var(--r-sm);padding:12px;text-align:center;}
+.result-pass{background:var(--green-bg);border:1px solid var(--green-light);}
+.result-fail{background:var(--red-bg);border:1px solid var(--red-light);}
+.result-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;}
+.result-val{font-size:20px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:2px;}
+.result-pass .result-val{color:var(--green-mid);}
+.result-fail .result-val{color:var(--red-mid);}
+.avg-val{font-size:22px;font-weight:800;font-family:'IBM Plex Mono',monospace;text-align:center;padding:8px;border-radius:var(--r-sm);background:var(--card2);}
+.avg-val.pass{color:var(--green-mid);}
+.avg-val.fail{color:var(--red-mid);}
+.step-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.step-chip{background:var(--card2);color:var(--text3);font-size:12px;font-weight:600;padding:7px 12px;border-radius:20px;cursor:pointer;transition:all 0.15s;border:1.5px solid transparent;}
+.step-chip.active{background:var(--teal-bg);color:var(--teal-mid);border-color:var(--teal-light);}
+.check-row{display:flex;align-items:flex-start;gap:12px;padding:11px 14px;background:var(--card);border-radius:var(--r-sm);margin-bottom:6px;cursor:pointer;transition:background 0.15s;}
+.check-circle{width:22px;height:22px;border-radius:50%;border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;color:var(--green-mid);}
+.check-circle.done{background:var(--green-mid);border-color:var(--green-mid);color:#fff;}
+.check-text{font-size:13px;color:var(--text1);font-weight:500;}
+.check-text.done{text-decoration:line-through;color:var(--text3);}
+.check-freq{font-size:11px;color:var(--text3);margin-top:2px;}
+.activity-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.activity-item:last-child{border-bottom:none;}
+.act-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.act-info{flex:1;}
+.act-name{font-size:13px;font-weight:600;color:var(--text1);}
+.act-sub{font-size:11.5px;color:var(--text3);margin-top:1px;}
+/* MASTER DATA */
+.master-tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-bottom:12px;padding-bottom:2px;}
+.master-tabs::-webkit-scrollbar{display:none;}
+.master-tab{background:var(--card2);color:var(--text3);font-size:11px;font-weight:600;padding:7px 11px;border-radius:20px;cursor:pointer;white-space:nowrap;border:1.5px solid transparent;transition:all 0.15s;}
+.master-tab.active{background:var(--teal-bg);color:var(--teal-mid);border-color:var(--teal-light);}
+.search-bar{background:var(--card);border:1.5px solid var(--border2);border-radius:var(--r-sm);padding:9px 12px;font-size:13px;font-family:'IBM Plex Sans Thai',sans-serif;color:var(--text1);width:100%;outline:none;margin-bottom:10px;}
+.search-bar:focus{border-color:var(--teal-mid);}
+.master-item{background:var(--card);border-radius:var(--r-sm);padding:12px 14px;margin-bottom:8px;box-shadow:var(--shadow-sm);}
+.master-item-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.master-item-id{font-size:10.5px;font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text3);}
+.master-item-name{font-size:13px;font-weight:600;color:var(--text1);margin-top:2px;line-height:1.35;}
+.master-item-meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;}
+.meta-tag{font-size:10.5px;background:var(--card2);color:var(--text2);padding:3px 8px;border-radius:12px;font-weight:500;}
+/* NCR */
+.ncr-item{background:var(--red-bg);border:1px solid var(--red-light);border-radius:var(--r-sm);padding:12px 14px;margin-bottom:8px;}
+.ncr-id{font-size:11px;font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--red-mid);}
+.ncr-title{font-size:13px;font-weight:600;color:var(--red);margin-top:2px;}
+.ncr-sub{font-size:11.5px;color:var(--text3);margin-top:3px;}
+/* STATS */
+.stats-row{display:flex;gap:8px;margin-bottom:12px;}
+.stat-pill{flex:1;background:var(--card);border-radius:var(--r-sm);padding:10px;text-align:center;box-shadow:var(--shadow-sm);}
+.stat-num{font-size:20px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--text1);}
+.stat-lbl{font-size:10px;color:var(--text3);margin-top:1px;}
+/* MODAL */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:100;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity 0.2s;}
+.modal-overlay.show{opacity:1;pointer-events:all;}
+.modal-sheet{background:var(--bg);width:430px;border-radius:22px 22px 0 0;padding:20px 20px 40px;max-height:88vh;overflow-y:auto;transform:translateY(100%);transition:transform 0.25s cubic-bezier(0.32,0.72,0,1);}
+.modal-overlay.show .modal-sheet{transform:translateY(0);}
+.modal-handle{width:40px;height:4px;background:var(--border2);border-radius:2px;margin:0 auto 16px;}
+.modal-title{font-size:16px;font-weight:800;color:var(--text1);margin-bottom:4px;}
+.modal-sub{font-size:12.5px;color:var(--text3);margin-bottom:14px;}
+.auto-banner{background:var(--red-bg);border:1px solid var(--red-light);border-radius:var(--r-xs);padding:10px 12px;font-size:12px;color:var(--red-mid);font-weight:600;margin-bottom:14px;}
+/* EXPORT OPTIONS */
+.export-option{background:var(--card);border-radius:var(--r-sm);padding:14px 16px;margin-bottom:8px;cursor:pointer;border:1.5px solid var(--border);display:flex;align-items:center;gap:14px;transition:border-color 0.15s;}
+.export-option:active{border-color:var(--teal-mid);}
+.export-icon{font-size:24px;flex-shrink:0;}
+.export-info .export-title{font-size:14px;font-weight:700;color:var(--text1);}
+.export-info .export-desc{font-size:12px;color:var(--text3);margin-top:2px;}
+.toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%) translateY(20px);background:#111110;color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;font-weight:500;z-index:200;opacity:0;transition:all 0.25s;white-space:nowrap;max-width:380px;text-align:center;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.ok{background:var(--green-mid);}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="status-bar">
+    <span id="status-time">09:41</span>
+    <div class="status-icons"><span>📶</span><span>🔋</span></div>
+  </div>
+  <div class="header">
+    <div class="header-top">
+      <div class="app-brand">
+        <div class="brand-icon">🏭</div>
+        <div>
+          <div class="app-title">Smart QA Factory v2</div>
+          <div class="app-sub">GHPs · HACCP · CODEX</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" onclick="openModal('export-modal')">📊</button>
+        <button class="icon-btn" onclick="switchPanel('ncr')">🔔<div class="badge-dot" id="ncr-dot" style="display:none"></div></button>
+      </div>
+    </div>
+  </div>
+  <div class="tab-bar">
+    <div class="tab active" onclick="switchPanel('dashboard',this)">🏠 Dashboard</div>
+    <div class="tab" onclick="switchPanel('receiving',this)">📥 รับวัตถุดิบ</div>
+    <div class="tab" onclick="switchPanel('inprocess',this)">⚙️ In-Process</div>
+    <div class="tab" onclick="switchPanel('fgrelease',this)">📦 FG Release</div>
+    <div class="tab" onclick="switchPanel('sanitation',this)">🧹 Sanitation</div>
+    <div class="tab" onclick="switchPanel('master',this)">📋 Master</div>
+    <div class="tab" onclick="switchPanel('ncr',this)">⚠️ NCR Log</div>
+  </div>
+
+  <div class="content">
+    <!-- ══ DASHBOARD ══ -->
+    <div id="panel-dashboard" class="panel active">
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-label">RM Today</div><div class="kpi-value ok" id="kpi-rm">0</div><div class="kpi-sub">Lots รับเข้า</div></div>
+        <div class="kpi-card"><div class="kpi-label">NCR Open</div><div class="kpi-value warn" id="kpi-ncr">0</div><div class="kpi-sub">รายการค้างแก้ไข</div></div>
+        <div class="kpi-card"><div class="kpi-label">Metal Det.</div><div class="kpi-value ok" id="kpi-md">0</div><div class="kpi-sub">PASS ทุกรอบ</div></div>
+        <div class="kpi-card"><div class="kpi-label">FG Released</div><div class="kpi-value ok" id="kpi-fg">0</div><div class="kpi-sub">Lots อนุมัติส่ง</div></div>
+      </div>
+      <div class="section-header">📊 Master Data Summary</div>
+      <div class="stats-row">
+        <div class="stat-pill"><div class="stat-num">32</div><div class="stat-lbl">Suppliers</div></div>
+        <div class="stat-pill"><div class="stat-num" id="stat-mat">0</div><div class="stat-lbl">Materials</div></div>
+        <div class="stat-pill"><div class="stat-num" id="stat-fg2">0</div><div class="stat-lbl">FG SKUs</div></div>
+        <div class="stat-pill"><div class="stat-num">3</div><div class="stat-lbl">CCPs</div></div>
+      </div>
+      <div class="section-header">🕐 Recent Activity</div>
+      <div class="form-card" style="padding:0 14px;">
+        <div id="recent-log">
+          <div class="activity-item">
+            <div class="act-icon" style="background:var(--teal-bg)">🏭</div>
+            <div class="act-info"><div class="act-name">ระบบพร้อมใช้งาน — Smart QA v2</div><div class="act-sub">ข้อมูล Master ครบ 32 Suppliers · RM/DM/PM/CM/FG</div></div>
+            <span class="badge badge-pass">READY</span>
+          </div>
+        </div>
+      </div>
+      <div class="section-header">⚠️ CCP Overview</div>
+      <div class="form-card">
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:13px;font-weight:600;">CCP001 · ตรวจจับ Fe</div><div style="font-size:11px;color:var(--text3);">PC0010 · Metal Detector</div></div><span class="badge badge-pass">CL ≥ø1.0mm</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:13px;font-weight:600;">CCP002 · ตรวจจับ Non-Fe</div><div style="font-size:11px;color:var(--text3);">PC0010 · Metal Detector</div></div><span class="badge badge-pass">CL ≥ø1.5mm</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:13px;font-weight:600;">CCP003 · ตรวจจับ SUS</div><div style="font-size:11px;color:var(--text3);">PC0010 · Metal Detector</div></div><span class="badge badge-pass">CL ≥ø2.0mm</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ RECEIVING ══ -->
+    <div id="panel-receiving" class="panel">
+      <div class="step-row">
+        <div class="step-chip active" onclick="setStep(this,'RM')">🥩 Raw Material</div>
+        <div class="step-chip" onclick="setStep(this,'DM')">🧂 Dry Material</div>
+        <div class="step-chip" onclick="setStep(this,'PM')">📦 Packaging</div>
+        <div class="step-chip" onclick="setStep(this,'CM')">🧪 Chemical</div>
+      </div>
+      <div class="form-card">
+        <div class="form-title"><div class="form-dot" style="background:var(--teal-mid)"></div>บันทึกการรับวัตถุดิบ — PC0001/PC0002</div>
+        <div class="ccp-banner">⚠ CCP: RM Chilled ≤7°C · Frozen ≤-18°C · ตรวจทุก Lot</div>
+        <div class="field"><div class="field-label">วัตถุดิบ <span class="req">*</span></div><select class="field-select" id="rm-material" onchange="onMaterialChange()"><option value="">-- เลือกวัตถุดิบ --</option></select></div>
+        <div id="rm-cl-banner" style="display:none;" class="ccp-banner"></div>
+        <div class="field-grid">
+          <div class="field"><div class="field-label">Lot No. <span class="req">*</span></div><input class="field-input" type="text" id="rm-lot" placeholder="LOT-001A"></div>
+          <div class="field"><div class="field-label">ปริมาณ (kg)</div><input class="field-input" type="number" id="rm-qty" placeholder="100.0"></div>
+        </div>
+        <div class="field"><div class="field-label">Supplier <span class="req">*</span></div><select class="field-select" id="rm-supplier"><option value="">-- เลือก Supplier --</option></select></div>
+        <div class="field-grid">
+          <div class="field"><div class="field-label">MFG Date</div><input class="field-input" type="date" id="rm-mfg"></div>
+          <div class="field"><div class="field-label">EXP Date</div><input class="field-input" type="date" id="rm-exp"></div>
+        </div>
+        <div id="temp-field-wrap">
+          <div class="field">
+            <div class="field-label" id="rm-temp-label">อุณหภูมิ (°C) <span style="color:var(--red-mid);font-size:10.5px;">CL ≤7°C</span></div>
+            <div class="temp-wrap"><input class="field-input" type="number" step="0.1" id="rm-temp" placeholder="4.5" oninput="checkRMTemp(this)"><span class="temp-unit">°C</span></div>
+          </div>
+          <div id="rm-temp-alert" style="display:none;" class="alert-banner">
+            <div class="alert-icon red">!</div>
+            <div><div class="alert-title">⚡ Out of Spec — CCP Breach!</div><div class="alert-sub">อุณหภูมิเกิน Critical Limit — Auto NCR จะถูกสร้าง</div></div>
+          </div>
+        </div>
+        <div class="field"><div class="field-label">Visual Inspection</div>
+          <select class="field-select" id="rm-visual">
+            <option value="pass">✅ PASS — ปกติ ไม่มีสิ่งผิดปกติ</option>
+            <option value="fail-foreign">❌ FAIL — พบสิ่งแปลกปลอม</option>
+            <option value="fail-color">❌ FAIL — สี/กลิ่นผิดปกติ</option>
+            <option value="fail-pack">❌ FAIL — บรรจุภัณฑ์เสียหาย</option>
+            <option value="fail-pest">❌ FAIL — พบร่องรอยสัตว์รบกวน</option>
+          </select>
+        </div>
+        <div class="field"><div class="field-label">QA Inspector <span class="req">*</span></div><input class="field-input" type="text" id="rm-inspector" placeholder="ชื่อผู้ตรวจ"></div>
+        <button class="btn btn-teal" onclick="submitReceiving()">✅ บันทึกการรับ + ตรวจสอบ Spec</button>
+      </div>
+    </div>
+
+    <!-- ══ IN-PROCESS ══ -->
+    <div id="panel-inprocess" class="panel">
+      <div class="form-card" style="border-left:3px solid var(--amber-mid);">
+        <div class="form-title"><div class="form-dot" style="background:var(--amber-mid)"></div>CCP-1/2/3: ตรวจจับโลหะ — PC0010</div>
+        <div class="ccp-banner">⚠ CCP: ห้ามพบชิ้นส่วนโลหะเกินขนาดกำหนด — ทุก Lot ทุกรอบผลิต</div>
+        <div class="field"><div class="field-label">เครื่องตรวจจับโลหะ</div>
+          <select class="field-select" id="md-equip">
+            <option value="TMD001">TMD001 · Metal Detector-S (สินค้าชิ้นเล็ก)</option>
+            <option value="TMD002">TMD002 · Metal Detector-L (สินค้าชิ้นใหญ่)</option>
+          </select>
+        </div>
+        <div class="field"><div class="field-label">สินค้าที่ผ่านเครื่อง</div><select class="field-select" id="md-product"><option value="">-- เลือกสินค้า --</option></select></div>
+        <div class="field-grid3">
+          <div class="field"><div class="field-label" style="font-size:11px;">Fe ≤1.0mm</div><select class="field-select" id="md-fe" onchange="onMDChange(this)"><option value="PASS">✅ PASS</option><option value="FAIL">❌ FAIL</option></select></div>
+          <div class="field"><div class="field-label" style="font-size:11px;">Non-Fe ≤1.5mm</div><select class="field-select" id="md-nonfe" onchange="onMDChange(this)"><option value="PASS">✅ PASS</option><option value="FAIL">❌ FAIL</option></select></div>
+          <div class="field"><div class="field-label" style="font-size:11px;">SUS ≤2.0mm</div><select class="field-select" id="md-sus" onchange="onMDChange(this)"><option value="PASS">✅ PASS</option><option value="FAIL">❌ FAIL</option></select></div>
+        </div>
+        <div class="field"><div class="field-label">เวลาตรวจสอบ</div><input class="field-input" type="time" id="md-time"></div>
+        <button class="btn btn-amber" onclick="submitMD()">บันทึกผล Metal Detector</button>
+      </div>
+      <div class="form-card">
+        <div class="form-title"><div class="form-dot" style="background:var(--blue-mid)"></div>ตรวจสอบน้ำหนัก / อุณหภูมิ In-Process</div>
+        <div class="field"><div class="field-label">สินค้า (FG)</div><select class="field-select" id="ip-fg" onchange="updateFGSpec()"><option value="">-- เลือกสินค้า --</option></select></div>
+        <div id="ip-spec-display" class="spec-chips"></div>
+        <div class="field"><div class="field-label">น้ำหนัก x5 ตัวอย่าง (g)</div>
+          <div class="w-grid" id="ip-weights">
+            <input class="w-input" type="number" placeholder="–" oninput="calcWeight()">
+            <input class="w-input" type="number" placeholder="–" oninput="calcWeight()">
+            <input class="w-input" type="number" placeholder="–" oninput="calcWeight()">
+            <input class="w-input" type="number" placeholder="–" oninput="calcWeight()">
+            <input class="w-input" type="number" placeholder="–" oninput="calcWeight()">
+          </div>
+          <div id="ip-avg" class="avg-val" style="margin-top:8px;">— g</div>
+        </div>
+        <div class="field">
+          <div class="field-label" id="ip-temp-label">อุณหภูมิผลิตภัณฑ์ (°C) <span style="color:var(--red-mid);font-size:10.5px;">CL ≤5°C</span></div>
+          <div class="temp-wrap"><input class="field-input" type="number" step="0.1" id="ip-temp" placeholder="3.0" oninput="checkIPTemp(this)"><span class="temp-unit">°C</span></div>
+        </div>
+        <div class="field"><div class="field-label">Visual Inspection</div>
+          <select class="field-select" id="ip-visual" onchange="checkIPVisual()">
+            <option value="pass">✅ PASS — ปกติ</option>
+            <option value="fail-color">❌ FAIL — สี/กลิ่นผิดปกติ</option>
+            <option value="fail-size">❌ FAIL — ขนาด/รูปร่างผิดปกติ</option>
+            <option value="fail-foreign">❌ FAIL — พบสิ่งแปลกปลอม</option>
+          </select>
+        </div>
+        <div id="ip-result-row" class="result-grid" style="display:none;">
+          <div class="result-box" id="ip-res-wt"><div class="result-label">Weight</div><div class="result-val">—</div></div>
+          <div class="result-box" id="ip-res-temp"><div class="result-label">Temp</div><div class="result-val">—</div></div>
+        </div>
+        <button class="btn btn-blue" onclick="submitIP()">บันทึก In-Process QC</button>
+      </div>
+    </div>
+
+    <!-- ══ FG RELEASE ══ -->
+    <div id="panel-fgrelease" class="panel">
+      <div class="form-card">
+        <div class="form-title"><div class="form-dot" style="background:var(--green-mid)"></div>QA Release สินค้าสำเร็จรูป — PC0013/PC0014</div>
+        <div class="ccp-banner">📦 ตรวจสอบครบทุก Parameter ก่อน Release</div>
+        <div class="field"><div class="field-label">สินค้า FG <span class="req">*</span></div><select class="field-select" id="fg-product" onchange="updateFGReleaseSpec()"><option value="">-- เลือกสินค้า --</option></select></div>
+        <div id="fg-spec-display" class="spec-chips"></div>
+        <div class="field-grid">
+          <div class="field"><div class="field-label">Lot No. <span class="req">*</span></div><input class="field-input" type="text" id="fg-lot" placeholder="LOT-001"></div>
+          <div class="field"><div class="field-label">จำนวน (กล่อง)</div><input class="field-input" type="number" id="fg-qty" placeholder="0"></div>
+        </div>
+        <div class="field">
+          <div class="field-label">อุณหภูมิจัดเก็บ (°C) <span style="color:var(--red-mid);font-size:10.5px;">CL ≤-18°C</span></div>
+          <div class="temp-wrap"><input class="field-input" type="number" step="0.1" id="fg-storage-temp" placeholder="-20.0" oninput="checkFGTemp(this)"><span class="temp-unit">°C</span></div>
+        </div>
+        <div class="field"><div class="field-label">น้ำหนักตัวอย่าง (g)</div><input class="field-input" type="number" id="fg-weight" placeholder="2750"></div>
+        <div class="field"><div class="field-label">Metal Detector Result</div>
+          <select class="field-select" id="fg-md">
+            <option value="PASS">✅ PASS — Fe/Non-Fe/SUS ตรวจแล้ว</option>
+            <option value="FAIL">❌ FAIL — พบโลหะ</option>
+          </select>
+        </div>
+        <div class="field"><div class="field-label">Label / EXP Date</div>
+          <select class="field-select" id="fg-label">
+            <option value="pass">✅ PASS — Label ถูกต้อง EXP ถูกต้อง</option>
+            <option value="fail-label">❌ FAIL — Label ผิด</option>
+            <option value="fail-exp">❌ FAIL — EXP Date ผิด</option>
+          </select>
+        </div>
+        <div class="field"><div class="field-label">QA Inspector</div><input class="field-input" type="text" id="fg-inspector" placeholder="ชื่อผู้ตรวจ"></div>
+        <button class="btn btn-green" onclick="submitFGRelease()">✅ QA Release สินค้า</button>
+      </div>
+    </div>
+
+    <!-- ══ SANITATION ══ -->
+    <div id="panel-sanitation" class="panel">
+      <div class="form-card" style="padding:14px;">
+        <div class="form-title"><div class="form-dot" style="background:var(--blue-mid)"></div>Sanitation & GHPs Checklist</div>
+        <div class="stats-row">
+          <div class="stat-pill"><div class="stat-num ok" id="san-done-count">0</div><div class="stat-lbl">เสร็จแล้ว</div></div>
+          <div class="stat-pill"><div class="stat-num" id="san-pending-count">8</div><div class="stat-lbl">รอดำเนินการ</div></div>
+        </div>
+      </div>
+      <div id="sanitation-list"></div>
+      <button class="btn btn-blue" onclick="submitSanitation()">บันทึก Sanitation Log</button>
+    </div>
+
+    <!-- ══ MASTER DATA ══ -->
+    <div id="panel-master" class="panel">
+      <div class="master-tabs">
+        <div class="master-tab active" onclick="switchMaster('supplier',this)">🏢 Supplier (32)</div>
+        <div class="master-tab" onclick="switchMaster('material',this)">🧪 วัตถุดิบ</div>
+        <div class="master-tab" onclick="switchMaster('fg',this)">📦 FG SKUs</div>
+        <div class="master-tab" onclick="switchMaster('process',this)">⚙️ Process</div>
+        <div class="master-tab" onclick="switchMaster('parameter',this)">📏 Parameter</div>
+        <div class="master-tab" onclick="switchMaster('equipment',this)">🔧 อุปกรณ์</div>
+        <div class="master-tab" onclick="switchMaster('ccp',this)">⚠️ CCP</div>
+      </div>
+      <input class="search-bar" id="master-search" type="text" placeholder="🔍 ค้นหา..." oninput="renderMaster()">
+      <div id="master-list"></div>
+    </div>
+
+    <!-- ══ NCR LOG ══ -->
+    <div id="panel-ncr" class="panel">
+      <div class="form-card" style="padding:14px;">
+        <div class="form-title"><div class="form-dot" style="background:var(--red-mid)"></div>NCR Log — รายการไม่สอดคล้อง</div>
+        <div class="stats-row">
+          <div class="stat-pill"><div class="stat-num fail" id="ncr-open-count">0</div><div class="stat-lbl">Open</div></div>
+          <div class="stat-pill"><div class="stat-num ok" id="ncr-closed-count">0</div><div class="stat-lbl">Closed</div></div>
+        </div>
+      </div>
+      <div id="ncr-list"><div style="text-align:center;color:var(--text3);padding:30px;font-size:13px;">ยังไม่มี NCR ในวันนี้ ✅</div></div>
+      <button class="btn btn-outline" onclick="openNCRModal('manual','สร้าง NCR ใหม่','')" style="margin-top:4px;">+ สร้าง NCR ด้วยตนเอง</button>
+    </div>
+  </div><!-- end content -->
+
+  <!-- BOTTOM NAV -->
+  <div class="bottom-nav">
+    <div class="nav-item active" onclick="switchPanel('dashboard')"><div class="nav-icon">🏠</div><div class="nav-label">Dashboard</div></div>
+    <div class="nav-item" onclick="switchPanel('receiving')"><div class="nav-icon">📥</div><div class="nav-label">รับวัตถุดิบ</div></div>
+    <div class="nav-item" onclick="switchPanel('inprocess')"><div class="nav-icon">⚙️</div><div class="nav-label">Process</div></div>
+    <div class="nav-item" onclick="switchPanel('fgrelease')"><div class="nav-icon">📦</div><div class="nav-label">FG</div></div>
+    <div class="nav-item" onclick="switchPanel('master')"><div class="nav-icon">📋</div><div class="nav-label">Master</div></div>
+  </div>
+</div><!-- end phone -->
+
+<!-- NCR MODAL -->
+<div class="modal-overlay" id="ncr-modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modal-title">Auto NCR</div>
+    <div class="modal-sub" id="modal-sub"></div>
+    <div class="auto-banner" id="modal-auto-banner" style="display:none;">⚡ Auto-generated NCR — โปรดระบุรายละเอียดและ Corrective Action</div>
+    <div class="field"><div class="field-label">NCR No.</div><input type="text" class="field-input" id="modal-ncr-id" readonly></div>
+    <div class="field"><div class="field-label">ประเภท NCR</div>
+      <select class="field-select" id="modal-ncr-type">
+        <option value="ccp">CCP Breach</option><option value="temp">Temperature OOC</option>
+        <option value="weight">Weight OOS</option><option value="visual">Visual Fail</option>
+        <option value="label">Label Error</option><option value="other">อื่นๆ</option>
+      </select>
+    </div>
+    <div class="field"><div class="field-label">คำอธิบาย</div><textarea class="field-textarea" id="modal-desc" placeholder="อธิบายรายละเอียดความไม่สอดคล้อง..."></textarea></div>
+    <div class="field"><div class="field-label">Corrective Action (HACCP)</div><textarea class="field-textarea" id="modal-ca" placeholder="Hold ผลิตภัณฑ์ → ดำเนินการแก้ไข..."></textarea></div>
+    <div class="field"><div class="field-label">QA Inspector</div><input type="text" class="field-input" id="modal-inspector" placeholder="ชื่อผู้บันทึก"></div>
+    <button class="btn btn-red" onclick="submitNCR()">📋 ยืนยัน NCR + แจ้งเตือนทีมผลิต</button>
+    <button class="btn btn-outline" onclick="closeModal('ncr-modal')">ยกเลิก</button>
+  </div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="modal-overlay" id="export-modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📊 Export Report</div>
+    <div class="modal-sub">เลือกประเภทรายงานที่ต้องการ Export</div>
+    <div class="export-option" onclick="exportReport('qc')"><div class="export-icon">📋</div><div class="export-info"><div class="export-title">QC Daily Report</div><div class="export-desc">รายงาน QC ประจำวัน · RM รับเข้า · In-Process · FG Release · NCR</div></div></div>
+    <div class="export-option" onclick="exportReport('ncr')"><div class="export-icon">⚠️</div><div class="export-info"><div class="export-title">NCR Report</div><div class="export-desc">รายงาน Non-Conformance ทั้งหมด (Open + Closed)</div></div></div>
+    <div class="export-option" onclick="exportReport('supplier')"><div class="export-icon">🏢</div><div class="export-info"><div class="export-title">Supplier Master List</div><div class="export-desc">รายชื่อซัพพลายเออร์ครบ 32 ราย + Risk Level + Status</div></div></div>
+    <div class="export-option" onclick="exportReport('material')"><div class="export-icon">🧪</div><div class="export-info"><div class="export-title">Material Master List</div><div class="export-desc">วัตถุดิบทั้งหมด RM · DM · PM · CM + Spec + Unit</div></div></div>
+    <div class="export-option" onclick="exportReport('fg')"><div class="export-icon">📦</div><div class="export-info"><div class="export-title">FG Product Master</div><div class="export-desc">สินค้าสำเร็จรูปทั้งหมด + Spec น้ำหนัก + Storage Temp</div></div></div>
+    <div class="export-option" onclick="exportReport('full')"><div class="export-icon">🗂️</div><div class="export-info"><div class="export-title">Full Master Data Export</div><div class="export-desc">ข้อมูล Master ทั้งหมด — Supplier + Material + FG + Process + Parameter + Equipment + CCP</div></div></div>
+    <button class="btn btn-outline" style="margin-top:8px;" onclick="closeModal('export-modal')">ปิด</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════ MASTER DATA — COMPLETE ═══════════ */
+const SUPPLIERS = [
+  {id:'SP0001',name:'บริษัท เบทาโกรเกษตรอุตสาหกรรม จำกัด (หมู)',type:'RM',risk:'HIGH',status:'Approved'},
+  {id:'SP0002',name:'บริษัท เบทาโกรเกษตรอุตสาหกรรม จำกัด (ไก่)',type:'RM',risk:'HIGH',status:'Approved'},
+  {id:'SP0003',name:'บริษัท เอส แอล พิทักษ์ จำกัด',type:'RM',risk:'HIGH',status:'Approved'},
+  {id:'SP0004',name:'บริษัท ฟู้ด จ๊อบ จำกัด',type:'RM',risk:'HIGH',status:'Approved'},
+  {id:'SP0005',name:'ร้าน ป้ายปายค้าข้าว',type:'DM',risk:'LOW',status:'Conditional'},
+  {id:'SP0006',name:'บริษัท ซีพีแอ็กซ์ตร้า จำกัด (มหาชน)',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0007',name:'บริษัท หยั่นหว่อ หยุ่น คอร์ปอเรชั่น จำกัด',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0008',name:'บริษัท ยิ่งเจริญ มงคลฟู้ดส์ จำกัด',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0009',name:'บริษัท เดลี่ ฟู้ดส์ จำกัด',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0010',name:'บริษัท เอ็น.อาร์.น้ำตาลมะพร้าว จำกัด',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0011',name:'โรงงานน้ำตาลโชควาสนา',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0012',name:'บริษัท จิมสกรุ้ป จำกัด',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0013',name:'บริษัท ไอ โอ พลัส ซัพพลายส์ จำกัด',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0014',name:'หจก.สหบุญญาชาติ ฟลาวเซ็นเตอร์',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0015',name:'ร้าน จูนีย์ (หอม-กระเทียม)',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0016',name:'บริษัท เอส เอ โอ การเกษตร จำกัด',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0017',name:'บริษัท กุยลิ้มซิ้ง จำกัด',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0018',name:'บริษัท ตะวันพืชผล จำกัด',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0019',name:'บริษัท อาหารเบทเทอร์ จำกัด',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0020',name:'หจก.เชียงใหม่เบเกอร์มาร์ท',type:'DM',risk:'LOW',status:'Approved'},
+  {id:'SP0021',name:'บริษัท อุทัยพลาสติก อุตสาหกรรม จำกัด',type:'PM',risk:'LOW',status:'Approved'},
+  {id:'SP0022',name:'บริษัท เจเนอรัล เรคคอร์ด อินเตอร์ จำกัด',type:'PM',risk:'LOW',status:'Approved'},
+  {id:'SP0023',name:'บริษัท บางกอก อินสทรูเมนท์ แอนด์เซอร์วิส จำกัด',type:'PM',risk:'LOW',status:'Approved'},
+  {id:'SP0024',name:'บริษัท ศรีไม้ไผ่ทอง(2019) อุตสาหกรรม จำกัด',type:'PM',risk:'LOW',status:'Approved'},
+  {id:'SP0025',name:'บริษัท ฟิวเจอร์ บิสซิเนส โซลูชั่น จำกัด',type:'PM',risk:'LOW',status:'Approved'},
+  {id:'SP0026',name:'ห้างหุ้นส่วนจำกัด วี-ริน เคมีคอล',type:'CM',risk:'MEDIUM',status:'Approved'},
+  {id:'SP0027',name:'บริษัท เอ็นริช อินเตอร์เคมิคัล จำกัด',type:'CM',risk:'MEDIUM',status:'Approved'},
+  {id:'SP0028',name:'บริษัท ฟลุสสิค เคม จำกัด',type:'CM',risk:'MEDIUM',status:'Approved'},
+  {id:'SP0029',name:'บริษัท เบทเทอร์ ฟาร์มา จำกัด',type:'CM',risk:'MEDIUM',status:'Approved'},
+  {id:'SP0030',name:'บริษัท ออฟฟิศเมท (ไทย) จำกัด',type:'CM',risk:'MEDIUM',status:'Approved'},
+  {id:'SP0031',name:'บริษัท ท้อป เมาท์เทน จำกัด',type:'PM',risk:'LOW',status:'Approved'},
+  {id:'SP0032',name:'บริษัท อี เค ชลอเทอร์เฮาส์ จำกัด',type:'RM',risk:'HIGH',status:'Approved'},
+];
+
+const MATERIALS = [
+  {code:'RM0001',name:'สะโพกหมู',type:'RM',cat:'Pork',unit:'กิโลกรัม',minT:0,maxT:7,shelf:6},
+  {code:'RM0002',name:'มันสันแข็ง',type:'RM',cat:'Pork',unit:'กิโลกรัม',minT:0,maxT:7,shelf:6},
+  {code:'RM0004',name:'เศษบีบีติดหนัง',type:'RM',cat:'Pork',unit:'กิโลกรัม',minT:0,maxT:7,shelf:5},
+  {code:'RM0005',name:'อกไก่',type:'RM',cat:'Chicken',unit:'กิโลกรัม',minT:0,maxT:7,shelf:5},
+  {code:'RM0006',name:'ข้าวสารเหนียว',type:'DM',cat:'Rice',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0001',name:'ซอสหอยนางรมหมู',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0002',name:'ซอสหอยนางรมไก่',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0003',name:'ซอสปรุงรสผ่าลัยเขียว',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0004',name:'ซีซั่วาว ชุดส 1',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0005',name:'ซีซั่วด้าอลาองส้ม',type:'DM',cat:'Ingredient',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0006',name:'ซีซั่วขาวเน็คตหอม',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0007',name:'ผงปรุงรส',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0008',name:'ผงพูรส',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0009',name:'แป้งทำว',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0010',name:'เกลือ',type:'DM',cat:'Ingredient',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0011',name:'กระเทียม',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0012',name:'พริกไทยดำ',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0013',name:'พริกไทยขาว',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0014',name:'แม็คผักกี้',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0015',name:'ผงฝิ่น',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0016',name:'ผงกระเทียม',type:'DM',cat:'Seasoning',unit:'กรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0017',name:'น้ำตาลมะพร้าวหมู',type:'DM',cat:'Ingredient',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0018',name:'น้ำตาลมะพร้าวไก่',type:'DM',cat:'Ingredient',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0019',name:'เมจิต',type:'DM',cat:'Ingredient',unit:'กระป๋อง',minT:null,maxT:null,shelf:null},
+  {code:'PD0020',name:'สีส้มแดง',type:'DM',cat:'Additive',unit:'กรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0021',name:'สีเหลืองส้ม',type:'DM',cat:'Additive',unit:'กรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0022',name:'ใยดา',type:'DM',cat:'Additive',unit:'ขวด',minT:null,maxT:null,shelf:null},
+  {code:'PD0023',name:'พ่อสเฟต',type:'DM',cat:'Additive',unit:'กรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0024',name:'แป้งมัน',type:'DM',cat:'Ingredient',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0025',name:'วุ้นเส้น',type:'DM',cat:'Ingredient',unit:'กรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0026',name:'ข้าวเจ้า',type:'DM',cat:'Ingredient',unit:'กรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0027',name:'ซอสบาร์บีคิว',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0028',name:'ซอสพริก',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0029',name:'เบคกิ้งโซดา',type:'DM',cat:'Additive',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0030',name:'ผงสามเกลอ',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0031',name:'พริกทุกบิน',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0032',name:'ผงพริกหม่าล่า',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0033',name:'ผงอาษรี่',type:'DM',cat:'Seasoning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0034',name:'น้ำมันงา',type:'DM',cat:'Seasoning',unit:'ลิตร',minT:null,maxT:null,shelf:null},
+  {code:'PD0035',name:'น้ำปลา',type:'DM',cat:'Seasoning',unit:'ลิตร',minT:null,maxT:null,shelf:null},
+  {code:'PD0036',name:'ซอสโซยู',type:'DM',cat:'Seasoning',unit:'กรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0037',name:'ซอสเทอริยากิ',type:'DM',cat:'Seasoning',unit:'กรัม',minT:null,maxT:null,shelf:null},
+  {code:'PD0038',name:'ราชาว',type:'DM',cat:'Seasoning',unit:'กรัม',minT:null,maxT:null,shelf:null},
+  {code:'PG0001',name:'ถุงหูหิ้ว 9×18 นิ้ว',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PG0002',name:'ถุงหูหิ้ว 12×20 นิ้ว',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PG0003',name:'ถุงหูหิ้ว 12×18 นิ้ว',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PG0004',name:'ถุงถั่ว 6×9 นิ้ว',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PG0005',name:'ถุงซะด้า 24×28×20mm',type:'PM',cat:'Plastic Bag',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PG0006',name:'ถุงซะสีขา',type:'PM',cat:'Plastic Bag',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PG0009',name:'รองเท้าบูทยางสีขาว เบอร์ 11',type:'PM',cat:'Boots',unit:'คู่',minT:null,maxT:null,shelf:null},
+  {code:'PG0010',name:'รองเท้าบูทสีขาว เบอร์ 12',type:'PM',cat:'Boots',unit:'คู่',minT:null,maxT:null,shelf:null},
+  {code:'PG0011',name:'เสื้อน้ำมัน',type:'PM',cat:'Aprons',unit:'ผืน',minT:null,maxT:null,shelf:null},
+  {code:'PG0012',name:'ถุงมือยางสีน้ำเงิน/S',type:'PM',cat:'Gloves',unit:'กล่อง',minT:null,maxT:null,shelf:null},
+  {code:'PG0013',name:'ถุงมือยางสีน้ำเงิน/M',type:'PM',cat:'Gloves',unit:'กล่อง',minT:null,maxT:null,shelf:null},
+  {code:'PG0014',name:'ถุงมือยางสีน้ำเงิน/L',type:'PM',cat:'Gloves',unit:'กล่อง',minT:null,maxT:null,shelf:null},
+  {code:'PG0015',name:'ถุง HD A11×17" หนา 0.12มล./คู่',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PG0016',name:'ถุง HD A14×25" หนา 0.12มล. (สีขาว)',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PG0017',name:'ถุง HD A14×25" หนา 0.12มล. (พิมพ์โลโก้ไก่)',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PG0018',name:'ถุง HD A14×25" หนา 0.12มล. (ลายห้า)',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0001',name:'กล่องลูกฟูก 5ชั้น ขนาด 287×385×305',type:'PM',cat:'Packaging',unit:'ใบ',minT:null,maxT:null,shelf:null},
+  {code:'PK0002',name:'กล่องลูกฟูก 5ชั้น ขนาด 23×40×21.2',type:'PM',cat:'Packaging',unit:'ใบ',minT:null,maxT:null,shelf:null},
+  {code:'PK0003',name:'กล่องใหม่ 25',type:'PM',cat:'Packaging',unit:'ใบ',minT:null,maxT:null,shelf:null},
+  {code:'PK0004',name:'กล่องใหม่ 3 กก.',type:'PM',cat:'Packaging',unit:'ใบ',minT:null,maxT:null,shelf:null},
+  {code:'PK0005',name:'ถุง HD A9×12 (แผ่นเม็ต)',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0006',name:'ถุง HD/A10×16หนา 0.08มล. ตีพิมพ์โลโก้',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0007',name:'ถุง HD A10×16หนา พิมพ์โลโก้',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0008',name:'ถุง NYLON+LL 220×300mm×300ml ซีล 3ด้าน',type:'PM',cat:'Packaging',unit:'ใบ',minT:null,maxT:null,shelf:null},
+  {code:'PK0010',name:'เทปใส',type:'PM',cat:'Tape',unit:'ม้วน',minT:null,maxT:null,shelf:null},
+  {code:'PK0011',name:'แผ่นรองชั้น HD A7×10หนา0.08มม.',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0012',name:'แผ่นแท็ด HD A18×23หนา0.08มม.',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0013',name:'แผ่น HD สีเขียว18×23หนา0.08มม.',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0014',name:'แผ่น HD สีฟ้า18×23หนา0.08มม.',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0015',name:'แผ่น HD สีชมพู18×23หนา0.08มม.',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0016',name:'แผ่น HD สีส้ม18×23หนา0.08มม.',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0017',name:'แผ่นห่อ HD A8×10หนา0.08มม.',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0018',name:'แผ่นห่อ DH A4×6หนา0.08มม.',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0019',name:'ไม้กลม 3×5',type:'PM',cat:'Skewer',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0020',name:'ไม้กลม 3×6',type:'PM',cat:'Skewer',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0021',name:'ไม้กลม 3×7',type:'PM',cat:'Skewer',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0022',name:'ไม้ชายของเบอร์ 6',type:'PM',cat:'Skewer',unit:'อัน',minT:null,maxT:null,shelf:null},
+  {code:'PK0023',name:'สติ๊กเกอร์ติดข้างกล่อง MK',type:'PM',cat:'Sticker',unit:'ดวง',minT:null,maxT:null,shelf:null},
+  {code:'PK0024',name:'สติ๊กเกอร์ติดแพ็คเมจิ้ง MK',type:'PM',cat:'Sticker',unit:'ดวง',minT:null,maxT:null,shelf:null},
+  {code:'PK0025',name:'สติ๊กเกอร์ (ข้าว)',type:'PM',cat:'Sticker',unit:'ดวง',minT:null,maxT:null,shelf:null},
+  {code:'PK0026',name:'ถุง HD A10×16 พิมพ์โลโก้พริกไทยดำ',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0027',name:'ถุง HD A10×16 พิมพ์โลโก้แดง',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0028',name:'ถุง HD A10×16 พิมพ์โลโก้สนแดง',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0029',name:'ไม้กลม 2.5×6',type:'PM',cat:'Skewer',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0030',name:'ถุง NYLON+LL 300×400mm×80ml ซีล 3ด้าน',type:'PM',cat:'Packaging',unit:'ใบ',minT:null,maxT:null,shelf:null},
+  {code:'PK0031',name:'สติ๊กเกอร์ติดข้างกล่อง หมูแสด-GHS',type:'PM',cat:'Sticker',unit:'ดวง',minT:null,maxT:null,shelf:null},
+  {code:'PK0032',name:'สติ๊กเกอร์ติดแพ็คเมจิ้ง หมูแสด-GHS',type:'PM',cat:'Sticker',unit:'ดวง',minT:null,maxT:null,shelf:null},
+  {code:'PK0033',name:'สติ๊กเกอร์ติดข้างกล่อง BBQ',type:'PM',cat:'Sticker',unit:'ดวง',minT:null,maxT:null,shelf:null},
+  {code:'PK0034',name:'สติ๊กเกอร์ติดแพ็คเมจิ้ง BBQ',type:'PM',cat:'Sticker',unit:'ดวง',minT:null,maxT:null,shelf:null},
+  {code:'PK0036',name:'ถุง NYLON+LL 220×240mm×80ml ซีล 3ด้าน',type:'PM',cat:'Packaging',unit:'ใบ',minT:null,maxT:null,shelf:null},
+  {code:'PK0037',name:'ถุง NYLON+LL 205×305mm×80ml ซีล 3ด้าน',type:'PM',cat:'Packaging',unit:'ใบ',minT:null,maxT:null,shelf:null},
+  {code:'PK0038',name:'กล่องลูกฟูก 5ชั้น ขนาด 230×400×170',type:'PM',cat:'Packaging',unit:'ใบ',minT:null,maxT:null,shelf:null},
+  {code:'PK0039',name:'สติ๊กเกอร์ข้างกล่อง หมูปิ้งสูตรโบราณ aro',type:'PM',cat:'Sticker',unit:'ดวง',minT:null,maxT:null,shelf:null},
+  {code:'PK0041',name:'สติ๊กเกอร์ข้างกล่อง หมูสเตื่อมปรุงเสียบไม้ aro',type:'PM',cat:'Sticker',unit:'ดวง',minT:null,maxT:null,shelf:null},
+  {code:'PK0042',name:'สติ๊กเกอร์ข้างกล่อง หมูปิ้งนมสดตราชั้น aro',type:'PM',cat:'Sticker',unit:'ดวง',minT:null,maxT:null,shelf:null},
+  {code:'PK0043',name:'สติ๊กเกอร์แพ็คหมูน้ำพัก หมูปิ้งสูตรโบราณ aro',type:'PM',cat:'Sticker',unit:'ดวง',minT:null,maxT:null,shelf:null},
+  {code:'PK0044',name:'สติ๊กเกอร์แพ็คหมูน้ำพัก หมูเสตื่อมหัวพริกไทยตั้น aro',type:'PM',cat:'Sticker',unit:'ดวง',minT:null,maxT:null,shelf:null},
+  {code:'PK0045',name:'สติ๊กเกอร์แพ็คหมูน้ำพัก หมูปิ้งนมสดตราชั้น aro',type:'PM',cat:'Sticker',unit:'ดวง',minT:null,maxT:null,shelf:null},
+  {code:'PK0046',name:'ถุง HD A10×16 พิมพ์หมูแดตเดียว',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'PK0053',name:'ถุง HD 11×17 (ไม่พิมพ์โลโก้)',type:'PM',cat:'Packaging',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'CM0001',name:'CL - Liquid Soap',type:'CM',cat:'Cleaning',unit:'ลิตร',minT:null,maxT:null,shelf:null},
+  {code:'CM0002',name:'SN - คลอรีนน้ำ 10%',type:'CM',cat:'Sanitizing',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'CM0003',name:'CL - Enrich D028',type:'CM',cat:'Cleaning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'CM0004',name:'SN - ALCOHOL 75%',type:'CM',cat:'Sanitizing',unit:'ลิตร',minT:null,maxT:null,shelf:null},
+  {code:'CM0006',name:'SN - QAC (Q-San M)',type:'CM',cat:'Sanitizing',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+  {code:'CM0007',name:'CL - NEXGEN MP-1000',type:'CM',cat:'Cleaning',unit:'กิโลกรัม',minT:null,maxT:null,shelf:null},
+];
+
+const FG_PRODUCTS = [
+  {code:'FG-M002',name:'หมูปิ้งนมสดเสียบไม้ - Size L',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:2692,maxW:2792},
+  {code:'FG-M003',name:'หมูปิ้งนมสดเสียบไม้ - Size S',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:2489,maxW:2689},
+  {code:'FG-M004',name:'หมูปิ้งนมสดเสียบไม้ - พาย',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:2702,maxW:2802},
+  {code:'FG-M005',name:'หมูปิ้งนมสด Size L พร้อมหาน',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:410,maxW:450},
+  {code:'FG-M006',name:'หมูปิ้งแพ็คเชิ้ง 25n×40ไม้×20แพ็ก/ลัง (MK)',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:1047,maxW:1147},
+  {code:'FG-M007',name:'หมูปิ้งแพ็คเชิ้ง 45n×40ไม้×10แพ็ก/ลัง (GHS)',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:1962,maxW:2062},
+  {code:'FG-M008',name:'GHS หมูปิ้งนมสดมากกราชา 45กน.×40ไม้×10แพ็ก',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:1927,maxW:2027},
+  {code:'FG-M010',name:'หมูแดตเดียว',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:1791,maxW:1891},
+  {code:'FG-M011',name:'หมูปิ้งโบราณ Size L',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:null,maxW:null},
+  {code:'FG-M013',name:'หมูปิ้งโบราณ Size S',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:null,maxW:null},
+  {code:'FG-M014',name:'หมูปิ้งโบราณแพ็คเชิ้ง 16n×40ไม้×24แพ็ก/ลัง (MK)',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:null,maxW:null},
+  {code:'FG-M024',name:'หมูหมักบาริบีคิวเสียบไม้เชิ้ง 50n×30ไม้',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:null,maxW:null},
+  {code:'FG-M025',name:'หมูปิ้งโบราณแพ็คเชิ้ง 16n×50ไม้ (ชุดส 2)',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:null,maxW:null},
+  {code:'FG-M026',name:'หมูสเตื่อมแพ็คเชิ้ง 13n×50ไม้',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:null,maxW:null},
+  {code:'FG-M027',name:'หมูหม่าล้าแพ็คเชิ้ง 16n×50ไม้',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:null,maxW:null},
+  {code:'FG-M028',name:'Repack หมูสเตื่อมแพ็คเชิ้ง 30n×50ไม้',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:null,maxW:null},
+  {code:'FG-M029',name:'Repack หมูหม่าล้าแพ็คเชิ้ง 24n×50ไม้',prodType:'Pork Marinated',storageTemp:-18,shelf:365,minW:null,maxW:null},
+  {code:'FG-B001',name:'ลูกชิ้นหมู',prodType:'Meat Ball',storageTemp:-18,shelf:365,minW:1000,maxW:1100},
+  {code:'FG-B003',name:'ลูกชิ้นเอ็นหมู',prodType:'Meat Ball',storageTemp:-18,shelf:365,minW:1000,maxW:1100},
+  {code:'FG-S001',name:'ไส้กรอกนุ่นเส้น',prodType:'Esan Sausage',storageTemp:-18,shelf:365,minW:2000,maxW:2200},
+  {code:'FG-S002',name:'ไส้กรอกตัดเส้น',prodType:'Esan Sausage',storageTemp:-18,shelf:365,minW:2000,maxW:2200},
+  {code:'FG-S003',name:'ไส้กรอกเนื่อง',prodType:'Esan Sausage',storageTemp:-18,shelf:365,minW:2000,maxW:2200},
+  {code:'FG-N001',name:'ไก่แดงโบราณ',prodType:'Chicken Marinated',storageTemp:-18,shelf:365,minW:2695,maxW:2795},
+  {code:'FG-N001 MPS',name:'ไก่พริกไทยดำเสียบไม้เชิ้ง แพ็กลอย 10ไม้',prodType:'Chicken Marinated',storageTemp:-18,shelf:365,minW:410,maxW:450},
+  {code:'FG-N002',name:'ไก่พริกไทยดำ',prodType:'Chicken Marinated',storageTemp:-18,shelf:365,minW:2695,maxW:2795},
+  {code:'FG-N003',name:'ไก่รัวนสด',prodType:'Chicken Marinated',storageTemp:-18,shelf:365,minW:2695,maxW:2795},
+  {code:'FG-N004',name:'ไก่หอดรัวากี 55n×50ไม้',prodType:'Chicken Marinated',storageTemp:-18,shelf:365,minW:2695,maxW:2795},
+  {code:'FG-N005',name:'ไก่หม่าล้า 55n×50ไม้',prodType:'Chicken Marinated',storageTemp:-18,shelf:365,minW:2695,maxW:2795},
+  {code:'FG-N006',name:'ไก่บาร์บีคิว 55n×40ไม้',prodType:'Chicken Marinated',storageTemp:-18,shelf:365,minW:2695,maxW:2795},
+  {code:'FG-R001',name:'ข้าวเหนียว',prodType:'Rice',storageTemp:null,shelf:null,minW:4990,maxW:5010},
+];
+
+const PROCESSES = [
+  {id:'PC0001',name:'การรับเข้าวัตถุดิบ',desc:'ตรวจสอบและตรวจรับเนื้อหมู หรือปรุง หรือซิปปิ้งรัมพ์',loc:'จุดรับวัตถุดิบ RM, DM, PM, CM'},
+  {id:'PC0002',name:'การจัดเก็บวัตถุดิบ',desc:'การเก็บรักษาวัตถุดิบก่อนนำไปใช้ (เช่น ห้องเย็น)',loc:'ห้องเย็น RAW / ห้องเก็บ PM'},
+  {id:'PC0003',name:'การตัดแต่งการแล่',desc:'การทำหน้าหมู ตัดสรรพ ตัดแต่งขนาด',loc:'จุดตัดแต่ง หรือห้องเย็น'},
+  {id:'PC0004',name:'การชั่งน้ำหนัก',desc:'การตรวจสอบว่าเนื้อที่ใช้มีปริมาณตามสูตร (Recipe)',loc:'ห้องเย็น'},
+  {id:'PC0005',name:'การคลุกหมัก',desc:'การคลุกหมักวัตถุดิบตามขนาดตัวเครื่องและโรลนม',loc:'ห้องเย็น'},
+  {id:'PC0006',name:'การผสมและการหมัก',desc:'การดูแลคุณภาพเนื้อหมูกับเครื่องปรุง',loc:'ห้องเย็น'},
+  {id:'PC0007',name:'การเสียบไม้/การตั้งขึ้นรูป',desc:'การนำเนื้อหมักเสียบไม้และจัดวางตามมาตรฐาน',loc:'ห้องเย็น'},
+  {id:'PC0008',name:'การทำให้สุก/การจิ้ว',desc:'กระบวนการทำให้สุก (ทางเป็นสินค้าพร้อมปรุงสุก)',loc:'ห้องเย็น (โส่นัลฝูก)'},
+  {id:'PC0009',name:'การดูแลอุณหภูมิ',desc:'การพักสินค้าก่อนย้ายไปพื้นที่พร้อมสมได้',loc:'ห้องเย็น'},
+  {id:'PC0010',name:'การตรวจจับโลหะ',desc:'จุดตรวจสอบหาสิ่งปลอมปนที่เป็นโลหะ (จุด CCP ที่สำคัญ)',loc:'ห้องบรรจุ แพ็กสินค้า'},
+  {id:'PC0011',name:'การบรรจุ',desc:'การนำสินค้าถาดใส่เข้าไปในโถกล่อง',loc:'จุดบรรจุ แพ็กสินค้า'},
+  {id:'PC0012',name:'การแช่แข็ง',desc:'การนำสินค้าแช่แข็งไป Air Blast',loc:'ห้องแช่เย็นแข็ง แบบบรรจิ้ว'},
+  {id:'PC0013',name:'การจัดเก็บสินค้าสำเร็จรูป',desc:'การเก็บสินค้าสำเร็จในตู้เย็น ≤-18°C',loc:'ห้องแช่เย็นแข็ง เข้าเก็บ FG'},
+  {id:'PC0014',name:'การจัดส่ง',desc:'การโหลดสินค้าสำเร็จรูปเพื่อนำจ่าย',loc:'จุดโหลดสินค้า'},
+  {id:'PC0015',name:'การทดลองเดินเครื่อง/ทดลองผลิต',desc:'การทดสอบระบบบรรพลิตสินค้าก่อนการผลิตจริง',loc:'ห้องเย็น'},
+];
+
+const PARAMETERS = [
+  {id:'PR0001',param:'อุณหภูมิห้องกลุ่ม RM0',cat:'Temperature',spec:'0–4',unit:'°C'},
+  {id:'PR0002',param:'ค่า pH รับเข้าใช้แข็ง',cat:'Quality',spec:'5.5–5.8',unit:'-'},
+  {id:'PR0003',param:'อุณหภูมิกายผ่านสาราง',cat:'Temperature',spec:'≥75',unit:'°C'},
+  {id:'PR0004',param:'อุณหภูมิวัตถุดิบ ห้องแต่งสินค้า',cat:'Temperature',spec:'0–7',unit:'°C'},
+  {id:'PR0005',param:'อุณหภูมิห้องเย็นแข็ง',cat:'Temperature',spec:'≤12',unit:'°C'},
+  {id:'PR0006',param:'อุณหภูมิห้องเย็น',cat:'Temperature',spec:'(-40)–4',unit:'°C'},
+  {id:'PR0007',param:'อุณหภูมิห้องแข็งต้น',cat:'Temperature',spec:'≤-18',unit:'°C'},
+  {id:'PR0008',param:'ตรวจจับโลหะ Fe (เหล็ก)',cat:'Food Safety',spec:'≥ø1.0',unit:'มิลลิเมตร'},
+  {id:'PR0009',param:'ตรวจจับโลหะ Non-Ferrous',cat:'Food Safety',spec:'≥ø1.5',unit:'มิลลิเมตร'},
+  {id:'PR0010',param:'ตรวจจับโลหะ SUS (สแตนเลส)',cat:'Food Safety',spec:'≥ø2.0',unit:'มิลลิเมตร'},
+  {id:'PR0011',param:'น้ำหนักสุทธิ / รวม',cat:'Weight',spec:'within tolerance',unit:'กรัม/กิโลกรัม'},
+  {id:'PR0012',param:'น้ำหนักกระทบยอด',cat:'Weight',spec:'within tolerance',unit:'กรัม/กิโลกรัม'},
+  {id:'PR0013',param:'จำนวนชิ้น',cat:'Visual',spec:'อ้างอิง Spec',unit:'-'},
+  {id:'PR0014',param:'ลักษณะปรากฏ',cat:'Quality',spec:'ปกติ',unit:'-'},
+  {id:'PR0015',param:'สี, กลิ่น, เนื้อสินค้า',cat:'Quality',spec:'ปกติ',unit:'-'},
+  {id:'PR0016',param:'สีสินค้า/เนื้อสัมผัส',cat:'Quality',spec:'ปกติ',unit:'-'},
+  {id:'PR0017',param:'ความบริสุทธิ์บรรจุ',cat:'Visual',spec:'ไม่เสียหาย',unit:'-'},
+  {id:'PR0018',param:'Label/Barcode',cat:'Visual',spec:'ชัดเจน/จัดชอบ',unit:'-'},
+  {id:'PR0019',param:'วันหมดอายุ (EXP)',cat:'Process',spec:'ชัดเจน/จัดชอบ',unit:'-'},
+  {id:'PR0020',param:'เวลาการทำไม้ไต้ตรวจ',cat:'Process',spec:'อ้างอิง QP',unit:'-'},
+];
+
+const EQUIPMENT_LIST = [
+  {id:'MDB001',name:'เครื่องชั่งดิจิตอล พิกัด 6 กก. (ห้องครื่องเสียง)',type:'Measuring',use:'ชั่งน้ำหนักสสัตภัณฑ์'},
+  {id:'MDB002',name:'เครื่องชั่งดิจิตอล พิกัด 6 กก. (ห้องสับบี้เมือ)',type:'Measuring',use:'ชั่งน้ำหนักสสัตภัณฑ์'},
+  {id:'MDB003',name:'เครื่องชั่งดิจิตอล พิกัด 15 กก. (ห้องชั่งสาร)',type:'Measuring',use:'ชั่งน้ำหนักส่วนผสม กลุ่ม DM'},
+  {id:'MDB004',name:'เครื่องชั่งดิจิตอล พิกัด 15 กก. (ห้องครื่องเสียง)',type:'Measuring',use:'ชั่งน้ำหนักสสัตภัณฑ์'},
+  {id:'MDB006',name:'เครื่องชั่งดิจิตอล พิกัด 100 กก. (จุดรับวัตถุดิบ)',type:'Measuring',use:'ชั่งน้ำหนักวัตถุดิบ'},
+  {id:'MDB007',name:'เครื่องชั่งดิจิตอล พิกัด 15 กก. (แผนกคุณภาพ)',type:'Measuring',use:'คุมตรวจตอกระบวนการผลิต - QA/QC'},
+  {id:'MDB008',name:'เครื่องชั่งดิจิตอล พิกัด 15 กก. (ห้องสับบี้เมือ)',type:'Measuring',use:'ชั่งน้ำหนักสสัตภัณฑ์'},
+  {id:'MDB009',name:'เครื่องชั่งดิจิตอล พิกัด 150 กก. (ห้องชั่งหนัก-ผสม)',type:'Measuring',use:'ชั่งน้ำหนักวัตถุดิบ'},
+  {id:'MDB010',name:'เครื่องชั่งดิจิตอล พิกัด 150 กก. (จุดรับวัตถุดิบ RM)',type:'Measuring',use:'ชั่งน้ำหนักวัตถุดิบ กลุ่ม RM'},
+  {id:'MTC001',name:'ห้องวัดอินควบคุมอุณหภูมิ (ห้อง RM)',type:'Measuring',use:'ห้องจัดเก็บวัตถุดิบกลุ่ม RM'},
+  {id:'MTC002',name:'ห้องปฏิบัติงานควบคุมอุณหภูมิ (ห้องชั่งสาร)',type:'Measuring',use:'ห้องปฏิบัติงาน'},
+  {id:'MTC003',name:'ห้องวัดอินควบคุมอุณหภูมิ (ห้องพักหมูหนัก)',type:'Measuring',use:'ห้องจัดเก็บหมูบรรจุ'},
+  {id:'MTC004',name:'ห้องปฏิบัติงานควบคุมอุณหภูมิ (ห้องเย็น)',type:'Measuring',use:'ห้องปฏิบัติงาน'},
+  {id:'MTF001',name:'ห้องวัดอินแข็งควบคุมอุณหภูมิ',type:'Measuring',use:'ห้อง FG 1'},
+  {id:'MTF002',name:'ห้องวัดอินแข็งควบคุมอุณหภูมิ',type:'Measuring',use:'ห้อง FG 1.1'},
+  {id:'MTF003',name:'ห้องวัดอินแข็งควบคุมอุณหภูมิ',type:'Measuring',use:'ห้อง FG 2'},
+  {id:'MTF004',name:'ห้องวัดอินแข็งควบคุมอุณหภูมิ',type:'Measuring',use:'ห้อง FG 3'},
+  {id:'MTF005',name:'ห้องวัดเนื้อกิดควบคุมอุณหภูมิ',type:'Measuring',use:'ห้อง Waste'},
+  {id:'MDT001',name:'HANNA - IC',type:'Measuring',use:'วัดคุณภูมิมีนากายวัตถุดิบ (กลุ่ม RM)'},
+  {id:'MDT002',name:'HANNA - IP',type:'Measuring',use:'วัดคุณภูมิวัตถุดิบ / หนุ่มหักบ Hopper'},
+  {id:'MDT003',name:'Data Logger',type:'Measuring',use:'เก็บข้อมูลสินค้าสำเร็จ'},
+  {id:'MIT001',name:'Infared Thermometer - QA',type:'Measuring',use:'วัดคุณภูมิขณะแดงกลุ่มวัตถุดิบ RM'},
+  {id:'MIT002',name:'Infared Thermometer - PD',type:'Measuring',use:'วัดคุณภูมิพื้นผิวสสัตภัณฑ์'},
+  {id:'MRF001',name:'Refractometer (Brix)',type:'Measuring',use:'วัดค่าความหวานของน้ำซอส'},
+  {id:'MRF002',name:'Refractometer (Salt)',type:'Measuring',use:'วัดค่าความเค็มของน้ำซอส'},
+  {id:'MPH001',name:'pH Meter 001',type:'Measuring',use:'วัดคุณภาพของน้ำใช้ภายในโรงงาน'},
+  {id:'MPH002',name:'pH Meter 002',type:'Measuring',use:'วัดคุณภาพของน้ำใช้ภายในโรงงาน (สำรอง)'},
+  {id:'TMD001',name:'Metal Detector - S',type:'Testing',use:'ทดสอบสิ่งแปลกปลอม เครื่อง S'},
+  {id:'TMD002',name:'Metal Detector - L',type:'Testing',use:'ทดสอบสิ่งแปลกปลอม เครื่อง L'},
+  {id:'VSC001',name:'Visual Check',type:'Visual',use:'ตรวจสอบด้วยสายตา'},
+];
+
+const CCPS = [
+  {id:'CCP001',processId:'PC0010',name:'ตรวจจับสิ่งแปลกปลอม Fe',limit:'ø 1.0 mm.'},
+  {id:'CCP002',processId:'PC0010',name:'ตรวจจับสิ่งแปลกปลอม Non Fe',limit:'ø 1.5 mm.'},
+  {id:'CCP003',processId:'PC0010',name:'ตรวจจับสิ่งแปลกปลอม SUS',limit:'ø 2.0 mm.'},
+];
+
+const SANITATION_ITEMS = [
+  {id:'S01',task:'ทำความสะอาดพื้นที่ผลิต (Production Floor)',freq:'ทุกรอบผลิต',zone:'A'},
+  {id:'S02',task:'ล้างและฆ่าเชื้อมีด/เขียง (Knife & Board Sanitize)',freq:'ทุก 4 ชม.',zone:'A'},
+  {id:'S03',task:'ล้างถาดและอุปกรณ์สัมผัสอาหาร (Food Contact Surface)',freq:'ทุกรอบผลิต',zone:'A'},
+  {id:'S04',task:'ทำความสะอาดและฆ่าเชื้อ Blast Freeze',freq:'รายสัปดาห์',zone:'B'},
+  {id:'S05',task:'ทำความสะอาดห้องเย็น (Cold Room)',freq:'รายสัปดาห์',zone:'B'},
+  {id:'S06',task:'ตรวจสอบ Pest Control Trap',freq:'รายสัปดาห์',zone:'All'},
+  {id:'S07',task:'ล้างมือก่อนเข้าพื้นที่ผลิต (Hand Wash Verification)',freq:'ทุกรอบ',zone:'A'},
+  {id:'S08',task:'ตรวจสอบ Sanitizer Solution Concentration',freq:'รายวัน',zone:'All'},
+];
+
+/* ═══════════ RUNTIME STATE ═══════════ */
+let QC_LOG = [], NCR_LOG = [];
+let sanitationDone = new Set();
+let currentMasterTab = 'supplier';
+
+/* ═══════════ INIT ═══════════ */
+window.onload = function() {
+  setInterval(()=>{ document.getElementById('status-time').textContent = new Date().toTimeString().slice(0,5); }, 1000);
+  document.getElementById('status-time').textContent = new Date().toTimeString().slice(0,5);
+  populateMaterialDropdown('RM');
+  populateFGDropdowns();
+  renderSanitation();
+  renderMaster();
+  document.getElementById('stat-mat').textContent = MATERIALS.length;
+  document.getElementById('stat-fg2').textContent = FG_PRODUCTS.length;
+  document.querySelectorAll('input[type=date]').forEach(el => { if(!el.value) el.value = new Date().toISOString().split('T')[0]; });
+  document.getElementById('md-time').value = new Date().toTimeString().slice(0,5);
+};
+
+/* ═══════════ NAVIGATION ═══════════ */
+function switchPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  const tabNames = ['dashboard','receiving','inprocess','fgrelease','sanitation','master','ncr'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', tabNames[i]===name));
+  const navNames = ['dashboard','receiving','inprocess','fgrelease','master'];
+  document.querySelectorAll('.nav-item').forEach((n,i) => n.classList.toggle('active', navNames[i]===name));
+  if(name==='master') renderMaster();
+  if(name==='ncr') renderNCRLog();
+}
+
+function setStep(el, type) {
+  document.querySelectorAll('.step-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  populateMaterialDropdown(type);
+}
+
+/* ═══════════ DROPDOWNS ═══════════ */
+function typeColor(t){return t==='RM'?'#E65100':t==='DM'?'#2E7D32':t==='PM'?'#1565C0':'#880E4F';}
+function typeBg(t){return t==='RM'?'#FFF3E0':t==='DM'?'#E8F5E9':t==='PM'?'#E3F2FD':'#FCE4EC';}
+
+function populateMaterialDropdown(type) {
+  const sel = document.getElementById('rm-material');
+  sel.innerHTML = '<option value="">-- เลือกวัตถุดิบ --</option>';
+  MATERIALS.filter(m => m.type === type).forEach(m => {
+    const opt = document.createElement('option');
+    const tInfo = m.maxT !== null ? `(${m.minT}–${m.maxT}°C)` : '(Ambient)';
+    const storageType = m.maxT === null ? 'ambient' : m.maxT <= 0 ? 'frozen' : 'chilled';
+    opt.value = `${m.code}|${storageType}|${m.maxT!==null?m.maxT:30}`;
+    opt.textContent = `${m.code} · ${m.name} ${tInfo}`;
+    sel.appendChild(opt);
+  });
+  populateSupplierDropdown(type);
+}
+
+function populateSupplierDropdown(type) {
+  const sel = document.getElementById('rm-supplier');
+  sel.innerHTML = '<option value="">-- เลือก Supplier --</option>';
+  SUPPLIERS.filter(s => s.type === type).forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = `${s.id} · ${s.name} [${s.status}]`;
+    if(s.status==='Conditional') opt.style.color = 'var(--amber-mid)';
+    sel.appendChild(opt);
+  });
+}
+
+function populateFGDropdowns() {
+  ['fg-product','ip-fg','md-product'].forEach(id => {
+    const sel = document.getElementById(id);
+    if(!sel) return;
+    sel.innerHTML = '<option value="">-- เลือกสินค้า --</option>';
+    FG_PRODUCTS.forEach(fg => {
+      const opt = document.createElement('option');
+      opt.value = fg.code;
+      opt.textContent = `${fg.code} · ${fg.name}`;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+/* ═══════════ MATERIAL CHANGE ═══════════ */
+function onMaterialChange() {
+  const val = document.getElementById('rm-material').value;
+  const banner = document.getElementById('rm-cl-banner');
+  const tempWrap = document.getElementById('temp-field-wrap');
+  const tempLabel = document.getElementById('rm-temp-label');
+  if(!val) { banner.style.display='none'; return; }
+  const [code, storageType, cl] = val.split('|');
+  const mat = MATERIALS.find(m => m.code === code);
+  if(storageType === 'ambient') {
+    banner.innerHTML='ℹ️ Ambient Material — ตรวจสอบ Visual และเอกสาร (ไม่ต้องวัดอุณหภูมิ)';
+    banner.style.display='block'; tempWrap.style.display='none';
+  } else if(storageType === 'frozen') {
+    banner.innerHTML='❄️ Frozen Material — Critical Limit: ≤-18°C';
+    banner.style.display='block'; tempWrap.style.display='';
+    tempLabel.innerHTML='อุณหภูมิ (°C) <span style="color:var(--red-mid);font-size:10.5px;">CL ≤-18°C</span>';
+  } else {
+    banner.style.display='none'; tempWrap.style.display='';
+    tempLabel.innerHTML='อุณหภูมิ (°C) <span style="color:var(--red-mid);font-size:10.5px;">CL ≤7°C</span>';
+  }
+  if(mat) populateSupplierDropdown(mat.type);
+}
+
+function checkRMTemp(input) {
+  const val = parseFloat(input.value);
+  const matVal = document.getElementById('rm-material').value;
+  const cl = matVal ? parseFloat(matVal.split('|')[2]) : 7;
+  const fail = !isNaN(val) && val > cl;
+  input.classList.toggle('fail', fail);
+  document.getElementById('rm-temp-alert').style.display = fail ? 'flex' : 'none';
+  if(fail) showToast(`⚡ OOC! Temp ${val.toFixed(1)}°C > CL ${cl}°C`);
+}
+
+function submitReceiving() {
+  const matVal = document.getElementById('rm-material').value;
+  const lot = document.getElementById('rm-lot').value;
+  const sup = document.getElementById('rm-supplier').value;
+  const temp = parseFloat(document.getElementById('rm-temp').value);
+  const visual = document.getElementById('rm-visual').value;
+  if(!matVal || !lot || !sup) { showToast('กรุณากรอกข้อมูลให้ครบ'); return; }
+  const matType = matVal.split('|')[1];
+  const cl = parseFloat(matVal.split('|')[2]);
+  if(matType !== 'ambient' && !isNaN(temp) && temp > cl) {
+    openNCRModal('auto','⚡ NCR — Receiving Temp CCP Breach',`Temp ${temp.toFixed(1)}°C > CL ≤${cl}°C · Lot: ${lot}`); return;
+  }
+  if(visual !== 'pass') {
+    openNCRModal('auto','⚡ NCR — Visual Inspection Fail',`Visual: ${visual} · Lot: ${lot}`); return;
+  }
+  const matCode = matVal.split('|')[0];
+  QC_LOG.push({type:'receiving', time:now(), mat:matCode, lot, supplier:sup, temp, result:'PASS'});
+  addActivity(`📥 รับ ${matCode} Lot ${lot}`, `Supplier: ${sup} · Temp: ${isNaN(temp)?'N/A':temp+'°C'}`, 'PASS','var(--teal-bg)','🥩');
+  document.getElementById('kpi-rm').textContent = QC_LOG.filter(l=>l.type==='receiving').length;
+  showToast('✅ บันทึกการรับวัตถุดิบสำเร็จ','ok');
+}
+
+/* ═══════════ FG SPEC ═══════════ */
+function renderFGChips(containerId, code) {
+  const fg = FG_PRODUCTS.find(f=>f.code===code);
+  const el = document.getElementById(containerId);
+  if(!fg) { el.innerHTML=''; return; }
+  let html = '';
+  if(fg.minW) html += `<span class="spec-chip">น้ำหนัก: <strong>${fg.minW}–${fg.maxW}g</strong></span>`;
+  html += `<span class="spec-chip">Storage: <strong>${fg.storageTemp ? '≤'+fg.storageTemp+'°C' : 'Ambient'}</strong></span>`;
+  if(fg.shelf) html += `<span class="spec-chip">Shelf: <strong>${fg.shelf} วัน</strong></span>`;
+  html += `<span class="spec-chip">Type: <strong>${fg.prodType}</strong></span>`;
+  el.innerHTML = html;
+}
+function updateFGSpec() {
+  renderFGChips('ip-spec-display', document.getElementById('ip-fg').value);
+  document.querySelectorAll('#ip-weights .w-input').forEach(w=>{ w.value=''; w.className='w-input'; });
+  document.getElementById('ip-avg').textContent='— g';
+  document.getElementById('ip-avg').className='avg-val';
+  document.getElementById('ip-result-row').style.display='none';
+}
+function updateFGReleaseSpec() { renderFGChips('fg-spec-display', document.getElementById('fg-product').value); }
+
+function checkIPTemp(input) {
+  const val = parseFloat(input.value);
+  const fail = !isNaN(val) && val > 5;
+  input.classList.toggle('fail', fail);
+  if(fail) showToast(`⚡ CCP Breach! Temp ${val.toFixed(1)}°C > CL ≤5°C`);
+}
+function calcWeight() {
+  const code = document.getElementById('ip-fg').value;
+  const fg = FG_PRODUCTS.find(f=>f.code===code);
+  const inputs = document.querySelectorAll('#ip-weights .w-input');
+  const vals = Array.from(inputs).map(i=>parseFloat(i.value)).filter(v=>!isNaN(v));
+  if(fg && fg.minW) inputs.forEach(i => {
+    const v = parseFloat(i.value);
+    if(!isNaN(v)) { i.classList.toggle('out-of-spec', v<fg.minW||v>fg.maxW); i.classList.toggle('in-spec', v>=fg.minW&&v<=fg.maxW); }
+  });
+  if(vals.length > 0) {
+    const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+    const pass = !fg || !fg.minW || (avg>=fg.minW && avg<=fg.maxW);
+    const el = document.getElementById('ip-avg');
+    el.textContent = Math.round(avg)+' g'; el.className = 'avg-val '+(pass?'pass':'fail');
+    if(vals.length >= 3) {
+      document.getElementById('ip-result-row').style.display='grid';
+      const rw = document.getElementById('ip-res-wt');
+      rw.className = 'result-box '+(pass?'result-pass':'result-fail');
+      rw.querySelector('.result-val').textContent = pass?'PASS':'FAIL';
+    }
+  }
+}
+function checkIPVisual() { if(document.getElementById('ip-visual').value !== 'pass') showToast('⚡ Visual FAIL — NCR จะสร้างอัตโนมัติเมื่อบันทึก'); }
+function submitIP() {
+  const code = document.getElementById('ip-fg').value;
+  const temp = parseFloat(document.getElementById('ip-temp').value);
+  const visual = document.getElementById('ip-visual').value;
+  const outSpec = document.querySelector('#ip-weights .out-of-spec');
+  const reasons = [];
+  if(!isNaN(temp)&&temp>5) reasons.push(`Temp ${temp.toFixed(1)}°C > CL`);
+  if(visual!=='pass') reasons.push('Visual Fail');
+  if(outSpec) reasons.push('น้ำหนักนอก Spec');
+  if(reasons.length) { openNCRModal('auto','⚡ NCR — In-Process Out of Spec', reasons.join(' · ')); return; }
+  QC_LOG.push({type:'inprocess', time:now(), fg:code, temp, result:'PASS'});
+  addActivity(`⚙️ In-Process QC — ${code||'FG'}`, `Temp ${isNaN(temp)?'—':temp}°C · Visual PASS`, 'PASS','var(--blue-bg)','⚙️');
+  showToast('✅ บันทึก In-Process QC สำเร็จ — PASS','ok');
+}
+
+/* ═══════════ METAL DETECTOR ═══════════ */
+function onMDChange(el) {
+  el.classList.toggle('fail', el.value==='FAIL');
+  if(el.value==='FAIL') showToast('⚡ Metal Detected! ระบบจะ Hold สินค้าและสร้าง NCR');
+}
+function submitMD() {
+  const fe=document.getElementById('md-fe').value, nf=document.getElementById('md-nonfe').value, su=document.getElementById('md-sus').value;
+  const eq=document.getElementById('md-equip').value;
+  if(fe==='FAIL'||nf==='FAIL'||su==='FAIL') {
+    const f=[fe==='FAIL'?'Fe':'',nf==='FAIL'?'Non-Fe':'',su==='FAIL'?'SUS':''].filter(Boolean).join(', ');
+    openNCRModal('auto',`⚡ NCR — CCP Metal Detected`,`${eq}: พบชิ้นส่วนโลหะ (${f}) — Hold ผลิตภัณฑ์ทันที`); return;
+  }
+  QC_LOG.push({type:'metaldetector', time:now(), equip:eq, fe, nf, su, result:'PASS'});
+  addActivity(`🔍 Metal Detector — ${eq}`, 'Fe PASS · Non-Fe PASS · SUS PASS', 'PASS','var(--teal-bg)','🔍');
+  document.getElementById('kpi-md').textContent = QC_LOG.filter(l=>l.type==='metaldetector').length;
+  showToast('✅ Metal Detector PASS — บันทึกสำเร็จ','ok');
+}
+
+/* ═══════════ FG RELEASE ═══════════ */
+function checkFGTemp(input) {
+  const val = parseFloat(input.value);
+  const fail = !isNaN(val) && val > -15;
+  input.classList.toggle('fail', fail);
+  if(fail) showToast(`⚡ Storage Temp ${val.toFixed(1)}°C > Spec ≤-18°C`);
+}
+function submitFGRelease() {
+  const code=document.getElementById('fg-product').value, lot=document.getElementById('fg-lot').value;
+  const temp=parseFloat(document.getElementById('fg-storage-temp').value);
+  const md=document.getElementById('fg-md').value, label=document.getElementById('fg-label').value;
+  if(!code||!lot) { showToast('กรุณากรอกข้อมูลให้ครบ'); return; }
+  if(!isNaN(temp)&&temp>-15) { openNCRModal('auto','⚡ NCR — FG Storage Temp Fail',`${code} Lot ${lot}: Temp ${temp.toFixed(1)}°C > Spec ≤-18°C`); return; }
+  if(md==='FAIL') { openNCRModal('auto','⚡ NCR — FG Metal Fail',`${code} Lot ${lot}: Metal Detector FAIL`); return; }
+  if(label!=='pass') { openNCRModal('auto','⚡ NCR — FG Label Error',`${code} Lot ${lot}: ${label}`); return; }
+  QC_LOG.push({type:'fgrelease', time:now(), code, lot, temp, result:'PASS'});
+  addActivity(`📦 FG Release — ${code}`, `Lot ${lot} · Temp ${isNaN(temp)?'—':temp}°C · QA Approved`, 'PASS','var(--green-bg)','📦');
+  document.getElementById('kpi-fg').textContent = QC_LOG.filter(l=>l.type==='fgrelease').length;
+  showToast('✅ QA Release สำเร็จ — สินค้าพร้อมจำหน่าย','ok');
+}
+
+/* ═══════════ SANITATION ═══════════ */
+function renderSanitation() {
+  document.getElementById('sanitation-list').innerHTML = SANITATION_ITEMS.map(item => `
+    <div class="check-row" onclick="toggleSanitation('${item.id}')">
+      <div class="check-circle ${sanitationDone.has(item.id)?'done':''}">${sanitationDone.has(item.id)?'✓':''}</div>
+      <div style="flex:1"><div class="check-text ${sanitationDone.has(item.id)?'done':''}">${item.task}</div><div class="check-freq">Zone ${item.zone} · ${item.freq}</div></div>
+    </div>`).join('');
+  document.getElementById('san-done-count').textContent = sanitationDone.size;
+  document.getElementById('san-pending-count').textContent = SANITATION_ITEMS.length - sanitationDone.size;
+}
+function toggleSanitation(id) { sanitationDone.has(id)?sanitationDone.delete(id):sanitationDone.add(id); renderSanitation(); }
+function submitSanitation() {
+  if(!sanitationDone.size) { showToast('กรุณาทำเครื่องหมายรายการที่เสร็จแล้ว'); return; }
+  showToast(`✅ Sanitation Log บันทึกแล้ว ${sanitationDone.size}/${SANITATION_ITEMS.length} รายการ`,'ok');
+}
+
+/* ═══════════ MASTER DATA ═══════════ */
+function switchMaster(tab, el) {
+  currentMasterTab = tab;
+  document.querySelectorAll('.master-tab').forEach(t => t.classList.remove('active'));
+  if(el) el.classList.add('active');
+  document.getElementById('master-search').value = '';
+  renderMaster();
+}
+
+function renderMaster() {
+  const q = (document.getElementById('master-search').value||'').toLowerCase();
+  const c = document.getElementById('master-list');
+  if(currentMasterTab==='supplier') {
+    const data = SUPPLIERS.filter(s=>!q||s.id.toLowerCase().includes(q)||s.name.toLowerCase().includes(q)||s.type.toLowerCase().includes(q));
+    c.innerHTML = data.map(s=>`
+      <div class="master-item">
+        <div class="master-item-header">
+          <div><div class="master-item-id">${s.id}</div><div class="master-item-name">${s.name}</div></div>
+          <span class="badge badge-${s.status.toLowerCase()}">${s.status}</span>
+        </div>
+        <div class="master-item-meta">
+          <span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:12px;background:${typeBg(s.type)};color:${typeColor(s.type)};">${s.type}</span>
+          <span style="font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:12px;background:${s.risk==='HIGH'?'var(--red-bg)':s.risk==='MEDIUM'?'var(--amber-bg)':'var(--green-bg)'};color:${s.risk==='HIGH'?'var(--red)':s.risk==='MEDIUM'?'var(--amber)':'var(--green)'};">Risk: ${s.risk}</span>
+        </div>
+      </div>`).join('');
+  } else if(currentMasterTab==='material') {
+    const data = MATERIALS.filter(m=>!q||m.code.toLowerCase().includes(q)||m.name.toLowerCase().includes(q)||m.cat.toLowerCase().includes(q));
+    c.innerHTML = data.map(m=>`
+      <div class="master-item">
+        <div class="master-item-header">
+          <div><div class="master-item-id">${m.code}</div><div class="master-item-name">${m.name}</div></div>
+          <span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:12px;background:${typeBg(m.type)};color:${typeColor(m.type)};">${m.type}</span>
+        </div>
+        <div class="master-item-meta">
+          <span class="meta-tag">${m.cat}</span><span class="meta-tag">Unit: ${m.unit}</span>
+          ${m.maxT!==null?`<span class="meta-tag" style="background:var(--blue-bg);color:var(--blue);">Temp: ${m.minT}–${m.maxT}°C</span>`:'<span class="meta-tag">Ambient</span>'}
+          ${m.shelf?`<span class="meta-tag">Shelf: ${m.shelf}d</span>`:''}
+        </div>
+      </div>`).join('');
+  } else if(currentMasterTab==='fg') {
+    const data = FG_PRODUCTS.filter(f=>!q||f.code.toLowerCase().includes(q)||f.name.toLowerCase().includes(q)||f.prodType.toLowerCase().includes(q));
+    c.innerHTML = data.map(f=>`
+      <div class="master-item">
+        <div class="master-item-header">
+          <div><div class="master-item-id">${f.code}</div><div class="master-item-name">${f.name}</div></div>
+          <span class="badge badge-pass">${f.shelf?f.shelf+'d':'—'}</span>
+        </div>
+        <div class="master-item-meta">
+          <span class="meta-tag">${f.prodType}</span>
+          ${f.storageTemp?`<span class="meta-tag" style="background:var(--blue-bg);color:var(--blue);">≤${f.storageTemp}°C</span>`:'<span class="meta-tag">Ambient</span>'}
+          ${f.minW?`<span class="meta-tag">${f.minW}–${f.maxW} g</span>`:''}
+        </div>
+      </div>`).join('');
+  } else if(currentMasterTab==='process') {
+    const data = PROCESSES.filter(p=>!q||p.id.toLowerCase().includes(q)||p.name.toLowerCase().includes(q));
+    c.innerHTML = data.map(p=>`
+      <div class="master-item">
+        <div class="master-item-id">${p.id}</div><div class="master-item-name">${p.name}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:4px;">${p.desc}</div>
+        <div class="master-item-meta"><span class="meta-tag">📍 ${p.loc}</span></div>
+      </div>`).join('');
+  } else if(currentMasterTab==='parameter') {
+    const data = PARAMETERS.filter(p=>!q||p.id.toLowerCase().includes(q)||p.param.toLowerCase().includes(q)||p.cat.toLowerCase().includes(q));
+    c.innerHTML = data.map(p=>`
+      <div class="master-item">
+        <div class="master-item-header">
+          <div><div class="master-item-id">${p.id}</div><div class="master-item-name">${p.param}</div></div>
+          <span class="meta-tag" style="background:var(--teal-bg);color:var(--teal);">${p.spec}</span>
+        </div>
+        <div class="master-item-meta">
+          <span class="meta-tag">${p.cat}</span>${p.unit&&p.unit!=='-'?`<span class="meta-tag">Unit: ${p.unit}</span>`:''}
+        </div>
+      </div>`).join('');
+  } else if(currentMasterTab==='equipment') {
+    const data = EQUIPMENT_LIST.filter(e=>!q||e.id.toLowerCase().includes(q)||e.name.toLowerCase().includes(q));
+    c.innerHTML = data.map(e=>`
+      <div class="master-item">
+        <div class="master-item-header">
+          <div><div class="master-item-id">${e.id}</div><div class="master-item-name">${e.name}</div></div>
+          <span class="meta-tag">${e.type}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin-top:4px;">📍 ${e.use}</div>
+      </div>`).join('');
+  } else if(currentMasterTab==='ccp') {
+    const data = CCPS.filter(c=>!q||c.id.toLowerCase().includes(q)||c.name.toLowerCase().includes(q));
+    c.innerHTML = data.map(cc=>`
+      <div class="master-item" style="border-left:3px solid var(--amber-mid);">
+        <div class="master-item-header">
+          <div><div class="master-item-id">${cc.id} · ${cc.processId}</div><div class="master-item-name">${cc.name}</div></div>
+          <span class="badge badge-ncr">CL: ${cc.limit}</span>
+        </div>
+      </div>`).join('');
+  }
+  if(!c.innerHTML) c.innerHTML='<div style="text-align:center;color:var(--text3);padding:30px;">ไม่พบข้อมูล</div>';
+}
+
+/* ═══════════ NCR ═══════════ */
+function openNCRModal(type, title, sub) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-sub').textContent = sub||'';
+  document.getElementById('modal-auto-banner').style.display = type==='auto'?'block':'none';
+  document.getElementById('modal-ncr-id').value = 'NCR-'+Date.now().toString(36).toUpperCase();
+  document.getElementById('modal-desc').value = sub||'';
+  document.getElementById('modal-ca').value = '';
+  openModal('ncr-modal');
+}
+function submitNCR() {
+  const entry = {
+    id:document.getElementById('modal-ncr-id').value,
+    title:document.getElementById('modal-title').textContent,
+    desc:document.getElementById('modal-desc').value,
+    ca:document.getElementById('modal-ca').value,
+    time:now(), status:'Open'
+  };
+  NCR_LOG.push(entry);
+  updateNCRBadge();
+  addActivity(`⚠️ ${entry.id}`, entry.title.replace('⚡ ',''), 'NCR','var(--amber-bg)','⚠️');
+  closeModal('ncr-modal'); renderNCRLog();
+  showToast('✅ NCR บันทึกแล้ว — แจ้งเตือนทีมผลิต','ok');
+}
+function renderNCRLog() {
+  const open = NCR_LOG.filter(n=>n.status==='Open'), closed = NCR_LOG.filter(n=>n.status==='Closed');
+  document.getElementById('ncr-open-count').textContent = open.length;
+  document.getElementById('ncr-closed-count').textContent = closed.length;
+  const c = document.getElementById('ncr-list');
+  if(!NCR_LOG.length) { c.innerHTML='<div style="text-align:center;color:var(--text3);padding:30px;font-size:13px;">ยังไม่มี NCR ในวันนี้ ✅</div>'; return; }
+  c.innerHTML = NCR_LOG.map(n=>`
+    <div class="ncr-item">
+      <div class="ncr-id">${n.id} · ${n.time}</div>
+      <div class="ncr-title">${n.title}</div>
+      <div class="ncr-sub">${n.desc}</div>
+      ${n.ca?`<div style="font-size:11.5px;margin-top:4px;color:var(--text2);"><strong>CA:</strong> ${n.ca}</div>`:''}
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+        <span class="badge ${n.status==='Open'?'badge-ncr':'badge-pass'}">${n.status}</span>
+        ${n.status==='Open'?`<button class="btn btn-sm btn-green" onclick="closeNCR('${n.id}')">Close NCR</button>`:''}
+      </div>
+    </div>`).join('');
+}
+function closeNCR(id) {
+  const n = NCR_LOG.find(x=>x.id===id); if(n) n.status='Closed';
+  updateNCRBadge(); renderNCRLog(); showToast('✅ NCR Closed','ok');
+}
+function updateNCRBadge() {
+  const open = NCR_LOG.filter(n=>n.status==='Open').length;
+  document.getElementById('kpi-ncr').textContent = open;
+  document.getElementById('ncr-dot').style.display = open > 0 ? 'block' : 'none';
+}
+
+/* ═══════════ ACTIVITY LOG ═══════════ */
+function addActivity(name, sub, status, bg, icon) {
+  const c = document.getElementById('recent-log');
+  const cls = status==='PASS'?'badge-pass':status==='NCR'?'badge-ncr':'badge-fail';
+  const item = document.createElement('div');
+  item.className='activity-item';
+  item.innerHTML=`<div class="act-icon" style="background:${bg}">${icon}</div><div class="act-info"><div class="act-name">${name}</div><div class="act-sub">${sub}</div></div><span class="badge ${cls}">${status}</span>`;
+  c.insertBefore(item, c.firstChild);
+  if(c.children.length > 8) c.lastChild.remove();
+}
+
+/* ═══════════ HELPERS ═══════════ */
+function now() { return new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}); }
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function showToast(msg, type) {
+  const t = document.getElementById('toast'); t.textContent = msg;
+  t.className = 'toast show '+(type==='ok'?'ok':'');
+  setTimeout(() => t.className='toast', 3800);
+}
+
+/* ═══════════ EXPORT ═══════════ */
+const TODAY_STR = new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
+function openReport(html) {
+  const b = new Blob([html],{type:'text/html;charset=utf-8'});
+  window.open(URL.createObjectURL(b),'_blank');
+}
+function baseStyle() {
+  return `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body{font-family:'Sarabun',sans-serif;margin:0;padding:24px;background:#fafafa;color:#111;}
+    .hdr{background:#111;color:#fff;padding:18px 22px;border-radius:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;}
+    .hdr h1{font-size:18px;font-weight:700;margin:0;}
+    .hdr small{opacity:0.5;font-size:11px;display:block;margin-top:3px;}
+    .print-btn{background:var(--teal,#178A6A);color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;}
+    h2{font-size:14px;font-weight:700;color:#111;border-bottom:2px solid #e0e0e0;padding-bottom:6px;margin:22px 0 10px;}
+    .sum{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+    .sum-card{background:#fff;border:1px solid #e0e0e0;padding:12px 16px;border-radius:8px;flex:1;min-width:90px;}
+    .sum-num{font-size:24px;font-weight:800;}
+    .sum-lbl{font-size:11px;color:#888;margin-top:2px;}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:22px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+    th{background:#f5f5f3;text-align:left;padding:9px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;border-bottom:1px solid #e0e0e0;}
+    td{padding:9px 12px;border-bottom:1px solid #f0f0f0;vertical-align:top;}
+    tr:last-child td{border-bottom:none;}
+    .badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;}
+    .ok{background:#E8F5EC;color:#1A5C2A;}.fail{background:#FEF0F0;color:#8C1A1A;}.warn{background:#FEF5E6;color:#6B3A0A;}
+    .rm{background:#FFF3E0;color:#E65100;}.dm{background:#E8F5E9;color:#2E7D32;}.pm{background:#E3F2FD;color:#1565C0;}.cm{background:#FCE4EC;color:#880E4F;}
+    .high{background:#FEF0F0;color:#8C1A1A;}.medium{background:#FEF5E6;color:#6B3A0A;}.low{background:#E8F5EC;color:#1A5C2A;}
+    @media print{body{padding:10px;}.print-btn{display:none!important;}}
+  </style></head><body>`;
+}
+function baseFooter() { return '</body></html>'; }
+function hdr(title) { return `<div class="hdr"><div><h1>🏭 Smart QA Factory — ${title}</h1><small>วันที่: ${TODAY_STR} · Smart QA Factory v2</small></div><button class="print-btn" onclick="window.print()">🖨️ Print</button></div>`; }
+
+function exportReport(type) {
+  closeModal('export-modal');
+  if(type==='qc') {
+    const rm = QC_LOG.filter(l=>l.type==='receiving');
+    const md = QC_LOG.filter(l=>l.type==='metaldetector');
+    const fg = QC_LOG.filter(l=>l.type==='fgrelease');
+    let h = baseStyle()+hdr('QC Daily Report');
+    h += `<div class="sum">
+      <div class="sum-card"><div class="sum-num">${rm.length}</div><div class="sum-lbl">RM รับเข้า</div></div>
+      <div class="sum-card"><div class="sum-num">${md.length}</div><div class="sum-lbl">Metal Det.</div></div>
+      <div class="sum-card"><div class="sum-num">${fg.length}</div><div class="sum-lbl">FG Released</div></div>
+      <div class="sum-card"><div class="sum-num">${NCR_LOG.length}</div><div class="sum-lbl">NCR</div></div>
+    </div>`;
+    h += `<h2>📥 รับวัตถุดิบ (${rm.length})</h2>
+    <table><tr><th>เวลา</th><th>วัตถุดิบ</th><th>Lot No.</th><th>Supplier</th><th>Temp (°C)</th><th>ผล</th></tr>
+    ${rm.length?rm.map(e=>`<tr><td>${e.time}</td><td>${e.mat}</td><td>${e.lot}</td><td>${e.supplier}</td><td>${isNaN(e.temp)?'N/A':e.temp}</td><td><span class="badge ok">PASS</span></td></tr>`).join(''):'<tr><td colspan="6" style="color:#aaa;text-align:center;">ยังไม่มีรายการ</td></tr>'}
+    </table>`;
+    h += `<h2>🔍 Metal Detector (${md.length})</h2>
+    <table><tr><th>เวลา</th><th>เครื่อง</th><th>Fe</th><th>Non-Fe</th><th>SUS</th><th>ผล</th></tr>
+    ${md.length?md.map(e=>`<tr><td>${e.time}</td><td>${e.equip}</td><td><span class="badge ${e.fe==='PASS'?'ok':'fail'}">${e.fe}</span></td><td><span class="badge ${e.nf==='PASS'?'ok':'fail'}">${e.nf}</span></td><td><span class="badge ${e.su==='PASS'?'ok':'fail'}">${e.su}</span></td><td><span class="badge ok">PASS</span></td></tr>`).join(''):'<tr><td colspan="6" style="color:#aaa;text-align:center;">ยังไม่มีรายการ</td></tr>'}
+    </table>`;
+    h += `<h2>📦 FG Release (${fg.length})</h2>
+    <table><tr><th>เวลา</th><th>สินค้า</th><th>Lot No.</th><th>Temp (°C)</th><th>ผล</th></tr>
+    ${fg.length?fg.map(e=>`<tr><td>${e.time}</td><td>${e.code}</td><td>${e.lot}</td><td>${isNaN(e.temp)?'N/A':e.temp}</td><td><span class="badge ok">PASS</span></td></tr>`).join(''):'<tr><td colspan="5" style="color:#aaa;text-align:center;">ยังไม่มีรายการ</td></tr>'}
+    </table>`;
+    h += `<h2>⚠️ NCR Log (${NCR_LOG.length})</h2>
+    <table><tr><th>NCR ID</th><th>เวลา</th><th>รายละเอียด</th><th>สถานะ</th></tr>
+    ${NCR_LOG.length?NCR_LOG.map(n=>`<tr><td><strong>${n.id}</strong></td><td>${n.time}</td><td>${n.desc}</td><td><span class="badge ${n.status==='Open'?'warn':'ok'}">${n.status}</span></td></tr>`).join(''):'<tr><td colspan="4" style="color:#aaa;text-align:center;">ยังไม่มี NCR ✅</td></tr>'}
+    </table>`;
+    openReport(h+baseFooter());
+  } else if(type==='ncr') {
+    let h = baseStyle()+hdr('NCR Report');
+    h += `<table><tr><th>NCR ID</th><th>เวลา</th><th>ประเภท</th><th>รายละเอียด</th><th>Corrective Action</th><th>สถานะ</th></tr>
+    ${NCR_LOG.length?NCR_LOG.map(n=>`<tr><td><strong>${n.id}</strong></td><td>${n.time}</td><td>${n.title}</td><td>${n.desc}</td><td>${n.ca||'—'}</td><td><span class="badge ${n.status==='Open'?'warn':'ok'}">${n.status}</span></td></tr>`).join(''):'<tr><td colspan="6" style="color:#aaa;text-align:center;padding:20px;">ยังไม่มี NCR ✅</td></tr>'}
+    </table>`;
+    openReport(h+baseFooter());
+  } else if(type==='supplier') {
+    let h = baseStyle()+hdr('Supplier Master List — 32 ราย');
+    h += `<div class="sum">
+      <div class="sum-card"><div class="sum-num">32</div><div class="sum-lbl">Total</div></div>
+      <div class="sum-card"><div class="sum-num" style="color:#D94040;">${SUPPLIERS.filter(s=>s.risk==='HIGH').length}</div><div class="sum-lbl">HIGH Risk</div></div>
+      <div class="sum-card"><div class="sum-num" style="color:#C27A1A;">${SUPPLIERS.filter(s=>s.risk==='MEDIUM').length}</div><div class="sum-lbl">MEDIUM Risk</div></div>
+      <div class="sum-card"><div class="sum-num" style="color:#2D8C45;">${SUPPLIERS.filter(s=>s.risk==='LOW').length}</div><div class="sum-lbl">LOW Risk</div></div>
+      <div class="sum-card"><div class="sum-num" style="color:#C27A1A;">${SUPPLIERS.filter(s=>s.status==='Conditional').length}</div><div class="sum-lbl">Conditional</div></div>
+    </div>`;
+    h += `<table><tr><th>Supplier ID</th><th>ชื่อบริษัท/ร้านค้า</th><th>Material Type</th><th>Risk Level</th><th>Approved Status</th></tr>
+    ${SUPPLIERS.map(s=>`<tr><td><strong>${s.id}</strong></td><td>${s.name}</td><td><span class="badge ${s.type.toLowerCase()}">${s.type}</span></td><td><span class="badge ${s.risk.toLowerCase()}">${s.risk}</span></td><td><span class="badge ${s.status==='Approved'?'ok':'warn'}">${s.status}</span></td></tr>`).join('')}
+    </table>`;
+    openReport(h+baseFooter());
+  } else if(type==='material') {
+    let h = baseStyle()+hdr(`Material Master List — ${MATERIALS.length} รายการ`);
+    h += `<div class="sum">
+      <div class="sum-card"><div class="sum-num">${MATERIALS.filter(m=>m.type==='RM').length}</div><div class="sum-lbl">RM</div></div>
+      <div class="sum-card"><div class="sum-num">${MATERIALS.filter(m=>m.type==='DM').length}</div><div class="sum-lbl">DM</div></div>
+      <div class="sum-card"><div class="sum-num">${MATERIALS.filter(m=>m.type==='PM').length}</div><div class="sum-lbl">PM</div></div>
+      <div class="sum-card"><div class="sum-num">${MATERIALS.filter(m=>m.type==='CM').length}</div><div class="sum-lbl">CM</div></div>
+    </div>`;
+    h += `<table><tr><th>Material Code</th><th>ชื่อวัตถุดิบ</th><th>Type</th><th>Category</th><th>Unit</th><th>Min Temp (°C)</th><th>Max Temp (°C)</th><th>Shelf Life (วัน)</th></tr>
+    ${MATERIALS.map(m=>`<tr><td><strong>${m.code}</strong></td><td>${m.name}</td><td><span class="badge ${m.type.toLowerCase()}">${m.type}</span></td><td>${m.cat}</td><td>${m.unit}</td><td>${m.minT!==null?m.minT:'—'}</td><td>${m.maxT!==null?m.maxT:'—'}</td><td>${m.shelf||'—'}</td></tr>`).join('')}
+    </table>`;
+    openReport(h+baseFooter());
+  } else if(type==='fg') {
+    let h = baseStyle()+hdr(`FG Product Master — ${FG_PRODUCTS.length} SKUs`);
+    h += `<div class="sum">
+      <div class="sum-card"><div class="sum-num">${FG_PRODUCTS.filter(f=>f.prodType==='Pork Marinated').length}</div><div class="sum-lbl">Pork</div></div>
+      <div class="sum-card"><div class="sum-num">${FG_PRODUCTS.filter(f=>f.prodType==='Chicken Marinated').length}</div><div class="sum-lbl">Chicken</div></div>
+      <div class="sum-card"><div class="sum-num">${FG_PRODUCTS.filter(f=>f.prodType.includes('Sausage')||f.prodType.includes('Ball')).length}</div><div class="sum-lbl">Others</div></div>
+    </div>`;
+    h += `<table><tr><th>FG Code</th><th>ชื่อสินค้า</th><th>Product Type</th><th>Storage Temp</th><th>Shelf Life (วัน)</th><th>Min Weight (g)</th><th>Max Weight (g)</th></tr>
+    ${FG_PRODUCTS.map(f=>`<tr><td><strong>${f.code}</strong></td><td>${f.name}</td><td>${f.prodType}</td><td>${f.storageTemp?'≤'+f.storageTemp+'°C':'Ambient'}</td><td>${f.shelf||'—'}</td><td>${f.minW||'—'}</td><td>${f.maxW||'—'}</td></tr>`).join('')}
+    </table>`;
+    openReport(h+baseFooter());
+  } else if(type==='full') {
+    let h = baseStyle()+hdr('Full Master Data Export');
+    // Suppliers
+    h += `<h2>🏢 Suppliers (${SUPPLIERS.length})</h2>
+    <table><tr><th>ID</th><th>ชื่อ</th><th>Type</th><th>Risk</th><th>Status</th></tr>
+    ${SUPPLIERS.map(s=>`<tr><td>${s.id}</td><td>${s.name}</td><td><span class="badge ${s.type.toLowerCase()}">${s.type}</span></td><td><span class="badge ${s.risk.toLowerCase()}">${s.risk}</span></td><td><span class="badge ${s.status==='Approved'?'ok':'warn'}">${s.status}</span></td></tr>`).join('')}</table>`;
+    // Materials
+    h += `<h2>🧪 Materials (${MATERIALS.length})</h2>
+    <table><tr><th>Code</th><th>ชื่อ</th><th>Type</th><th>Category</th><th>Unit</th><th>Temp Range</th><th>Shelf</th></tr>
+    ${MATERIALS.map(m=>`<tr><td>${m.code}</td><td>${m.name}</td><td><span class="badge ${m.type.toLowerCase()}">${m.type}</span></td><td>${m.cat}</td><td>${m.unit}</td><td>${m.maxT!==null?m.minT+'–'+m.maxT+'°C':'Ambient'}</td><td>${m.shelf?m.shelf+'d':'—'}</td></tr>`).join('')}</table>`;
+    // FG
+    h += `<h2>📦 FG Products (${FG_PRODUCTS.length})</h2>
+    <table><tr><th>Code</th><th>ชื่อ</th><th>Type</th><th>Temp</th><th>Shelf</th><th>Weight (g)</th></tr>
+    ${FG_PRODUCTS.map(f=>`<tr><td>${f.code}</td><td>${f.name}</td><td>${f.prodType}</td><td>${f.storageTemp?'≤'+f.storageTemp+'°C':'Ambient'}</td><td>${f.shelf?f.shelf+'d':'—'}</td><td>${f.minW?f.minW+'–'+f.maxW:'—'}</td></tr>`).join('')}</table>`;
+    // Processes
+    h += `<h2>⚙️ Processes (${PROCESSES.length})</h2>
+    <table><tr><th>ID</th><th>ชื่อกระบวนการ</th><th>รายละเอียด</th><th>สถานที่</th></tr>
+    ${PROCESSES.map(p=>`<tr><td>${p.id}</td><td>${p.name}</td><td>${p.desc}</td><td>${p.loc}</td></tr>`).join('')}</table>`;
+    // Parameters
+    h += `<h2>📏 Parameters (${PARAMETERS.length})</h2>
+    <table><tr><th>ID</th><th>Parameter</th><th>Category</th><th>Spec</th><th>Unit</th></tr>
+    ${PARAMETERS.map(p=>`<tr><td>${p.id}</td><td>${p.param}</td><td>${p.cat}</td><td>${p.spec}</td><td>${p.unit}</td></tr>`).join('')}</table>`;
+    // Equipment
+    h += `<h2>🔧 Equipment (${EQUIPMENT_LIST.length})</h2>
+    <table><tr><th>ID</th><th>ชื่ออุปกรณ์</th><th>Type</th><th>การใช้งาน</th></tr>
+    ${EQUIPMENT_LIST.map(e=>`<tr><td>${e.id}</td><td>${e.name}</td><td>${e.type}</td><td>${e.use}</td></tr>`).join('')}</table>`;
+    // CCPs
+    h += `<h2>⚠️ Critical Control Points (${CCPS.length})</h2>
+    <table><tr><th>CCP ID</th><th>Process ID</th><th>CCP Name</th><th>Critical Limit</th></tr>
+    ${CCPS.map(c=>`<tr><td><strong>${c.id}</strong></td><td>${c.processId}</td><td>${c.name}</td><td>${c.limit}</td></tr>`).join('')}</table>`;
+    openReport(h+baseFooter());
+  }
+}
+</script>
+</body>
+</html>
