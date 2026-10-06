@@ -6,6 +6,7 @@ const MAX_PHOTOS = 5;                    // per photo field
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // the page shrinks photos to far less than this
 const MAX_BODY_BYTES = 60 * 1024 * 1024;
 const LIST_LIMIT = 50;
+const MAX_LINES = 30;                  // goods lines in one record
 const PHOTO_KEY = /^(product|invoice)\/\d{8}\/[0-9a-f-]{36}\.jpg$/;
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
@@ -28,6 +29,24 @@ function pinOk(request, env) {
 // Form posts send line breaks as CR LF; records keep plain LF.
 const text = (form, name, max) => String(form.get(name) ?? '').replace(/\r\n?/g, '\n').trim().slice(0, max);
 
+// Goods lines arrive as a JSON list of { item, qty }. Blank rows are dropped; a row needs both parts.
+function readLines(form) {
+  let list;
+  try { list = JSON.parse(String(form.get('lines') ?? '[]')); } catch { list = null; }
+  if (!Array.isArray(list)) throw new Error('รูปแบบรายการสินค้าไม่ถูกต้อง');
+  const clean = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+  const lines = [];
+  for (const row of list) {
+    const item = clean(row && row.item, 200), qty = clean(row && row.qty, 100);
+    if (!item && !qty) continue;
+    if (!item || !qty) throw new Error('กรุณากรอกทั้งชื่อสินค้าและจำนวนให้ครบทุกแถว');
+    lines.push({ item, qty });
+  }
+  if (!lines.length) throw new Error('กรุณากรอกสินค้าและจำนวนอย่างน้อย 1 รายการ');
+  if (lines.length > MAX_LINES) throw new Error(`บันทึกได้สูงสุด ${MAX_LINES} รายการสินค้าต่อครั้ง`);
+  return lines;
+}
+
 // Reads the photos of one field and checks each really is a JPEG of a sane size.
 async function readPhotos(form, field) {
   const files = form.getAll(field).filter((f) => f && typeof f === 'object' && typeof f.arrayBuffer === 'function');
@@ -47,8 +66,10 @@ async function saveReceipt(request, env) {
   let form;
   try { form = await request.formData(); } catch { return fail(400, 'รูปแบบข้อมูลไม่ถูกต้อง'); }
 
-  const receiver = text(form, 'receiver', 100), items = text(form, 'items', 2000), qty = text(form, 'qty', 200);
-  if (!receiver || !items || !qty) return fail(400, 'กรุณากรอก ผู้รับของ รายการสินค้า และจำนวน');
+  const receiver = text(form, 'receiver', 100);
+  if (!receiver) return fail(400, 'กรุณากรอกผู้รับของ');
+  let lines;
+  try { lines = readLines(form); } catch (e) { return fail(400, e.message); }
 
   let product, invoice;
   try { product = await readPhotos(form, 'product'); invoice = await readPhotos(form, 'invoice'); }
@@ -71,10 +92,17 @@ async function saveReceipt(request, env) {
   try {
     const productKeys = await put('product', product);
     const invoiceKeys = await put('invoice', invoice);
-    await env.DB.prepare(
-      'INSERT INTO receipts (created_at, receiver, items, qty, supplier, note, product_photos, invoice_photos) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(now.toISOString(), receiver, items, qty, text(form, 'supplier', 200), text(form, 'note', 1000),
-      JSON.stringify(productKeys), JSON.stringify(invoiceKeys)).run();
+    // One batch is one transaction: the record and all its goods lines are saved together or not at all.
+    await env.DB.batch([
+      env.DB.prepare(
+        // items and qty are the old free-text columns; goods now go to receipt_lines, so they stay empty.
+        "INSERT INTO receipts (created_at, receiver, items, qty, supplier, note, product_photos, invoice_photos) VALUES (?, ?, '', '', ?, ?, ?, ?)"
+      ).bind(now.toISOString(), receiver, text(form, 'supplier', 200), text(form, 'note', 1000),
+        JSON.stringify(productKeys), JSON.stringify(invoiceKeys)),
+      ...lines.map((l, i) => env.DB.prepare(
+        'INSERT INTO receipt_lines (receipt_id, line_no, item, qty) VALUES ((SELECT MAX(id) FROM receipts), ?, ?, ?)'
+      ).bind(i + 1, l.item, l.qty)),
+    ]);
   } catch (e) {
     // Nothing half-saved: remove photos already stored for a record that did not get written.
     await Promise.allSettled(saved.map((k) => env.PHOTOS.delete(k)));
@@ -92,7 +120,22 @@ async function listReceipts(env) {
   const { results } = await env.DB.prepare(
     'SELECT id, created_at, receiver, items, qty, supplier, note, product_photos, invoice_photos FROM receipts ORDER BY id DESC LIMIT ?'
   ).bind(LIST_LIMIT).all();
-  return json(results.map((r) => ({ ...r, product_photos: keys(r.product_photos), invoice_photos: keys(r.invoice_photos) })));
+  if (!results.length) return json([]);
+  const oldest = results[results.length - 1].id;
+  const { results: lineRows } = await env.DB.prepare(
+    'SELECT receipt_id, item, qty FROM receipt_lines WHERE receipt_id >= ? ORDER BY receipt_id, line_no'
+  ).bind(oldest).all();
+  const byReceipt = new Map();
+  for (const l of lineRows) {
+    if (!byReceipt.has(l.receipt_id)) byReceipt.set(l.receipt_id, []);
+    byReceipt.get(l.receipt_id).push({ item: l.item, qty: l.qty });
+  }
+  return json(results.map((r) => ({
+    id: r.id, created_at: r.created_at, receiver: r.receiver, supplier: r.supplier, note: r.note,
+    // Records saved before goods lines existed kept one free-text item and quantity.
+    lines: byReceipt.get(r.id) || (r.items ? [{ item: r.items, qty: r.qty }] : []),
+    product_photos: keys(r.product_photos), invoice_photos: keys(r.invoice_photos),
+  })));
 }
 
 async function getPhoto(key, env) {
@@ -173,13 +216,28 @@ const PAGE = `<!doctype html>
   .rec{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
   .rec .top{display:flex;justify-content:space-between;gap:8px;color:var(--mute);font-size:14px}
   .rec .who{font-weight:700;color:var(--ink)}
-  .rec .items{white-space:pre-wrap;margin:6px 0 2px;overflow-wrap:anywhere}
   .rec .sub{color:var(--mute);font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
   .rec .btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
   .rec .btns button{padding:6px 10px;border:1px solid var(--brand);border-radius:6px;background:none;color:var(--brand);font:inherit;font-size:14px}
   .rec img{max-width:100%;border-radius:6px;margin-top:8px;display:block}
   .hint{color:var(--mute);text-align:center;padding:24px 0}
   #pinBox{margin-bottom:14px}
+  .now{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+  .now b{font-size:17px}
+  .now small{color:var(--mute)}
+  .line{display:flex;gap:6px;margin-bottom:6px;align-items:flex-start}
+  .line .item{flex:2;min-width:0}
+  .line .qty{flex:1;min-width:0}
+  .line .del{flex:none;width:40px;height:46px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--err);font-size:18px;line-height:1}
+  .line .del:disabled{opacity:.35}
+  .linehead{display:flex;gap:6px;color:var(--mute);font-size:13px;margin-bottom:2px}
+  .linehead span:first-child{flex:2}
+  .linehead span:nth-child(2){flex:1}
+  .linehead span:last-child{flex:none;width:40px}
+  .add{width:100%;padding:10px;border:1px solid var(--brand);border-radius:8px;background:none;color:var(--brand);font:inherit;font-weight:600}
+  .rec table{width:100%;border-collapse:collapse;margin:8px 0 4px}
+  .rec td{padding:4px 0;border-top:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere;white-space:pre-wrap}
+  .rec td:last-child{text-align:right;padding-left:10px;width:38%}
   .hide{display:none}
 </style>
 </head>
@@ -193,14 +251,18 @@ const PAGE = `<!doctype html>
   </div>
 
   <section id="pageAdd">
+    <div class="now"><span><small>วันที่ / เวลา</small><br><b id="now"></b></span><small>บันทึกให้อัตโนมัติ</small></div>
+
     <label for="receiver">ผู้รับของ</label>
     <input id="receiver" type="text" autocomplete="name" maxlength="100">
-    <label for="items">รายการสินค้าที่รับ</label>
-    <textarea id="items" maxlength="2000"></textarea>
-    <label for="qty">จำนวนที่รับจริง</label>
-    <input id="qty" type="text" maxlength="200">
     <label for="supplier">ผู้ขาย / บริษัทขนส่ง <small>(ไม่บังคับ)</small></label>
     <input id="supplier" type="text" maxlength="200">
+
+    <label>รายการสินค้า</label>
+    <div class="linehead"><span>สินค้า</span><span>จำนวน</span><span></span></div>
+    <div id="lines"></div>
+    <button id="addLine" type="button" class="add">+ เพิ่มสินค้า</button>
+
     <label for="note">หมายเหตุ <small>(ไม่บังคับ)</small></label>
     <textarea id="note" maxlength="1000"></textarea>
 
@@ -223,6 +285,7 @@ const PAGE = `<!doctype html>
 
 <script>
 var MAX = 5;
+var MAX_LINES = 30;
 var needPin = false;
 var photos = { product: [], invoice: [] };
 
@@ -231,6 +294,44 @@ function showMsg(text, kind){ var m = $('msg'); m.textContent = text; m.classNam
 function el(tag, cls, text){ var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function remember(key, value){ try { localStorage.setItem(key, value); } catch (e) {} }
 function recall(key){ try { return localStorage.getItem(key) || ''; } catch (e) { return ''; } }
+
+function clock(iso){
+  var t = iso ? new Date(iso) : new Date();
+  if (isNaN(t)) return '';
+  return t.toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '');
+}
+function tick(){ $('now').textContent = clock(); }
+tick(); setInterval(tick, 15000);
+
+// Goods rows: each row pairs one item with its quantity.
+function addLine(focus){
+  var box = $('lines');
+  if (box.children.length >= MAX_LINES) { showMsg('บันทึกได้สูงสุด ' + MAX_LINES + ' รายการสินค้าต่อครั้ง', 'err'); return; }
+  var n = box.children.length + 1;
+  var row = el('div', 'line');
+  var item = el('input', 'item'); item.type = 'text'; item.maxLength = 200; item.setAttribute('aria-label', 'สินค้า');
+  var qty = el('input', 'qty'); qty.type = 'text'; qty.maxLength = 100; qty.setAttribute('aria-label', 'จำนวน');
+  var del = el('button', 'del', '×'); del.type = 'button'; del.setAttribute('aria-label', 'ลบแถวสินค้า');
+  del.onclick = function(){ row.remove(); if (!box.children.length) addLine(); syncLines(); };
+  row.appendChild(item); row.appendChild(qty); row.appendChild(del); box.appendChild(row);
+  syncLines();
+  if (focus) item.focus();
+}
+// The only row cannot be removed, so there is always somewhere to type.
+function syncLines(){
+  var rows = $('lines').children;
+  for (var i = 0; i < rows.length; i++) rows[i].querySelector('.del').disabled = rows.length === 1;
+}
+function readLines(){
+  var out = [], rows = $('lines').children;
+  for (var i = 0; i < rows.length; i++) {
+    out.push({ item: rows[i].querySelector('.item').value.trim(), qty: rows[i].querySelector('.qty').value.trim() });
+  }
+  return out;
+}
+function resetLines(){ $('lines').textContent = ''; addLine(); }
+$('addLine').onclick = function(){ addLine(true); };
+addLine();
 
 $('receiver').value = recall('receiver');
 $('pin').value = recall('pin');
@@ -307,15 +408,16 @@ function bind(inputId, kind){
 bind('fProduct', 'product'); bind('fInvoice', 'invoice');
 
 $('save').onclick = async function(){
-  var d = {
-    receiver: $('receiver').value.trim(), items: $('items').value.trim(), qty: $('qty').value.trim(),
-    supplier: $('supplier').value.trim(), note: $('note').value.trim()
-  };
-  if (!d.receiver || !d.items || !d.qty) { showMsg('กรุณากรอก ผู้รับของ รายการสินค้า และจำนวน', 'err'); return; }
+  var d = { receiver: $('receiver').value.trim(), supplier: $('supplier').value.trim(), note: $('note').value.trim() };
+  var lines = readLines().filter(function(l){ return l.item || l.qty; });
+  if (!d.receiver) { showMsg('กรุณากรอกผู้รับของ', 'err'); return; }
+  if (!lines.length) { showMsg('กรุณากรอกสินค้าและจำนวนอย่างน้อย 1 รายการ', 'err'); return; }
+  if (lines.some(function(l){ return !l.item || !l.qty; })) { showMsg('กรุณากรอกทั้งชื่อสินค้าและจำนวนให้ครบทุกแถว', 'err'); return; }
   if (needPin && !$('pin').value) { showMsg('กรุณาใส่รหัส PIN', 'err'); return; }
 
   var form = new FormData();
   Object.keys(d).forEach(function(k){ form.append(k, d[k]); });
+  form.append('lines', JSON.stringify(lines));
   photos.product.forEach(function(p, i){ form.append('product', p.blob, 'product' + (i + 1) + '.jpg'); });
   photos.invoice.forEach(function(p, i){ form.append('invoice', p.blob, 'invoice' + (i + 1) + '.jpg'); });
 
@@ -324,10 +426,12 @@ $('save').onclick = async function(){
   try {
     var res = await api('/api/receipts', { method: 'POST', body: form });
     if (!res.ok) throw new Error(await readError(res));
+    var saved = await res.json();
     remember('receiver', d.receiver); remember('pin', $('pin').value);
-    ['items', 'qty', 'supplier', 'note'].forEach(function(id){ $(id).value = ''; });
+    ['supplier', 'note'].forEach(function(id){ $(id).value = ''; });
+    resetLines();
     photos.product = []; photos.invoice = []; draw('product'); draw('invoice');
-    showMsg('บันทึกแล้ว', 'ok');
+    showMsg('บันทึกแล้ว เวลา ' + clock(saved.created_at), 'ok');
   } catch (err) {
     var why = (err && err.message) ? err.message : String(err);
     if (err instanceof TypeError) why = 'เชื่อมต่อไม่ได้ ตรวจสอบอินเทอร์เน็ต';
@@ -335,12 +439,6 @@ $('save').onclick = async function(){
   }
   btn.disabled = false; btn.textContent = 'บันทึก';
 };
-
-function when(iso){
-  var t = new Date(iso);
-  if (isNaN(t)) return '';
-  return t.toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '');
-}
 
 function photoButtons(card, list, label){
   (list || []).forEach(function(key, i){
@@ -375,13 +473,15 @@ async function loadList(){
   box.textContent = ''; box.className = '';
   rows.forEach(function(r){
     var card = el('div', 'rec');
-    var top = el('div', 'top'); top.appendChild(el('span', 'who', r.receiver)); top.appendChild(el('span', '', when(r.created_at)));
+    var top = el('div', 'top'); top.appendChild(el('span', 'who', r.receiver)); top.appendChild(el('span', '', clock(r.created_at)));
     card.appendChild(top);
-    card.appendChild(el('div', 'items', r.items));
-    var sub = 'จำนวน: ' + r.qty;
-    if (r.supplier) sub += '\\nผู้ขาย/ขนส่ง: ' + r.supplier;
-    if (r.note) sub += '\\nหมายเหตุ: ' + r.note;
-    card.appendChild(el('div', 'sub', sub));
+    if (r.supplier) card.appendChild(el('div', 'sub', 'ผู้ขาย/ขนส่ง: ' + r.supplier));
+    var table = el('table');
+    (r.lines || []).forEach(function(l){
+      var tr = el('tr'); tr.appendChild(el('td', '', l.item)); tr.appendChild(el('td', '', l.qty)); table.appendChild(tr);
+    });
+    card.appendChild(table);
+    if (r.note) card.appendChild(el('div', 'sub', 'หมายเหตุ: ' + r.note));
     card.appendChild(el('div', 'btns'));
     photoButtons(card, r.product_photos, 'รูปสินค้า');
     photoButtons(card, r.invoice_photos, 'รูป Invoice');
