@@ -311,6 +311,15 @@ INSERT OR IGNORE INTO control_points (cp_id,name,process_ref,hazard,cp_type,stat
  'เกินเกณฑ์: HOLD ทั้ง Batch QA ตัดสิน (ทอดซ้ำ ปรับสูตร หรือทำลาย) ทบทวนเวลาทอดและอัตราส่วนสูตร',
  'QA ทบทวนผลทุก Batch · สอบเทียบเครื่องวัด aw · Validation V-04, V-12','QC_10','system',datetime('now'),'system',datetime('now'));
 
+-- Finished-goods pH and aw per batch: data for shelf-life validation and the risk grouping (pH > 4.6, aw > 0.85).
+-- Record only until QA sets limits from the shelf-life study; not needed for release.
+INSERT OR IGNORE INTO control_points (cp_id,name,process_ref,hazard,cp_type,status,products,params,monitoring,frequency,corrective_action,verification,form_code,created_by,created_at,updated_by,updated_at) VALUES
+('VER-01','ค่า pH และ aw ผลิตภัณฑ์สำเร็จรูป (ทวนสอบอายุสินค้า)',NULL,'B – เชื้อก่อโรค ยีสต์ และราเจริญระหว่างเก็บรักษา เมื่อ pH > 4.6 และ aw > 0.85','PRP','DRAFT','["FG0001","FG0002","FG0003","FG0004","FG0005","FG0006","FG0007","FG0008","FG0009","FG0010","FG0011","FG0012","FG0014"]',
+ '[{"key":"ph","label":"ค่า pH ผลิตภัณฑ์สำเร็จรูป (บันทึกค่า — เกณฑ์รอผล Shelf life study)","type":"number"},{"key":"aw","label":"ค่า aw ผลิตภัณฑ์สำเร็จรูป (บันทึกค่า — เกณฑ์รอผล Shelf life study)","type":"number"},{"key":"aw_temp","label":"อุณหภูมิตัวอย่างขณะวัด aw","type":"number","unit":"°C"},{"key":"meter_ok","label":"เครื่องวัด pH และ aw ผ่านการสอบเทียบ","type":"check"},{"key":"source","label":"วัดที่ (QC ภายใน หรือชื่อห้องปฏิบัติการ และเลขที่รายงาน)","type":"text"}]',
+ 'pH meter และเครื่องวัด aw ที่สอบเทียบแล้ว หรือส่งห้องปฏิบัติการภายนอก','ทุก Batch หรือตามแผนสุ่มที่ QA กำหนด',
+ 'ค่าผิดปกติจากที่เคยวัดของสูตรเดียวกัน: แจ้ง QA ทบทวนสูตร กระบวนการ และอายุสินค้า',
+ 'QA ทบทวนแนวโน้มรายเดือน · ใช้ประกอบ Shelf life study และการจัดกลุ่มความเสี่ยงในแผน HACCP',NULL,'system',datetime('now'),'system',datetime('now'));
+
 -- The first register (before QP-HA-001 Rev.01) is retired, but only entries nobody has edited yet.
 INSERT INTO audit_log (ts,actor,actor_type,action,entity,entity_id,changes)
  SELECT datetime('now'),'system','system','update','control_point',cp_id,'{"status":{"from":"DRAFT","to":"RETIRED"},"reason":"แทนด้วยทะเบียนตาม QP-HA-001 Rev.01"}'
@@ -328,6 +337,7 @@ CREATE TABLE IF NOT EXISTS cp_release (
 -- Per-batch points in QP-HA-001 sheet 7: CCP-01, CCP-02, OPRP-04, OPRP-05, OPRP-06.
 INSERT OR IGNORE INTO cp_release (cp_id, release_required) VALUES
  ('CCP-01',1),('CCP-02',1),('OPRP-01',0),('OPRP-02',0),('OPRP-03',0),('OPRP-04',1),('OPRP-05',1),('OPRP-06',1);
+INSERT OR IGNORE INTO cp_release (cp_id, release_required) VALUES ('VER-01',0);
 
 -- QA decision on one finished-goods batch. `gate` is the state of every requirement when the
 -- decision was taken; `rm_lots` the raw-material lots used, for tracing forward and back.

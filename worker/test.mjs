@@ -332,7 +332,7 @@ r = await call('DELETE', `/api/ncr/${id}`, { token: qa });
 check('no delete route', r.status === 404, r);
 // ----- Smart QA: control points and monitoring records -----
 r = await call('GET', '/api/control-points', { token: qc });
-check('control point register follows QP-HA-001 Rev.01, all draft', r.status === 200 && r.j.length === 8 && r.j.every((c) => c.status === 'DRAFT')
+check('control point register follows QP-HA-001 Rev.01 plus the pH/aw record, all draft', r.status === 200 && r.j.length === 9 && r.j.every((c) => c.status === 'DRAFT')
   && r.j.filter((c) => c.cp_type === 'CCP').length === 2 && r.j.find((c) => c.cp_id === 'CCP-01').params[0].min === 85, r.j.map((c) => c.cp_id));
 r = await call('PATCH', '/api/control-points/CCP-01', { token: qc, body: { status: 'APPROVED' } });
 check('QC cannot change a control point', r.status === 403, r);
@@ -450,6 +450,15 @@ r = await gateOf('FG0002', 'B999');
 check('QA can take a point off the release list', r.status === 200 && !r.j.requirements.some((x) => x.cp_id === 'OPRP-05'), r.j);
 r = await call('GET', '/api/control-points', { token: qc });
 check('the register shows which points are needed for release', r.j.find((c) => c.cp_id === 'CCP-01').release_required === 1 && r.j.find((c) => c.cp_id === 'OPRP-05').release_required === 0, r.j.map((c) => [c.cp_id, c.release_required]));
+const phaw = (v, o = {}) => qcBody({ cp_id: 'VER-01', product_code: 'FG0008', product_name: 'น้ำพริกเผ็ดแมคเคอเรล', batch_no: 'B260915-PH', values: v, ...o });
+r = await call('POST', '/api/qc', { token: qc, body: phaw({ ph: 5.68, aw: 0.579, aw_temp: 25, meter_ok: true, source: 'QC ภายใน' }) });
+check('finished-goods pH and aw are recorded per product, without a limit yet', r.status === 201 && r.j.result === 'PASS' && !r.j.ncr_id, r);
+r = await call('POST', '/api/qc', { token: qc, body: phaw({ ph: 5.6, aw_temp: 25, meter_ok: true }) });
+check('the pH/aw record needs the aw value', r.status === 400, r);
+r = await call('POST', '/api/qc', { token: qc, body: phaw({ ph: 5.6, aw: 0.9, aw_temp: 25, meter_ok: true }, { product_code: '' }) });
+check('the pH/aw record needs the product', r.status === 400, r);
+r = await call('GET', '/api/control-points', { token: qc });
+check('the pH/aw record is not needed for release', r.j.find((c) => c.cp_id === 'VER-01').release_required === 0, r.j.map((c) => [c.cp_id, c.release_required]));
 
 // ----- Smart QA: personal hygiene check -----
 r = await call('GET', '/api/hyg/items', { token: qc });
