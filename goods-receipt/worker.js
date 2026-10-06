@@ -179,6 +179,7 @@ const PAGE = `<!doctype html>
   .rec .btns button{padding:6px 10px;border:1px solid var(--brand);border-radius:6px;background:none;color:var(--brand);font:inherit;font-size:14px}
   .rec img{max-width:100%;border-radius:6px;margin-top:8px;display:block}
   .hint{color:var(--mute);text-align:center;padding:24px 0}
+  #pinBox{margin-bottom:14px}
   .hide{display:none}
 </style>
 </head>
