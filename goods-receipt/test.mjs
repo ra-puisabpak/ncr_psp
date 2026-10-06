@@ -144,6 +144,29 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop()
   r = await call(locked, 'POST', '/api/receipts', { form: formOf(good), pin: '2468' });
   check('save with right PIN works', r.status === 201, r);
 
+  // ---------- Daily report: records of one Thai calendar day ----------
+  const at = (iso, who) => {
+    const id = db.prepare("INSERT INTO receipts (created_at, receiver, items, qty, supplier) VALUES (?, ?, '', '', 'ซัพ')").run(iso, who).lastInsertRowid;
+    db.prepare('INSERT INTO receipt_lines (receipt_id, line_no, item, qty) VALUES (?, 1, ?, ?), (?, 2, ?, ?)').run(id, 'ของ ก', '1 ลัง', id, 'ของ ข', '2 ลัง');
+  };
+  at('2030-01-09T16:59:59.000Z', 'ก่อนเที่ยงคืน');   // 23:59 on the 9th, Thai time
+  at('2030-01-09T17:00:00.000Z', 'เช้าสุด');         // 00:00 on the 10th
+  at('2030-01-10T05:30:00.000Z', 'เที่ยง');          // 12:30 on the 10th
+  at('2030-01-10T16:59:59.000Z', 'ดึกสุด');          // 23:59 on the 10th
+  at('2030-01-10T17:00:00.000Z', 'วันถัดไป');        // 00:00 on the 11th
+  r = await call(env, 'GET', '/api/receipts?date=2030-01-10');
+  check('daily report holds exactly that Thai day, in the order received',
+    r.status === 200 && r.j.day === '2030-01-10' && r.j.more === false && r.j.receipts.map((x) => x.receiver).join() === 'เช้าสุด,เที่ยง,ดึกสุด', r.j);
+  check('daily report keeps each item with its quantity', JSON.stringify(r.j.receipts[1].lines) === JSON.stringify([{ item: 'ของ ก', qty: '1 ลัง' }, { item: 'ของ ข', qty: '2 ลัง' }]), r.j.receipts[1]);
+  r = await call(env, 'GET', '/api/receipts?date=2030-01-12');
+  check('a day with no receipts gives an empty report', r.status === 200 && r.j.receipts.length === 0, r.j);
+  for (const bad of ['', '2030-1-10', '2030-02-30', '10/01/2030', "2030-01-10' OR 1=1"]) {
+    r = await call(env, 'GET', '/api/receipts?date=' + encodeURIComponent(bad));
+    check('bad report date is refused: ' + JSON.stringify(bad), r.status === 400, r);
+  }
+  r = await call(makeEnv({ APP_PIN: '2468' }), 'GET', '/api/receipts?date=2030-01-10');
+  check('daily report without PIN is refused', r.status === 401, r);
+
   // ---------- LINE group announcements ----------
   const { createHmac } = await import('node:crypto');
   const sent = [];
