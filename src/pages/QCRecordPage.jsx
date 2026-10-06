@@ -168,14 +168,14 @@ export default function QCRecordPage() {
 
           {anyFail && (
             <div className="text-xs bg-red-50 border border-red-200 text-red-800 rounded-lg p-2.5">
-              มีรายการไม่ผ่านเกณฑ์ เมื่อบันทึก ระบบจะเปิด NCR และกำหนดให้กักกัน Batch นี้ทันที
+              {user?.auto_ncr ? 'มีรายการไม่ผ่านเกณฑ์ เมื่อบันทึก ระบบจะเปิด NCR และกำหนดให้กักกัน Batch นี้ทันที' : 'มีรายการไม่ผ่านเกณฑ์ ระบบบันทึกเป็นไม่ผ่าน (ช่วงทดลองระบบ ยังไม่เปิด NCR อัตโนมัติ) แจ้งหัวหน้างาน/QA และกักกัน Batch ตามแผน'}
               {cp.corrective_action && <div className="mt-1"><b>การแก้ไขตามแผน:</b> {cp.corrective_action}</div>}
             </div>
           )}
           {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{error}</div>}
           {writable ? (
             <button disabled={saving} className={`w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-white font-semibold ${anyFail ? 'bg-red-600 hover:bg-red-700' : 'bg-teal-600 hover:bg-teal-700'} disabled:opacity-50`}>
-              <Save className="w-4 h-4" />{saving ? 'กำลังบันทึก…' : anyFail ? 'บันทึกและเปิด NCR' : 'บันทึก'}
+              <Save className="w-4 h-4" />{saving ? 'กำลังบันทึก…' : anyFail && user?.auto_ncr ? 'บันทึกและเปิด NCR' : 'บันทึก'}
             </button>
           ) : (
             <div className="text-sm text-gray-500">{cp.status === 'RETIRED' ? 'จุดควบคุมนี้ยกเลิกการใช้งานแล้ว' : 'บัญชีนี้ดูได้อย่างเดียว บันทึกไม่ได้'}</div>

@@ -11,6 +11,8 @@ database_id = "9622b468-e02b-46a2-8848-784bd676d2a0"
 ENVIRONMENT = "production"
 # Web addresses allowed to call this API from a browser (comma separated, no trailing slash).
 ALLOWED_ORIGINS = "https://puisabpak-ncr.pages.dev,https://puisabpak-receiving.rapuisabpak.workers.dev"
+# Production-side checks open NCRs automatically when "on". "off" during the trial (receiving NCs are not affected).
+AUTO_NCR_PRODUCTION = "off"
 
 # Secret (set from the GitHub secret SETUP_KEY by the deploy workflow): SETUP_KEY
 

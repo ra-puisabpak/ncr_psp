@@ -136,7 +136,7 @@ export default function OilPage() {
         {preview && (
           <div className={`rounded-lg p-2.5 text-sm font-semibold ${OIL_RESULT[preview].cls}`}>
             ผลเบื้องต้น: {OIL_RESULT[preview].label}{worst !== null ? ` (TPM สูงสุด ${worst}%)` : ''}
-            {preview === 'FAIL' && <div className="text-xs font-normal mt-0.5">หยุดใช้ → แยกสถานะและติดป้าย HOLD → แจ้งหัวหน้างาน/QC → ระบุ Lot/ถัง → บันทึกสิ่งที่ทำ · ระบบจะเปิด NCR เมื่อบันทึก</div>}
+            {preview === 'FAIL' && <div className="text-xs font-normal mt-0.5">หยุดใช้ → แยกสถานะและติดป้าย HOLD → แจ้งหัวหน้างาน/QC → ระบุ Lot/ถัง → บันทึกสิ่งที่ทำ{user?.auto_ncr ? ' · ระบบจะเปิด NCR เมื่อบันทึก' : ''}</div>}
           </div>
         )}
         {preview === 'FAIL' && (

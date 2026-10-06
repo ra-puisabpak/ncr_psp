@@ -15,6 +15,9 @@ const LOCK_MINUTES = 15;
 const ROLES = ['QA_MANAGER', 'FSTL', 'QC', 'SUPERVISOR', 'VIEWER'];
 const WRITERS = new Set(['QA_MANAGER', 'FSTL', 'QC', 'SUPERVISOR']);
 const QA = new Set(['QA_MANAGER', 'FSTL']);
+// Production-side checks (CCP/OPRP records, FM-QC-002, FM-QC-005, FM-QC-006) open NCRs only when
+// AUTO_NCR_PRODUCTION = "on". Off during the trial: a failed check is still recorded as FAIL. Receiving NCs are unaffected.
+let AUTO_NCR = false;
 const COND_ROLES = new Set(['QA_MANAGER', 'FSTL', 'SUPERVISOR', 'QC']); // who may receive material with conditions
 const ASSESSORS = new Set(['QA_MANAGER', 'FSTL', 'SUPERVISOR']); // who may assess a weighing out of tolerance (FM-QC-004)
 
@@ -302,7 +305,7 @@ async function saveQcRecord(DB, user, b, na = []) {
     const day = rec.record_date.slice(2).replace(/-/g, '');
     const last = await DB.prepare('SELECT rec_id FROM qc_records WHERE rec_id LIKE ? ORDER BY rec_id DESC LIMIT 1').bind(`QC-${day}-%`).first();
     const recId = `QC-${day}-${String((last ? parseInt(last.rec_id.slice(-4), 10) : 0) + 1).padStart(4, '0')}`;
-    const ncrId = failed.length ? (await nextId(DB, 'ncr_records', 'ncr_id', 'NCR')) : null;
+    const ncrId = failed.length && AUTO_NCR ? (await nextId(DB, 'ncr_records', 'ncr_id', 'NCR')) : null;
     const stmts = [];
     if (ncrId) {
       // A failed check is a deviation: the batch is held and an NCR opened in the same write, so neither can be lost.
@@ -483,6 +486,7 @@ const DERIVED_CPS = ['CCP-01', 'CCP-02', 'OPRP-05'];
 // ---------- router ----------
 export default {
   async fetch(req, env) {
+    AUTO_NCR = env.AUTO_NCR_PRODUCTION === 'on';
     const url = new URL(req.url);
     const path = url.pathname.replace(/\/+$/, '') || '/';
     const method = req.method;
@@ -547,7 +551,7 @@ export default {
             .bind(await sha256(token), username, expires),
         ]);
         await audit(DB, username, 'user', 'login', 'user', username, null);
-        return json({ token, expires_at: expires, user: { username, display_name: u.display_name, role: u.role } });
+        return json({ token, expires_at: expires, user: { username, display_name: u.display_name, role: u.role, auto_ncr: AUTO_NCR } });
       }
 
       // ----- supplier link endpoints (the token is the only credential; no login) -----
@@ -645,7 +649,7 @@ export default {
       const user = await currentUser(req, DB);
 
       if (method === 'GET' && path === '/api/me') {
-        return json({ username: user.username, display_name: user.display_name, role: user.role });
+        return json({ username: user.username, display_name: user.display_name, role: user.role, auto_ncr: AUTO_NCR });
       }
       if (method === 'POST' && path === '/api/logout') {
         await DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(user.token_hash).run();
@@ -1750,7 +1754,7 @@ export default {
         const productName = txt(b.product_name, 200);
         for (let attempt = 0; ; attempt++) {
           const pcId = await dayId(DB, 'prod_controls', 'pc_id', 'Q8', b.prod_date);
-          const ncrId = d.cool.foreign_ok === false ? await nextId(DB, 'ncr_records', 'ncr_id', 'NCR') : null;
+          const ncrId = d.cool.foreign_ok === false && AUTO_NCR ? await nextId(DB, 'ncr_records', 'ncr_id', 'NCR') : null;
           const stmts = [];
           if (ncrId) stmts.push(autoNcrStmt(DB, user, ncrId, {
             source_type: 'IN_PROCESS', source_ref: pcId, process_ref: 'PC0009', severity: 'Major', found_date: b.prod_date,
@@ -1815,7 +1819,7 @@ export default {
         const STAGE_TH = { BEFORE: 'ก่อนการผลิต', DURING: 'ระหว่างการผลิต', AFTER: 'หลังการผลิต' };
         for (let attempt = 0; ; attempt++) {
           const chkId = await dayId(DB, 'oil_checks', 'chk_id', 'OIL', rec.check_date);
-          const ncrId = result === 'FAIL' ? await nextId(DB, 'ncr_records', 'ncr_id', 'NCR') : null;
+          const ncrId = result === 'FAIL' && AUTO_NCR ? await nextId(DB, 'ncr_records', 'ncr_id', 'NCR') : null;
           const stmts = [];
           if (ncrId) {
             const why = [tpmMax >= 25 ? `TPM ${tpmMax}% (เกณฑ์ < 25%)` : '', b.temp_result === 'FAIL' ? `อุณหภูมิน้ำมัน ${temps.join(' / ')} °C ไม่ตรง Spec` : ''].filter(Boolean);
@@ -1958,7 +1962,7 @@ export default {
         const specTxt = unit.spec_min !== null ? `${unit.spec_min}–${unit.spec_max} °C` : `≤ ${unit.spec_max} °C`;
         for (let attempt = 0; ; attempt++) {
           const rdId = await dayId(DB, 'cold_readings', 'rd_id', 'TMP', b.read_date, 4);
-          const ncrId = status === 'ESCALATE' ? await nextId(DB, 'ncr_records', 'ncr_id', 'NCR') : null;
+          const ncrId = status === 'ESCALATE' && AUTO_NCR ? await nextId(DB, 'ncr_records', 'ncr_id', 'NCR') : null;
           const stmts = [];
           if (ncrId) {
             stmts.push(autoNcrStmt(DB, user, ncrId, {

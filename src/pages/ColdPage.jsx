@@ -144,7 +144,7 @@ export default function ColdPage() {
             <input type="number" inputMode="decimal" step="0.1" value={temp} onChange={(e) => setTemp(e.target.value)}
               className={`${input} text-lg font-bold ${status ? COLD_STATUS[status].cell : ''}`} />
           </label>
-          {status && <div className={`rounded-lg p-2 text-sm font-semibold ${COLD_STATUS[status].cls}`}>{COLD_STATUS[status].label}{status === 'ESCALATE' ? ' — ต้องแจ้งหัวหน้างาน/QA ระบบจะเปิด NCR เมื่อบันทึก' : status === 'FAIL' ? ' — ตรวจซ้ำและหาสาเหตุ' : ''}</div>}
+          {status && <div className={`rounded-lg p-2 text-sm font-semibold ${COLD_STATUS[status].cls}`}>{COLD_STATUS[status].label}{status === 'ESCALATE' ? (user?.auto_ncr ? ' — ต้องแจ้งหัวหน้างาน/QA ระบบจะเปิด NCR เมื่อบันทึก' : ' — ต้องแจ้งหัวหน้างาน/QA') : status === 'FAIL' ? ' — ตรวจซ้ำและหาสาเหตุ' : ''}</div>}
 
           {(needCond || Object.keys(cond).length > 0) && (
             <div>

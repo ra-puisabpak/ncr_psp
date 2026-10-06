@@ -237,7 +237,7 @@ export default function ProdControlPage() {
           <div className="bg-white rounded-xl shadow p-4 space-y-3">
             {preview.length > 0 && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-2.5 text-xs text-red-800">
-                <div className="font-semibold">จะไม่ผ่านเมื่อบันทึก — ระบบจะเปิด NCR และกักกัน Batch</div>
+                <div className="font-semibold">จะไม่ผ่านเมื่อบันทึก — {user?.auto_ncr ? 'ระบบจะเปิด NCR และกักกัน Batch' : 'แจ้งหัวหน้างาน/QA และกักกัน Batch (ช่วงทดลอง ยังไม่เปิด NCR อัตโนมัติ)'}</div>
                 <ul className="list-disc ml-4">{preview.map((x) => <li key={x}>{x}</li>)}</ul>
               </div>
             )}

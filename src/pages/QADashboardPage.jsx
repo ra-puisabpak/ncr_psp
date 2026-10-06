@@ -6,6 +6,7 @@ import {
 import Layout from '../components/Layout'
 import { qaApi } from '../api/d1Api'
 import { RECEIVING_URL, FORMS } from '../config'
+import { useAuth } from '../auth'
 import { CP_TYPE_TH, CP_TYPE_CLS, CP_STATUS_TH, CP_STATUS_CLS, Badge, ResultBadge, bkkToday } from '../qa/shared'
 
 function Tile({ icon: Icon, label, value, sub, tone, to }) {
@@ -31,6 +32,7 @@ function Tile({ icon: Icon, label, value, sub, tone, to }) {
 
 export default function QADashboardPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [date, setDate] = useState(bkkToday())
   const [summary, setSummary] = useState(null)
   const [points, setPoints] = useState([])
@@ -78,7 +80,7 @@ export default function QADashboardPage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <Tile icon={ClipboardCheck} label="บันทึกตรวจ" sub={date === bkkToday() ? 'วันนี้' : date} value={summary?.total ?? '–'} tone="teal" to="/qa/records" />
-        <Tile icon={AlertTriangle} label="ไม่ผ่านเกณฑ์" sub="เปิด NCR อัตโนมัติ" value={summary?.fail ?? '–'} tone={summary?.fail ? 'red' : 'green'} to="/qa/records?result=FAIL" />
+        <Tile icon={AlertTriangle} label="ไม่ผ่านเกณฑ์" sub={user?.auto_ncr ? 'เปิด NCR อัตโนมัติ' : 'ช่วงทดลอง ยังไม่เปิด NCR'} value={summary?.fail ?? '–'} tone={summary?.fail ? 'red' : 'green'} to="/qa/records?result=FAIL" />
         <Tile icon={FileText} label="NCR ค้างอยู่" sub={`จากการผลิต ${summary?.ncrProcessOpen ?? 0} รายการ`} value={summary?.ncrOpen ?? '–'} tone={summary?.ncrOpen ? 'orange' : 'green'} to="/ncr" />
         <Tile icon={ListChecks} label="จุดควบคุมที่อนุมัติแล้ว" sub="ที่เหลือรอ validate" value={`${approved}/${active.length}`} tone={approved === active.length && active.length ? 'green' : 'orange'} to="/qa/control-points" />
       </div>

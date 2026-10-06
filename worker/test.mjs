@@ -13,7 +13,7 @@ const stmt = (sql, args = []) => ({
   run: async () => { db.prepare(sql).run(...args); return { success: true }; },
 });
 const DB = { prepare: (sql) => stmt(sql), batch: async (list) => { for (const s of list) await s.run(); } };
-const env = { DB, SETUP_KEY: 'setup-secret', ALLOWED_ORIGINS: 'https://app.example' };
+const env = { DB, SETUP_KEY: 'setup-secret', ALLOWED_ORIGINS: 'https://app.example', AUTO_NCR_PRODUCTION: 'on' };
 
 let pass = 0, failed = 0;
 const call = async (method, path, { token, body, headers = {} } = {}) => {
@@ -528,6 +528,17 @@ r = await call('POST', `/api/oil/${oilId}/verify`, { token: qc, body: { decision
 check('QC cannot verify an oil check', r.status === 403, r);
 r = await call('POST', `/api/oil/${oilId}/verify`, { token: qa, body: { decision: 'APPROVE' } });
 check('QA verifies an oil check', r.status === 200, r);
+// Trial period: production-side checks record FAIL without opening an NCR
+env.AUTO_NCR_PRODUCTION = 'off';
+r = await call('GET', '/api/me', { token: qc });
+check('the app is told automatic NCRs are off', r.status === 200 && r.j.auto_ncr === false, r.j);
+r = await call('POST', '/api/oil', { token: qc, body: oilBody({ check_date: '2026-08-20', stage: 'AFTER', tpm: [26], action: 'หยุดใช้ เปลี่ยนน้ำมันใหม่' }) });
+check('with automatic NCRs off, a failed oil check is recorded without an NCR', r.status === 201 && r.j.result === 'FAIL' && !r.j.ncr_id, r);
+r = await call('POST', '/api/qc', { token: qc, body: qcBody({ batch_no: 'B260915-TRIAL', values: { temp_start: 80, temp_min: 79, temp_end: 81, hold_min: 125, thermo_ok: true } }) });
+check('with automatic NCRs off, a failed CCP record is FAIL without an NCR', r.status === 201 && r.j.result === 'FAIL' && !r.j.ncr_id, r);
+r = await call('GET', '/api/release/check?product_code=FG0002&batch_no=B260915-TRIAL', { token: qa });
+check('a failed record without an NCR still blocks release', r.status === 200 && !r.j.releasable && r.j.requirements.some((x) => x.state === 'FAIL'), r.j);
+env.AUTO_NCR_PRODUCTION = 'on';
 r = await call('POST', `/api/oil/${oilId}/verify`, { token: qa, body: { decision: 'REJECT', note: 'x' } });
 check('an oil check is verified once', r.status === 409, r);
 r = await call('GET', '/api/oil?from=2026-09-21&to=2026-09-21', { token: qc });
