@@ -1,0 +1,43 @@
+name: Deploy Puisabpak Goods Receipt Log (Worker)
+
+# Standalone app: who received what, with photos of the goods and the invoice.
+# One Worker (page + API), its own D1 database and its own R2 photo bucket.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'goods-receipt/**'
+      - '.github/workflows/deploy-goods-receipt.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Test and deploy to Cloudflare Workers
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run tests
+        working-directory: goods-receipt
+        run: node --no-warnings test.mjs
+
+      # schema.sql only uses CREATE ... IF NOT EXISTS, so applying it again never touches saved records.
+      - name: Apply database schema
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: goods-receipt
+          command: d1 execute puisabpak-goods-receipt --remote --file=schema.sql
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: goods-receipt
