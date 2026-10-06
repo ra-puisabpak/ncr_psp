@@ -7,6 +7,7 @@ const db = new DatabaseSync(':memory:');
 db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
 const stmt = (sql, args = []) => ({
   bind: (...a) => stmt(sql, a),
+  first: async () => db.prepare(sql).get(...args) ?? null,
   all: async () => ({ results: db.prepare(sql).all(...args) }),
   run: async () => { db.prepare(sql).run(...args); return { success: true }; },
 });
@@ -142,6 +143,84 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop()
   check('list with right PIN works', r.status === 200 && r.j.length === total, r);
   r = await call(locked, 'POST', '/api/receipts', { form: formOf(good), pin: '2468' });
   check('save with right PIN works', r.status === 201, r);
+
+  // ---------- LINE group announcements ----------
+  const { createHmac } = await import('node:crypto');
+  const sent = [];
+  let lineStatus = 200;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    sent.push({ url: String(url), auth: init.headers.Authorization, body: JSON.parse(init.body) });
+    return new Response(lineStatus === 200 ? '{}' : '{"message":"limit"}', { status: lineStatus });
+  };
+  const line = makeEnv({ LINE_CHANNEL_ACCESS_TOKEN: 'tok', LINE_CHANNEL_SECRET: 'sec' });
+  const hook = async (env2, events, { secret = 'sec', sign = true } = {}) => {
+    const body = JSON.stringify({ events });
+    const res = await worker.fetch(new Request('https://app.example/line/webhook', {
+      method: 'POST', body,
+      headers: sign ? { 'X-Line-Signature': createHmac('sha256', secret).update(body).digest('base64') } : {},
+    }), env2);
+    return { status: res.status };
+  };
+  const say = (groupId, text, type = 'group') => ({ type: 'message', replyToken: 'rt', message: { type: 'text', text }, source: { type, groupId, userId: 'U1' } });
+  const group = () => (db.prepare("SELECT value FROM settings WHERE key = 'line_group_id'").get() || {}).value;
+
+  r = await hook(env, []);
+  check('webhook is closed until LINE is set up', r.status === 503, r);
+  r = await hook(line, [say('G1', 'ตั้งกลุ่มแจ้งเตือน')], { sign: false });
+  check('webhook without signature is refused', r.status === 401 && !group(), r);
+  r = await hook(line, [say('G1', 'ตั้งกลุ่มแจ้งเตือน')], { secret: 'other' });
+  check('webhook with wrong signature is refused', r.status === 401 && !group(), r);
+  r = await hook(line, []);
+  check('LINE verify call (no events) is accepted', r.status === 200, r);
+
+  r = await call(line, 'POST', '/api/receipts', { form: formOf(good) });
+  check('no group chosen yet: saved, nothing announced', r.status === 201 && r.j.notify === 'off' && sent.length === 0, r.j);
+
+  await hook(line, [say('G1', 'สวัสดี'), say('U1', 'ตั้งกลุ่มแจ้งเตือน', 'user')]);
+  check('ordinary chat and one-to-one messages choose no group', !group() && sent.length === 0, sent);
+  await hook(line, [say('G1', ' ตั้งกลุ่มแจ้งเตือน ')]);
+  check('typing the phrase in a group chooses it', group() === 'G1', group());
+  check('the group gets a confirmation reply', sent.length === 1 && sent[0].url.endsWith('/reply') && sent[0].body.replyToken === 'rt', sent);
+  await hook(line, [say('G2', 'ตั้งกลุ่มแจ้งเตือน')]);
+  check('another group cannot take the announcements over', group() === 'G1', group());
+  await hook(line, [say('G2', 'ยกเลิกกลุ่มแจ้งเตือน')]);
+  check('another group cannot switch them off', group() === 'G1', group());
+
+  sent.length = 0;
+  r = await call(line, 'POST', '/api/receipts', { form: formOf(good, [jpeg()], [jpeg(), jpeg()]) });
+  const push = sent[0] || { body: { messages: [{}] } };
+  const msg = push.body.messages[0].text || '';
+  check('saved record is announced once to the chosen group', r.j.notify === 'sent' && sent.length === 1 && sent[0].url.endsWith('/push') && push.body.to === 'G1' && push.auth === 'Bearer tok', sent);
+  check('announcement lists who, supplier, each item with quantity, and photo counts',
+    msg.includes('ผู้รับของ: สมชาย') && msg.includes('บจก. ตัวอย่าง') && msg.includes('• หมูบด — 5 ถุง') && msg.includes('• พริกแห้ง — 2 ลัง')
+    && msg.includes('รูปสินค้า 1 รูป') && msg.includes('รูป Invoice 2 รูป') && msg.includes('https://app.example/'), msg);
+  check('announcement shows Thai time', /รับสินค้า \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}/.test(msg), msg);
+
+  const long = Array.from({ length: 30 }, (_, i) => ({ item: 'ก'.repeat(200) + i, qty: 'ข'.repeat(100) }));
+  sent.length = 0;
+  r = await call(line, 'POST', '/api/receipts', { form: formOf({ ...good, lines: long }) });
+  const longMsg = sent[0].body.messages[0].text;
+  check('very long record still fits one LINE message and says how many items were left out', longMsg.length <= 5000 && /และอีก \d+ รายการ/.test(longMsg) && longMsg.includes('https://app.example/'), longMsg.length);
+
+  lineStatus = 429; sent.length = 0;
+  const n1 = db.prepare('SELECT COUNT(*) n FROM receipts').get().n;
+  r = await call(line, 'POST', '/api/receipts', { form: formOf(good) });
+  check('LINE refusing the message does not lose the record', r.status === 201 && r.j.notify === 'failed' && db.prepare('SELECT COUNT(*) n FROM receipts').get().n === n1 + 1, r.j);
+  globalThis.fetch = async () => { throw new Error('network down'); };
+  r = await call(line, 'POST', '/api/receipts', { form: formOf(good) });
+  check('LINE being unreachable does not lose the record', r.status === 201 && r.j.notify === 'failed', r.j);
+  lineStatus = 200;
+  globalThis.fetch = async (url, init) => { sent.push({ url: String(url), body: JSON.parse(init.body) }); return new Response('{}'); };
+
+  await hook(line, [say('G1', 'ยกเลิกกลุ่มแจ้งเตือน')]);
+  check('the chosen group can switch announcements off', !group(), group());
+  sent.length = 0;
+  r = await call(line, 'POST', '/api/receipts', { form: formOf(good) });
+  check('after switching off nothing is announced', r.j.notify === 'off' && sent.length === 0, sent);
+  await hook(line, [say('G2', 'ตั้งกลุ่มแจ้งเตือน')]);
+  check('a new group can then be chosen', group() === 'G2', group());
+  globalThis.fetch = realFetch;
 
   console.log(`\n${pass} passed, ${failed} failed`);
   if (failed) process.exit(1);

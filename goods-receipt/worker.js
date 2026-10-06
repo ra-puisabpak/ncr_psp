@@ -1,12 +1,18 @@
 // Goods receipt log (บันทึกการรับสินค้า): one Worker serves the page and its API.
 // Records are stored in D1 (binding DB), photos in R2 (binding PHOTOS).
 // Optional secret APP_PIN: when set, saving and viewing need that PIN.
+// Optional secrets LINE_CHANNEL_ACCESS_TOKEN and LINE_CHANNEL_SECRET (a LINE Official Account with the
+// Messaging API): when set, every saved record is announced in one LINE group. The group is chosen by
+// typing the BIND phrase in it; LINE delivers that message to /line/webhook.
 
 const MAX_PHOTOS = 5;                    // per photo field
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // the page shrinks photos to far less than this
 const MAX_BODY_BYTES = 60 * 1024 * 1024;
 const LIST_LIMIT = 50;
 const MAX_LINES = 30;                  // goods lines in one record
+const LINE_BIND = 'ตั้งกลุ่มแจ้งเตือน';     // typed in a LINE group: announce records here
+const LINE_UNBIND = 'ยกเลิกกลุ่มแจ้งเตือน'; // typed in that same group: stop announcing
+const LINE_TEXT_MAX = 4500;              // LINE allows 5000 characters in one text message
 const PHOTO_KEY = /^(product|invoice)\/\d{8}\/[0-9a-f-]{36}\.jpg$/;
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
@@ -61,6 +67,112 @@ async function readPhotos(form, field) {
   return out;
 }
 
+// ---------- LINE group announcements ----------
+
+async function getSetting(env, key) {
+  const row = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(key).first();
+  return row ? row.value : null;
+}
+const setSetting = (env, key, value) => env.DB.prepare(
+  'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+).bind(key, value).run();
+const clearSetting = (env, key) => env.DB.prepare('DELETE FROM settings WHERE key = ?').bind(key).run();
+
+const lineOn = (env) => !!(env.LINE_CHANNEL_ACCESS_TOKEN && env.LINE_CHANNEL_SECRET);
+
+function lineCall(env, kind, payload) {
+  return fetch('https://api.line.me/v2/bot/message/' + kind, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + env.LINE_CHANNEL_ACCESS_TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(5000),
+  });
+}
+
+// Thai time (UTC+7) as dd/mm/yyyy hh:mm.
+function thaiTime(date) {
+  const t = new Date(date.getTime() + 7 * 3600 * 1000).toISOString();
+  return `${t.slice(8, 10)}/${t.slice(5, 7)}/${t.slice(0, 4)} ${t.slice(11, 16)}`;
+}
+
+function lineText(rec, appUrl) {
+  const head = [`📦 รับสินค้า ${thaiTime(rec.when)}`, `ผู้รับของ: ${rec.receiver}`];
+  if (rec.supplier) head.push(`ผู้ขาย/ขนส่ง: ${rec.supplier}`);
+  const tail = [];
+  if (rec.note) tail.push(`หมายเหตุ: ${rec.note}`);
+  tail.push(`รูปสินค้า ${rec.productCount} รูป · รูป Invoice ${rec.invoiceCount} รูป`);
+  tail.push(`ดูรายการและรูป: ${appUrl}`);
+  // Goods lines are added while the whole message still fits; the rest are counted, never silently lost.
+  const room = LINE_TEXT_MAX - head.join('\n').length - tail.join('\n').length - 40;
+  const goods = [];
+  let used = 0;
+  for (const l of rec.lines) {
+    const row = `• ${l.item} — ${l.qty}`;
+    if (used + row.length + 1 > room) break;
+    goods.push(row); used += row.length + 1;
+  }
+  if (goods.length < rec.lines.length) goods.push(`… และอีก ${rec.lines.length - goods.length} รายการ`);
+  return [...head, ...goods, ...tail].join('\n').slice(0, 5000);
+}
+
+// Announces a saved record. Returns 'off' (LINE not set up or no group chosen), 'sent' or 'failed'.
+// A failure never undoes the save: the record is already stored.
+async function announce(env, rec, appUrl) {
+  if (!lineOn(env)) return 'off';
+  try {
+    const groupId = await getSetting(env, 'line_group_id');
+    if (!groupId) return 'off';
+    const res = await lineCall(env, 'push', { to: groupId, messages: [{ type: 'text', text: lineText(rec, appUrl) }] });
+    if (res.ok) return 'sent';
+    console.error('LINE push refused', res.status, await res.text());
+  } catch (e) { console.error('LINE push failed', e); }
+  return 'failed';
+}
+
+async function lineSignatureOk(raw, signature, secret) {
+  if (!signature) return false;
+  let sig;
+  try { sig = Uint8Array.from(atob(signature), (c) => c.charCodeAt(0)); } catch { return false; }
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+  return crypto.subtle.verify('HMAC', key, sig, raw);
+}
+
+// LINE calls this for messages sent where the Official Account is present. Only the two phrases
+// typed in a group do anything. The first group to ask becomes the announcement group; it can be
+// changed only after that same group releases it, so another group cannot take the announcements over.
+async function lineWebhook(request, env) {
+  if (!lineOn(env)) return fail(503, 'ยังไม่ได้ตั้งค่า LINE');
+  const raw = await request.arrayBuffer();
+  if (!(await lineSignatureOk(raw, request.headers.get('X-Line-Signature'), env.LINE_CHANNEL_SECRET))) return fail(401, 'ลายเซ็นไม่ถูกต้อง');
+  let body;
+  try { body = JSON.parse(new TextDecoder().decode(raw)); } catch { return fail(400, 'รูปแบบข้อมูลไม่ถูกต้อง'); }
+
+  for (const ev of Array.isArray(body.events) ? body.events : []) {
+    if (!ev || ev.type !== 'message' || !ev.message || ev.message.type !== 'text') continue;
+    if (!ev.source || ev.source.type !== 'group' || !ev.source.groupId) continue;
+    const said = String(ev.message.text || '').trim();
+    if (said !== LINE_BIND && said !== LINE_UNBIND) continue;
+
+    const groupId = ev.source.groupId;
+    const current = await getSetting(env, 'line_group_id');
+    let reply = null;
+    if (said === LINE_BIND) {
+      if (!current) { await setSetting(env, 'line_group_id', groupId); reply = 'ตั้งกลุ่มนี้เป็นกลุ่มรับแจ้งเตือนการรับสินค้าแล้ว ✅'; }
+      else if (current === groupId) reply = 'กลุ่มนี้รับแจ้งเตือนการรับสินค้าอยู่แล้ว';
+      else reply = 'มีกลุ่มอื่นรับแจ้งเตือนอยู่แล้ว ให้พิมพ์ "' + LINE_UNBIND + '" ในกลุ่มเดิมก่อน';
+    } else if (current === groupId) {
+      await clearSetting(env, 'line_group_id'); reply = 'ยกเลิกการแจ้งเตือนในกลุ่มนี้แล้ว';
+    }
+    if (reply && ev.replyToken) {
+      try { await lineCall(env, 'reply', { replyToken: ev.replyToken, messages: [{ type: 'text', text: reply }] }); }
+      catch (e) { console.error('LINE reply failed', e); }
+    }
+  }
+  return json({ ok: true });
+}
+
+// ---------- Records ----------
+
 async function saveReceipt(request, env) {
   if (Number(request.headers.get('Content-Length') || 0) > MAX_BODY_BYTES) return fail(413, 'ข้อมูลใหญ่เกินไป');
   let form;
@@ -78,6 +190,7 @@ async function saveReceipt(request, env) {
   const now = new Date();
   // Photo folders are named by the Thai calendar day (UTC+7).
   const day = new Date(now.getTime() + 7 * 3600 * 1000).toISOString().slice(0, 10).replace(/-/g, '');
+  const supplier = text(form, 'supplier', 200), note = text(form, 'note', 1000);
   const saved = [];
   const put = async (kind, list) => {
     const keys = [];
@@ -97,8 +210,7 @@ async function saveReceipt(request, env) {
       env.DB.prepare(
         // items and qty are the old free-text columns; goods now go to receipt_lines, so they stay empty.
         "INSERT INTO receipts (created_at, receiver, items, qty, supplier, note, product_photos, invoice_photos) VALUES (?, ?, '', '', ?, ?, ?, ?)"
-      ).bind(now.toISOString(), receiver, text(form, 'supplier', 200), text(form, 'note', 1000),
-        JSON.stringify(productKeys), JSON.stringify(invoiceKeys)),
+      ).bind(now.toISOString(), receiver, supplier, note, JSON.stringify(productKeys), JSON.stringify(invoiceKeys)),
       ...lines.map((l, i) => env.DB.prepare(
         'INSERT INTO receipt_lines (receipt_id, line_no, item, qty) VALUES ((SELECT MAX(id) FROM receipts), ?, ?, ?)'
       ).bind(i + 1, l.item, l.qty)),
@@ -108,7 +220,10 @@ async function saveReceipt(request, env) {
     await Promise.allSettled(saved.map((k) => env.PHOTOS.delete(k)));
     throw e;
   }
-  return json({ ok: true, created_at: now.toISOString() }, 201);
+  const notify = await announce(env, {
+    when: now, receiver, supplier, note, lines, productCount: product.length, invoiceCount: invoice.length,
+  }, new URL(request.url).origin + '/');
+  return json({ ok: true, created_at: now.toISOString(), notify }, 201);
 }
 
 const keys = (value) => {
@@ -164,6 +279,7 @@ async function route(request, env) {
     });
   }
   if (method === 'GET' && path === '/api/config') return json({ needPin: !!env.APP_PIN });
+  if (method === 'POST' && path === '/line/webhook') return lineWebhook(request, env);
 
   if (path.startsWith('/api/')) {
     if (!pinOk(request, env)) return fail(401, 'รหัส PIN ไม่ถูกต้อง');
@@ -431,7 +547,10 @@ $('save').onclick = async function(){
     ['supplier', 'note'].forEach(function(id){ $(id).value = ''; });
     resetLines();
     photos.product = []; photos.invoice = []; draw('product'); draw('invoice');
-    showMsg('บันทึกแล้ว เวลา ' + clock(saved.created_at), 'ok');
+    var done = 'บันทึกแล้ว เวลา ' + clock(saved.created_at);
+    if (saved.notify === 'sent') done += ' และแจ้งเตือนในกลุ่ม LINE แล้ว';
+    if (saved.notify === 'failed') done += ' แต่แจ้งเตือนในกลุ่ม LINE ไม่สำเร็จ กรุณาแจ้งในกลุ่มเอง';
+    showMsg(done, 'ok');
   } catch (err) {
     var why = (err && err.message) ? err.message : String(err);
     if (err instanceof TypeError) why = 'เชื่อมต่อไม่ได้ ตรวจสอบอินเทอร์เน็ต';

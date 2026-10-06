@@ -21,3 +21,9 @@ CREATE TABLE IF NOT EXISTS receipt_lines (
   qty        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS receipt_lines_receipt ON receipt_lines (receipt_id, line_no);
+
+-- Small settings kept by the app itself, e.g. line_group_id: the LINE group that gets the announcements.
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
