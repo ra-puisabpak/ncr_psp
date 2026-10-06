@@ -416,8 +416,8 @@ await call('POST', '/api/qc', { token: qc, body: qcBody({ batch_no: 'B260916-01'
 await call('POST', '/api/qc', { token: qc, body: qcBody({ cp_id: 'OPRP-05', batch_no: 'B260916-01', record_date: '2026-09-16', values: { to_cap_min: 35, fill_temp: 55, cap_temp: 45, chilled: true } }) });
 r = await gateOf('FG0002', 'B260916-01');
 check('a batch whose records all pass is releasable', r.status === 200 && r.j.releasable && r.j.requirements.every((x) => x.state === 'PASS'), r.j);
-r = await call('POST', '/api/release', { token: qa, body: relBody({ batch_no: 'B260916-01', rm_lots: [] }) });
-check('release needs the raw-material lots used', r.status === 422 && r.j.reasons.some((x) => /ล็อตวัตถุดิบ/.test(x)), r.j);
+r = await call('POST', '/api/release', { token: qa, body: relBody({ batch_no: 'B260916-01', rm_lots: [], checks: { label_ok: true, pack_ok: false, spec_ok: true } }) });
+check('raw-material lots are optional for release', r.status === 422 && !r.j.reasons.some((x) => /ล็อตวัตถุดิบ/.test(x)), r.j);
 r = await call('POST', '/api/release', { token: qa, body: relBody({ batch_no: 'B260916-01', checks: { label_ok: true, pack_ok: false, spec_ok: true } }) });
 check('release needs every release check confirmed', r.status === 422, r.j);
 r = await call('POST', '/api/release', { token: qa, body: relBody({ batch_no: 'B260916-01', exp_date: '2026-09-01' }) });
@@ -581,8 +581,6 @@ const linesFor = (o = {}) => fgItems.map((i) => ({ name: i.name, lot: `LOT-${i.n
 const wBody = (o = {}) => ({ uid: 'wr-uid-' + Math.random().toString(36).slice(2, 10), product_code: 'FG0004', prod_date: '2026-09-22', batch_no: 'B260922-01', sets: 1, scale_id: 'MDB009', lines: linesFor(), ...o });
 r = await call('POST', '/api/weigh', { token: qc, body: wBody({ lines: linesFor().slice(1) }) });
 check('every formula item must be weighed', r.status === 400, r);
-r = await call('POST', '/api/weigh', { token: qc, body: wBody({ lines: linesFor().map((l, i) => (i ? l : { ...l, lot: '' })) }) });
-check('every line needs a raw-material lot', r.status === 400 && /LOT/.test(r.j.error), r);
 r = await call('POST', '/api/weigh', { token: qc, body: wBody() });
 check('weights within tolerance pass', r.status === 201 && r.j.result === 'PASS' && r.j.wr_id === 'PD-260922-001', r);
 r = await call('POST', '/api/weigh', { token: qc, body: wBody() });
@@ -600,6 +598,8 @@ r = await call('GET', '/api/weigh?product_code=FG0004&batch_no=B260922-01', { to
 check('a weighing keeps lots, weights, weigher and formula version', r.status === 200 && r.j.length === 1 && r.j[0].lines.length === 9 && r.j[0].weigher === 'QC One' && r.j[0].formula_version === 2 && r.j[0].tolerance_pct === 2, r.j);
 r = await call('GET', '/api/trace?q=LOT-หมูบด', { token: qc });
 check('tracing a raw-material lot finds the batches that weighed it', r.status === 200 && r.j.weighings.length === 3 && r.j.weighings.some((w) => w.batch_no === 'B260922-02' && w.lots.some((l) => l.kg === 46.51)), r.j.weighings);
+r = await call('POST', '/api/weigh', { token: qc, body: wBody({ batch_no: 'B260922-09', lines: linesFor().map((l, i) => (i ? l : { ...l, lot: '' })) }) });
+check('a line may leave its raw-material lot blank', r.status === 201 && r.j.result === 'PASS', r);
 
 // ----- QC_08 production control → CCP-01 / CCP-02 / OPRP-05 records -----
 const fryOff = { garlic: { done: false }, shallot: { done: false }, chili: { done: false } };

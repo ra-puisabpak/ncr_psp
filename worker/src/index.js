@@ -1374,7 +1374,6 @@ export default {
           const problems = [...gate.reasons];
           if (RELEASE_CHECKS.some((k) => !checks[k])) problems.push('ต้องยืนยันการตรวจก่อนปล่อยครบทุกข้อ');
           if (blank(b.mfg_date) || blank(b.exp_date)) problems.push('ต้องระบุวันผลิตและวันหมดอายุ');
-          if (!lots.length) problems.push('ต้องระบุล็อตวัตถุดิบที่ใช้อย่างน้อย 1 รายการ (เพื่อการสอบย้อนกลับ)');
           if (problems.length) return json({ error: 'ยังปล่อยสินค้าไม่ได้', reasons: problems }, 422);
         }
         const productName = blank(b.product_name) ? null : String(b.product_name).trim().slice(0, 200);
@@ -1658,7 +1657,6 @@ export default {
           const w = (Array.isArray(l?.weights) ? l.weights : []).slice(0, sets).map((v) => (blank(v) ? NaN : Number(v)));
           if (w.length !== sets || w.some((n) => !Number.isFinite(n) || n < 0 || n > 1000)) fail(400, `กรอกน้ำหนักของ ${name} ให้ครบ ${sets} ชุด (กก.)`);
           const lot = String(l?.lot || '').trim().slice(0, 60);
-          if (!lot) fail(400, `กรุณาระบุ LOT ของ ${name} (เลือกจากใบตรวจรับ FM-QC-001)`);
           const line = { name, target, lot, doc_no: String(l?.doc_no || '').slice(0, 40), code: String(l?.code || '').slice(0, 40), weights: w };
           if (extra) { line.extra = true; deviations.push({ name, kind: 'EXTRA', text: `${name} ไม่อยู่ในสูตร` }); }
           else if (tol !== null) {

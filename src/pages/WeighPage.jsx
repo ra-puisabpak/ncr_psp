@@ -72,7 +72,7 @@ export default function WeighPage() {
     if (f?.tolerance_pct != null) return Math.abs(pct) > f.tolerance_pct ? 'bad' : 'ok'
     return Math.abs(pct) > 0.5 ? 'warn' : 'ok'
   }
-  const complete = f && lines.every((l) => l.name && l.lot && Array.from({ length: sets }, (_, s) => l.weights[s]).every((v) => v !== '' && v != null))
+  const complete = f && lines.every((l) => l.name && Array.from({ length: sets }, (_, s) => l.weights[s]).every((v) => v !== '' && v != null))
   const canAssess = ASSESS.includes(user?.role)
 
   const save = async () => {
@@ -136,7 +136,7 @@ export default function WeighPage() {
                     </div>
                     {l.extra && <button type="button" onClick={() => setLines((x) => x.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>}
                   </div>
-                  <input list="recv-lots" value={l.lot && l.doc_no ? `${l.lot} · ${MAT_LABEL[l.code] || l.code} · ${l.doc_no}` : l.lot} onChange={(e) => pickLot(i, e.target.value)} placeholder="LOT วัตถุดิบ * (พิมพ์เพื่อค้นจากใบตรวจรับ)" className={`${input} mb-1.5`} />
+                  <input list="recv-lots" value={l.lot && l.doc_no ? `${l.lot} · ${MAT_LABEL[l.code] || l.code} · ${l.doc_no}` : l.lot} onChange={(e) => pickLot(i, e.target.value)} placeholder="LOT วัตถุดิบ (ถ้ามี — พิมพ์เพื่อค้นจากใบตรวจรับ)" className={`${input} mb-1.5`} />
                   <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                     {Array.from({ length: sets }, (_, s) => {
                       const st = offTarget(l, l.weights[s])

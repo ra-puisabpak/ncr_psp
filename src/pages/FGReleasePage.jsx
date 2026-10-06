@@ -93,7 +93,7 @@ function LotPicker({ lots, setLots }) {
   const add = (l) => { setLots([...lots, l]); setQ('') }
   return (
     <div>
-      <div className="text-xs text-gray-600 mb-1">ล็อตวัตถุดิบที่ใช้ * (ค้นจากใบตรวจรับ FM-QC-001 ย้อนหลัง 180 วัน หรือพิมพ์เพิ่มเอง)</div>
+      <div className="text-xs text-gray-600 mb-1">ล็อตวัตถุดิบที่ใช้ (ถ้ามี · ค้นจากใบตรวจรับ FM-QC-001 ย้อนหลัง 180 วัน หรือพิมพ์เพิ่มเอง)</div>
       <div className="space-y-1.5 mb-2">
         {lots.map((l, i) => (
           <div key={`${l.lot}-${i}`} className="flex items-center gap-2 bg-gray-50 rounded-lg px-2.5 py-1.5 text-sm">
@@ -155,7 +155,7 @@ function DecisionForm({ gate, onSaved }) {
     finally { setSaving(false) }
   }
   const allChecked = CHECKS.every(([k]) => checks[k])
-  const ready = gate.releasable && allChecked && lots.length && f.mfg_date && f.exp_date
+  const ready = gate.releasable && allChecked && f.mfg_date && f.exp_date
 
   return (
     <div className="bg-white rounded-xl shadow p-4 space-y-4">
@@ -187,7 +187,7 @@ function DecisionForm({ gate, onSaved }) {
         </div>
       )}
       <div className="flex flex-wrap gap-2">
-        <button disabled={saving || !ready} onClick={() => decide('RELEASE')} title={ready ? '' : 'ต้องผ่านทุกเงื่อนไข ยืนยันการตรวจครบ และระบุวันที่กับล็อตวัตถุดิบ'}
+        <button disabled={saving || !ready} onClick={() => decide('RELEASE')} title={ready ? '' : 'ต้องผ่านทุกเงื่อนไข ยืนยันการตรวจครบ และระบุวันผลิตกับวันหมดอายุ'}
           className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-40">
           <PackageCheck className="w-4 h-4" />ปล่อยสินค้า
         </button>
