@@ -854,8 +854,10 @@ const AQL_PLAN=[            // min–max = จำนวนถุงที่ร�
 const AQL_LIMIT={major:2.5,minor:5.0};          // % สูงสุดที่ยอมรับ (Critical = 0)
 const AQL_BAG_KG=10;                            // น้ำหนักมาตรฐานต่อถุง
 const AQL_CROPS={shallot:'หอม',chili:'พริก',garlic:'กระเทียม'};
-const AQL_PH_CROPS=['shallot','garlic'];   // วัด pH ตัวอย่างรวม — บันทึกค่าอย่างเดียว ยังไม่มีเกณฑ์ตัดสิน
+const AQL_PH_SPEC={shallot:[5.3,5.8],garlic:[5.3,6.3]};   // pH ตัวอย่างรวม: หอมแขก 5.3–5.8, กระเทียม 5.3–6.3 — นอกช่วง = HOLD ให้ QC Supervisor ตัดสิน
+const AQL_PH_CROPS=Object.keys(AQL_PH_SPEC);
 const aqlNeedsPh=m=>!!m&&AQL_PH_CROPS.includes(m.crop);
+const aqlPhSpecTxt=m=>{const x=AQL_PH_SPEC[m.crop];return x?x[0].toFixed(1)+'–'+x[1].toFixed(1):'';};
 const aqlPhVal=v=>{const n=parseFloat(v);return v===''||v===null||v===undefined||isNaN(n)?null:n;};
 const AQL_CODES={'RM-001':'shallot','RM-002':'shallot','RM-003':'shallot','RM-004':'shallot','RM-005':'garlic',
   'RM-006':'chili','RM-007':'chili','RM-008':'chili'};   // รหัสวัตถุดิบที่เปิดแผน OPL อัตโนมัติ (ปิดเองได้ในฟอร์ม)
@@ -889,6 +891,8 @@ function aqlCalc(m){
     if(miPct>AQL_LIMIT.minor)why.push('Minor '+miPct.toFixed(2)+'% เกิน '+AQL_LIMIT.minor+'%');
     verdict=why.length?'HOLD':'PASS';
   }
+  if(aqlNeedsPh(m)){const v=aqlPhVal(m.ph),x=AQL_PH_SPEC[m.crop];
+    if(v!==null&&v>=0&&v<=14&&(v<x[0]||v>x[1])){why.push('pH '+v+' นอกเกณฑ์ '+aqlPhSpecTxt(m));if(verdict!=='REJECT')verdict='HOLD';}}
   return{bags,plan,reqG,sBags,totG,cr,maG,miG,maPct,miPct,warn,verdict,why};
 }
 function aqlFmtG(g){return g>=1000?(g/1000)+' kg':g+' g';}
@@ -959,7 +963,7 @@ function aqlPlanHtml(c){
 }
 function aqlVerdictHtml(idx,c){
   const cls=c.verdict==='PASS'?'pass':c.verdict==='HOLD'?'hold':c.verdict==='REJECT'?'fail':'na';
-  const head=c.verdict==='PASS'?'&#x2714; ACCEPT — ผ่านเกณฑ์ AQL':c.verdict==='HOLD'?'&#x26A0; CAR / HOLD — เกินเกณฑ์ AQL (ออก NC ให้ QC Supervisor ตัดสิน)':c.verdict==='REJECT'?'&#x2716; REJECT ทั้งลอต':'รอข้อมูลการสุ่ม';
+  const head=c.verdict==='PASS'?'&#x2714; ACCEPT — ผ่านเกณฑ์ AQL':c.verdict==='HOLD'?'&#x26A0; CAR / HOLD — ไม่ผ่านเกณฑ์ AQL / pH (ออก NC ให้ QC Supervisor ตัดสิน)':c.verdict==='REJECT'?'&#x2716; REJECT ทั้งลอต':'รอข้อมูลการสุ่ม';
   const line=c.totG>0?'Critical '+c.cr+' ชิ้น | Major '+c.maG+' g = '+aqlPct(c.maPct)+' (≤'+AQL_LIMIT.major+'%) | Minor '+c.miG+' g = '+aqlPct(c.miPct)+' (≤'+AQL_LIMIT.minor+'%)':'';
   return'<div class="aq-v '+cls+'" id="aqv-'+idx+'">'+head+(c.why.length?'<small>'+c.why.join(' , ')+'</small>':'')+(line?'<small>'+line+'</small>':'')+c.warn.map(w=>'<small>&#x26A0; '+w+'</small>').join('')+'</div>';
 }
@@ -980,7 +984,7 @@ function aqlHtml(m){
       '<button type="button" class="tp pass'+(m.pos==='Y'?' sel':'')+'" onclick="setAqlPill('+i+',\'pos\',\'Y\')">✓ ครบ 3 ตำแหน่ง</button>'+
       '<button type="button" class="tp fail'+(m.pos==='N'?' sel':'')+'" onclick="setAqlPill('+i+',\'pos\',\'N\')">✗ ไม่ครบ</button></div></div>'+
     (aqlNeedsPh(m)?'<div class="ig"><div class="fg"><label>pH ตัวอย่างรวม ('+AQL_CROPS[m.crop]+') <span class="req">*</span></label>'+inp('ph',0.01,'เช่น 5.80')+'</div>'+
-      '<div class="fg"><label>เกณฑ์</label><input type="text" value="บันทึกค่าเท่านั้น" readonly></div></div>':'')+
+      '<div class="fg"><label>เกณฑ์ pH</label><input type="text" value="'+aqlPhSpecTxt(m)+'" readonly></div></div>':'')+
     grp('cr','cr','CRITICAL — AQL 0% | พบเพียง 1 ชิ้น ปฏิเสธทั้งลอต','ชิ้น',1)+
     grp('ma','ma','MAJOR — AQL 2.5% | ไม่เกิน 2.5%','g',0.1)+
     grp('mi','mi','MINOR — AQL 5.0% | ไม่เกิน 5.0%','g',0.1)+
@@ -1246,7 +1250,7 @@ function generatePDF(rec){
       <div style="flex:1">
         <div class="fl"><div><b>รายการที่ #:</b> ${mats.indexOf(m)+1} — ${E(nm(m))}</div><div><b>ชนิด:</b> ${cb(m.crop==='shallot','หอม')+cb(m.crop==='chili','พริก')+cb(m.crop==='garlic','กระเทียม')}</div></div>
         <div class="fl"><div><b>ถุงที่รับเข้า:</b> ${c.bags||''}</div><div><b>ถุงที่สุ่มจริง:</b> ${c.sBags||''}</div><div><b>ตัวอย่างรวม (g):</b> ${c.totG||''}</div></div>
-        <div class="fl"><div><b>ตักครบ 3 ตำแหน่ง:</b> ${cb(m.pos==='Y'||m.pos==='PASS','ครบ')+cb(m.pos==='N'||m.pos==='FAIL','ไม่ครบ')}</div>${aqlNeedsPh(m)?`<div><b>pH ตัวอย่างรวม:</b> ${aqlPhVal(m.ph)??'-'} <span class="sm">(บันทึกค่า ยังไม่กำหนดเกณฑ์)</span></div>`:''}</div>
+        <div class="fl"><div><b>ตักครบ 3 ตำแหน่ง:</b> ${cb(m.pos==='Y'||m.pos==='PASS','ครบ')+cb(m.pos==='N'||m.pos==='FAIL','ไม่ครบ')}</div>${aqlNeedsPh(m)?`<div><b>pH ตัวอย่างรวม:</b> ${aqlPhVal(m.ph)??'-'} <span class="sm">(เกณฑ์ ${aqlPhSpecTxt(m)})</span></div>`:''}</div>
         <table><thead><tr><th style="width:19%">ระดับ</th><th>ข้อบกพร่อง</th><th style="width:13%">ปริมาณ</th><th style="width:11%">รวม</th><th style="width:13%">%</th><th style="width:15%">เกณฑ์</th></tr></thead><tbody>
           ${grp('cr','CRITICAL','ชิ้น',c.cr,'—','0 ชิ้น<br>พบ 1 = Reject')}${grp('ma','MAJOR','g',c.maG,aqlPct(c.maPct),'≤ '+AQL_LIMIT.major+'%')}${grp('mi','MINOR','g',c.miG,aqlPct(c.miPct),'≤ '+AQL_LIMIT.minor+'%')}</tbody></table></div></div>
       <div class="vd"><b>ผล AQL:</b> ${cb(c.verdict==='PASS','ACCEPT')+cb(c.verdict==='HOLD','CAR / HOLD')+cb(c.verdict==='REJECT','REJECT ทั้งลอต')}${c.why.length?'<span class="sm bad" style="margin-left:auto">'+E(c.why.join(' ; '))+'</span>':''}</div></div>`;}).join('');
@@ -1762,7 +1766,7 @@ function exportExcel(){
   records.forEach(r=>{const sp=SUPPLIERS.find(s=>s.id===r.supplier)||{name:r.supplier};h1.push([r.docNo,r.date,r.time||'',r.supplier,sp.name,r.carReg||'',r.carTemp!==null&&r.carTemp!==undefined?r.carTemp:'',r.inspector,r.note||'',r.sig?.signerName||'',r.sig?.signedAt||'',(r.mats||r.materials||[]).every(m=>m.result==='PASS')?'PASS':(r.mats||r.materials||[]).some(m=>m.result==='REJECT')?'REJECT':'HOLD']);});
   const wsH=XLSX.utils.aoa_to_sheet(h1);wsH['!cols']=[20,12,8,10,35,14,12,20,30,20,22,8].map(w=>({wch:w}));XLSX.utils.book_append_sheet(wb,wsH,'Receiving_Header');
   const d1=[['Detail_ID','Doc_No','Date','Supplier','Material_Code','Material_Name','Type','Lot_No','Qty','Unit','MFG','EXP','Temp1','Temp2','Temp3','Avg_Temp','Temp_Status','Visual','Leak','Document','Result','Note','AQL_Crop','Lot_Bags','Plan_Sample_Bags','Plan_g_per_Bag','Sample_Bags','Sample_g','Bag_kg','3_Point','Critical_pcs','Major_g','Major_pct','Minor_g','Minor_pct','AQL_Verdict','Pork_Lot_Bags','Pork_Sample_Bags','Net_kg','Core_Temp','pH','pH_Min','pH_Max','Packaging','Label','Color','Odor','Foreign_Matter','IQC_Verdict','PO_DO_No','DO_Invoice','COA','COA_No','COA_Result','Label_Lot','Wt_Containers','Wt_Samples','Wt_Label_kg','Wt_Values_kg','Wt_Result']];
-  records.forEach(r=>{const sp=SUPPLIERS.find(s=>s.id===r.supplier)||{name:r.supplier};(r.mats||r.materials||[]).forEach((m,i)=>{const mi=MATERIALS.find(x=>x.code===m.code)||{};const ts=[m.t1,m.t2,m.t3].filter(t=>t!==''&&t!==null&&t!==undefined).map(Number).filter(t=>!isNaN(t));const avg=ts.length?parseFloat((ts.reduce((a,b)=>a+b,0)/ts.length).toFixed(1)):'';const mn=mi.minTemp??mi.minT;const mx2=mi.maxTemp??mi.maxT;const tst=ts.length&&mn!=null?(ts.every(t=>t>=mn&&t<=mx2)?'PASS':'FAIL'):'';d1.push([r.docNo+'_'+String(i+1).padStart(2,'0'),r.docNo,r.date,sp.name,m.code,m.name||'',mi.type||'',m.lot||'',m.qty!==''&&m.qty!=null?parseFloat(m.qty):'',m.unit||'',m.mfg||'',m.exp||'',m.t1!==''&&m.t1!=null?parseFloat(m.t1):'',m.t2!==''&&m.t2!=null?parseFloat(m.t2):'',m.t3!==''&&m.t3!=null?parseFloat(m.t3):'',avg,tst,m.visual||'',m.leak||'',m.doc||'',m.result||'',m.note||''].concat(m.aql?(c=>[AQL_CROPS[m.crop]||'',c.bags,c.plan?c.plan.n:'',c.plan?c.plan.g:'',c.sBags,c.totG,m.bagKg??'',m.pos||'',c.cr,c.maG,c.maPct==null?'':+c.maPct.toFixed(2),c.miG,c.miPct==null?'':+c.miPct.toFixed(2),aqlVerdictTxt(c.verdict)])(aqlCalc(m)):Array(14).fill('')).concat(isPork(m)&&Array.isArray(m.pk)?(p=>[p.iqc_lot_bags,p.iqc_sample_bags,p.iqc_net_kg,p.iqc_core_temp,p.iqc_ph,p.iqc_ph_min,p.iqc_ph_max,p.iqc_packaging,p.iqc_label,p.iqc_color,p.iqc_odor,p.iqc_foreign_matter,p.iqc_verdict])(porkCloud(m)):m.aql&&aqlNeedsPh(m)?['','','','',aqlPhVal(m.ph)??'','','','','','','','','']:Array(13).fill('')).concat([r.poNo||'',m.docDo||'',COA_TXT[m.coa]||'',m.coaNo||'',m.coaOk||'',m.docLabel||''],(w=>w&&Array.isArray(m.wt)?[w.N,w.n,w.lab??'',w.vals.join('/'),w.verdict==='HOLD'?'FAIL':w.verdict==='PASS'&&w.lab!==null?'PASS':'']:[])(wtCalc(m))));});});
+  records.forEach(r=>{const sp=SUPPLIERS.find(s=>s.id===r.supplier)||{name:r.supplier};(r.mats||r.materials||[]).forEach((m,i)=>{const mi=MATERIALS.find(x=>x.code===m.code)||{};const ts=[m.t1,m.t2,m.t3].filter(t=>t!==''&&t!==null&&t!==undefined).map(Number).filter(t=>!isNaN(t));const avg=ts.length?parseFloat((ts.reduce((a,b)=>a+b,0)/ts.length).toFixed(1)):'';const mn=mi.minTemp??mi.minT;const mx2=mi.maxTemp??mi.maxT;const tst=ts.length&&mn!=null?(ts.every(t=>t>=mn&&t<=mx2)?'PASS':'FAIL'):'';d1.push([r.docNo+'_'+String(i+1).padStart(2,'0'),r.docNo,r.date,sp.name,m.code,m.name||'',mi.type||'',m.lot||'',m.qty!==''&&m.qty!=null?parseFloat(m.qty):'',m.unit||'',m.mfg||'',m.exp||'',m.t1!==''&&m.t1!=null?parseFloat(m.t1):'',m.t2!==''&&m.t2!=null?parseFloat(m.t2):'',m.t3!==''&&m.t3!=null?parseFloat(m.t3):'',avg,tst,m.visual||'',m.leak||'',m.doc||'',m.result||'',m.note||''].concat(m.aql?(c=>[AQL_CROPS[m.crop]||'',c.bags,c.plan?c.plan.n:'',c.plan?c.plan.g:'',c.sBags,c.totG,m.bagKg??'',m.pos||'',c.cr,c.maG,c.maPct==null?'':+c.maPct.toFixed(2),c.miG,c.miPct==null?'':+c.miPct.toFixed(2),aqlVerdictTxt(c.verdict)])(aqlCalc(m)):Array(14).fill('')).concat(isPork(m)&&Array.isArray(m.pk)?(p=>[p.iqc_lot_bags,p.iqc_sample_bags,p.iqc_net_kg,p.iqc_core_temp,p.iqc_ph,p.iqc_ph_min,p.iqc_ph_max,p.iqc_packaging,p.iqc_label,p.iqc_color,p.iqc_odor,p.iqc_foreign_matter,p.iqc_verdict])(porkCloud(m)):m.aql&&aqlNeedsPh(m)?['','','','',aqlPhVal(m.ph)??'',AQL_PH_SPEC[m.crop][0],AQL_PH_SPEC[m.crop][1],'','','','','','']:Array(13).fill('')).concat([r.poNo||'',m.docDo||'',COA_TXT[m.coa]||'',m.coaNo||'',m.coaOk||'',m.docLabel||''],(w=>w&&Array.isArray(m.wt)?[w.N,w.n,w.lab??'',w.vals.join('/'),w.verdict==='HOLD'?'FAIL':w.verdict==='PASS'&&w.lab!==null?'PASS':'']:[])(wtCalc(m))));});});
   const wsD=XLSX.utils.aoa_to_sheet(d1);wsD['!cols']=[18,14,12,24,10,18,6,14,10,8,12,12,10,10,10,10,10,8,8,10,8,20,10,9,10,10,10,10,8,8,10,9,9,9,9,12,10,10,14,14,14,8,8,10,8,8,8,10,12,16,10,10,16,10,10,10,10,10,20,8].map(w=>({wch:w}));XLSX.utils.book_append_sheet(wb,wsD,'Receiving_Detail');
   const n1=[['NC_ID','Doc_No','Supplier','Fail_Type','Corrective_Action','QA','Status','Closed_Date','Note']];
   ncLogs.forEach(nc=>{const sp=SUPPLIERS.find(s=>s.id===nc.supplier)||{name:nc.supplier||'—'};n1.push([nc.id,nc.docNo,sp.name,nc.failType,nc.corrective,nc.qa,nc.status,nc.closedDate||'',nc.note||'']);});
