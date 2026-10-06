@@ -1,0 +1,23 @@
+# Goods receipt log: a standalone app (own page, own database, own photo storage).
+# One Worker serves the page and the API. Records go to D1, photos go to R2.
+name = "puisabpak-goods-receipt"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "puisabpak-goods-receipt"
+database_id = "744b4027-5477-4637-8f22-faec6f0c98c6"
+
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "puisabpak-goods-receipt-photos"
+
+# Optional secret APP_PIN: when set (Cloudflare dashboard > this Worker > Settings >
+# Variables and Secrets > add a Secret named APP_PIN), the app asks for this PIN before
+# saving or viewing records. Without it, anyone who has the address can save and view.
+
+# Keep request logs so problems can be traced in the Cloudflare dashboard.
+[observability]
+enabled = true
