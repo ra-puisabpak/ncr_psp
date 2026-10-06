@@ -18,6 +18,11 @@ bucket_name = "puisabpak-goods-receipt-photos"
 # Variables and Secrets > add a Secret named APP_PIN), the app asks for this PIN before
 # saving or viewing records. Without it, anyone who has the address can save and view.
 
+# Optional secrets LINE_CHANNEL_ACCESS_TOKEN and LINE_CHANNEL_SECRET (same place, from the LINE
+# Official Account's Messaging API channel): when both are set, each saved record is announced in one
+# LINE group. Webhook address to give LINE: https://<this worker's address>/line/webhook
+# Choose the group by typing "ตั้งกลุ่มแจ้งเตือน" in it once the Official Account has joined.
+
 # Keep request logs so problems can be traced in the Cloudflare dashboard.
 [observability]
 enabled = true
