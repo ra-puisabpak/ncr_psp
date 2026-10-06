@@ -9,6 +9,7 @@ const MAX_PHOTOS = 5;                    // per photo field
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // the page shrinks photos to far less than this
 const MAX_BODY_BYTES = 60 * 1024 * 1024;
 const LIST_LIMIT = 50;
+const REPORT_LIMIT = 300;                // records on one daily report
 const MAX_LINES = 30;                  // goods lines in one record
 const LINE_BIND = 'ตั้งกลุ่มแจ้งเตือน';     // typed in a LINE group: announce records here
 const LINE_UNBIND = 'ยกเลิกกลุ่มแจ้งเตือน'; // typed in that same group: stop announcing
@@ -231,26 +232,48 @@ const keys = (value) => {
   catch { return []; }
 };
 
-async function listReceipts(env) {
-  const { results } = await env.DB.prepare(
-    'SELECT id, created_at, receiver, items, qty, supplier, note, product_photos, invoice_photos FROM receipts ORDER BY id DESC LIMIT ?'
-  ).bind(LIST_LIMIT).all();
-  if (!results.length) return json([]);
-  const oldest = results[results.length - 1].id;
+// Turns receipt rows into what the page shows, attaching each record's goods lines.
+async function withLines(env, results) {
+  if (!results.length) return [];
+  const ids = results.map((r) => r.id);
   const { results: lineRows } = await env.DB.prepare(
-    'SELECT receipt_id, item, qty FROM receipt_lines WHERE receipt_id >= ? ORDER BY receipt_id, line_no'
-  ).bind(oldest).all();
+    'SELECT receipt_id, item, qty FROM receipt_lines WHERE receipt_id BETWEEN ? AND ? ORDER BY receipt_id, line_no'
+  ).bind(Math.min(...ids), Math.max(...ids)).all();
   const byReceipt = new Map();
   for (const l of lineRows) {
     if (!byReceipt.has(l.receipt_id)) byReceipt.set(l.receipt_id, []);
     byReceipt.get(l.receipt_id).push({ item: l.item, qty: l.qty });
   }
-  return json(results.map((r) => ({
+  return results.map((r) => ({
     id: r.id, created_at: r.created_at, receiver: r.receiver, supplier: r.supplier, note: r.note,
     // Records saved before goods lines existed kept one free-text item and quantity.
     lines: byReceipt.get(r.id) || (r.items ? [{ item: r.items, qty: r.qty }] : []),
     product_photos: keys(r.product_photos), invoice_photos: keys(r.invoice_photos),
-  })));
+  }));
+}
+
+const RECEIPT_COLUMNS = 'id, created_at, receiver, items, qty, supplier, note, product_photos, invoice_photos';
+
+// Latest records, newest first (the list tab).
+async function listReceipts(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT ${RECEIPT_COLUMNS} FROM receipts ORDER BY id DESC LIMIT ?`
+  ).bind(LIST_LIMIT).all();
+  return json(await withLines(env, results));
+}
+
+// Every record of one Thai calendar day (UTC+7), in the order received (the daily report).
+async function listDay(env, day) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  const start = m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) - 7 * 3600 * 1000 : NaN;
+  if (!m || Number.isNaN(start) || new Date(start + 7 * 3600 * 1000).toISOString().slice(0, 10) !== day) {
+    return fail(400, 'วันที่ไม่ถูกต้อง');
+  }
+  const { results } = await env.DB.prepare(
+    `SELECT ${RECEIPT_COLUMNS} FROM receipts WHERE created_at >= ? AND created_at < ? ORDER BY id ASC LIMIT ?`
+  ).bind(new Date(start).toISOString(), new Date(start + 24 * 3600 * 1000).toISOString(), REPORT_LIMIT + 1).all();
+  const more = results.length > REPORT_LIMIT;
+  return json({ day, receipts: await withLines(env, results.slice(0, REPORT_LIMIT)), more });
 }
 
 async function getPhoto(key, env) {
@@ -283,7 +306,10 @@ async function route(request, env) {
 
   if (path.startsWith('/api/')) {
     if (!pinOk(request, env)) return fail(401, 'รหัส PIN ไม่ถูกต้อง');
-    if (path === '/api/receipts' && method === 'GET') return listReceipts(env);
+    if (path === '/api/receipts' && method === 'GET') {
+      const day = url.searchParams.get('date');
+      return day === null ? listReceipts(env) : listDay(env, day);
+    }
     if (path === '/api/receipts' && method === 'POST') return saveReceipt(request, env);
     if (path.startsWith('/api/photos/') && method === 'GET') return getPhoto(decodeURIComponent(path.slice('/api/photos/'.length)), env);
   }
@@ -355,11 +381,48 @@ const PAGE = `<!doctype html>
   .rec td{padding:4px 0;border-top:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere;white-space:pre-wrap}
   .rec td:last-child{text-align:right;padding-left:10px;width:38%}
   .hide{display:none}
+  .tools{display:flex;gap:8px;align-items:flex-end;margin-bottom:12px}
+  .tools label{margin:0 0 4px}
+  .tools > div{flex:1}
+  input[type=date]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--card);color:var(--ink)}
+  .tools button{flex:none;padding:11px 16px;border:0;border-radius:8px;background:var(--brand);color:var(--brand-ink);font:inherit;font-weight:700}
+  .tools button:disabled{opacity:.55}
+  .sheetwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .sheet{min-width:700px;padding:14px;color:#1a2130;font-size:12px;line-height:1.35;background:#fff}
+  .sheet .hd{display:flex;align-items:flex-end;gap:10px;border-bottom:2px solid #0f2744;padding-bottom:6px}
+  .sheet .co{font-size:16px;font-weight:700;color:#0f2744;line-height:1.25}
+  .sheet .co2{font-size:11px;color:#5c6470}
+  .sheet .ref{margin-left:auto;text-align:right;font-size:11px;line-height:1.5}
+  .sheet h1{font-size:15px;text-align:center;color:#0f2744;margin:9px 0 2px}
+  .sheet .sum{text-align:center;font-size:12px;margin-bottom:8px}
+  .sheet table{width:100%;border-collapse:collapse;table-layout:fixed}
+  .sheet th{background:#e9edf2;font-weight:700;font-size:11px;padding:4px 3px;border:1px solid #1a2130;text-align:center}
+  .sheet td{border:1px solid #1a2130;padding:3px 5px;vertical-align:top;overflow-wrap:anywhere;white-space:pre-wrap}
+  .sheet td.c{text-align:center}
+  .sheet td.none{text-align:center;padding:14px;color:#5c6470}
+  .sheet .warn{font-weight:700}
+  .sheet .sg{display:flex;gap:40px;margin-top:26px;padding:0 20px}
+  .sheet .sg div{flex:1;text-align:center;font-size:11.5px;line-height:1.9}
+  .sheet .nt{font-size:10px;color:#5c6470;margin-top:8px}
+  @page{size:A4 portrait;margin:10mm 12mm}
+  @media print{
+    body{background:#fff;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+    header,nav,#pinBox,#pageAdd,#pageList,.tools,#reportMsg{display:none!important}
+    main{max-width:none;padding:0;margin:0}
+    #pageReport{display:block!important}
+    .sheetwrap{overflow:visible;border:0;border-radius:0}
+    .sheet{min-width:0;padding:0;font-size:10.5pt}
+    .sheet .co{font-size:14pt}.sheet .co2,.sheet .ref{font-size:9.5pt}
+    .sheet h1{font-size:13pt}.sheet .sum{font-size:10.5pt}
+    .sheet th{font-size:9.5pt}.sheet .sg div{font-size:10pt}.sheet .nt{font-size:8.5pt}
+    .sheet thead{display:table-header-group}
+    .sheet tbody,.sheet tr,.sheet .sg{break-inside:avoid;page-break-inside:avoid}
+  }
 </style>
 </head>
 <body>
 <header>บันทึกการรับสินค้า</header>
-<nav><button id="tabAdd" class="on">บันทึกรับของ</button><button id="tabList">รายการที่รับแล้ว</button></nav>
+<nav><button id="tabAdd" class="on">บันทึกรับของ</button><button id="tabList">รายการที่รับแล้ว</button><button id="tabReport">รายงาน</button></nav>
 <main>
   <div id="pinBox" class="hide">
     <label for="pin">รหัส PIN</label>
@@ -397,6 +460,15 @@ const PAGE = `<!doctype html>
   </section>
 
   <section id="pageList" class="hide"><div id="list" class="hint">กำลังโหลด...</div></section>
+
+  <section id="pageReport" class="hide">
+    <div class="tools">
+      <div><label for="reportDay">วันที่ของรายงาน</label><input id="reportDay" type="date"></div>
+      <button id="printReport" type="button" disabled>พิมพ์รายงาน</button>
+    </div>
+    <div id="reportMsg" class="hint">กำลังโหลด...</div>
+    <div class="sheetwrap hide" id="sheetWrap"><div class="sheet" id="sheet"></div></div>
+  </section>
 </main>
 
 <script>
@@ -470,12 +542,16 @@ fetch('/api/config').then(function(r){ return r.json(); }).then(function(c){
 function show(tab){
   $('pageAdd').className = tab === 'add' ? '' : 'hide';
   $('pageList').className = tab === 'list' ? '' : 'hide';
+  $('pageReport').className = tab === 'report' ? '' : 'hide';
   $('tabAdd').className = tab === 'add' ? 'on' : '';
   $('tabList').className = tab === 'list' ? 'on' : '';
+  $('tabReport').className = tab === 'report' ? 'on' : '';
   if (tab === 'list') loadList();
+  if (tab === 'report') loadReport();
 }
 $('tabAdd').onclick = function(){ show('add'); };
 $('tabList').onclick = function(){ show('list'); };
+$('tabReport').onclick = function(){ show('report'); };
 
 // Shrinks a photo to a JPEG no longer than 1600px on its long side before sending.
 function shrink(file){
@@ -606,6 +682,117 @@ async function loadList(){
     photoButtons(card, r.invoice_photos, 'รูป Invoice');
     box.appendChild(card);
   });
+}
+
+// ---------- Daily report (A4 portrait) ----------
+var COMPANY = 'บริษัท พระจันทร์ ๕๐ จำกัด';
+var COMPANY_SUB = 'Puisabpak';
+var WEEKDAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+
+// Today's date in Thailand as yyyy-mm-dd.
+function thaiToday(){ return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10); }
+function dayLabel(day){
+  var p = day.split('-');
+  var w = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay();
+  return 'วัน' + WEEKDAYS[w] + 'ที่ ' + p[2] + '/' + p[1] + '/' + p[0];
+}
+$('reportDay').value = thaiToday();
+$('reportDay').max = thaiToday();
+$('reportDay').onchange = loadReport;
+$('printReport').onclick = function(){ window.print(); };
+
+function cell(tag, text, cls, span){
+  var c = el(tag, cls, text);
+  if (span > 1) c.rowSpan = span;
+  return c;
+}
+
+function drawReport(day, receipts, more){
+  var sheet = $('sheet');
+  sheet.textContent = '';
+
+  var hd = el('div', 'hd');
+  var left = el('div'); left.appendChild(el('div', 'co', COMPANY)); left.appendChild(el('div', 'co2', COMPANY_SUB));
+  var ref = el('div', 'ref');
+  ref.appendChild(el('div', '', 'วันที่รับสินค้า: ' + day.split('-').reverse().join('/')));
+  ref.appendChild(el('div', '', 'พิมพ์เมื่อ: ' + clock()));
+  hd.appendChild(left); hd.appendChild(ref); sheet.appendChild(hd);
+
+  sheet.appendChild(el('h1', '', 'รายงานการรับสินค้าประจำวัน'));
+  var items = 0;
+  receipts.forEach(function(r){ items += r.lines.length; });
+  sheet.appendChild(el('div', 'sum', dayLabel(day) + '   รับทั้งหมด ' + receipts.length + ' ครั้ง   ' + items + ' รายการสินค้า'));
+
+  var table = el('table');
+  var widths = ['6%', '7%', '14%', '17%', '21%', '16%', '8%', '11%'];
+  var cg = el('colgroup');
+  widths.forEach(function(w){ var c = el('col'); c.style.width = w; cg.appendChild(c); });
+  table.appendChild(cg);
+  var thead = el('thead'), hr = el('tr');
+  ['ลำดับ', 'เวลา', 'ผู้รับของ', 'ผู้ขาย / บริษัทขนส่ง', 'สินค้า', 'จำนวน', 'รูปสินค้า / Invoice', 'หมายเหตุ'].forEach(function(h){ hr.appendChild(el('th', '', h)); });
+  thead.appendChild(hr); table.appendChild(thead);
+
+  if (!receipts.length) {
+    var tb0 = el('tbody'), tr0 = el('tr'), td0 = el('td', 'none', 'ไม่มีการรับสินค้าในวันนี้');
+    td0.colSpan = 8; tr0.appendChild(td0); tb0.appendChild(tr0); table.appendChild(tb0);
+  }
+  receipts.forEach(function(r, i){
+    // One tbody per receipt so a receipt is not split across two pages.
+    var tb = el('tbody');
+    var lines = r.lines.length ? r.lines : [{ item: '-', qty: '-' }];
+    var n = lines.length;
+    lines.forEach(function(l, j){
+      var tr = el('tr');
+      if (j === 0) {
+        tr.appendChild(cell('td', String(i + 1), 'c', n));
+        tr.appendChild(cell('td', clock(r.created_at).slice(11), 'c', n));
+        tr.appendChild(cell('td', r.receiver, '', n));
+        tr.appendChild(cell('td', r.supplier || '-', '', n));
+      }
+      tr.appendChild(el('td', '', l.item));
+      tr.appendChild(el('td', '', l.qty));
+      if (j === 0) {
+        var missing = !r.product_photos.length || !r.invoice_photos.length;
+        tr.appendChild(cell('td', r.product_photos.length + ' / ' + r.invoice_photos.length, missing ? 'c warn' : 'c', n));
+        tr.appendChild(cell('td', r.note || '', '', n));
+      }
+      tb.appendChild(tr);
+    });
+    table.appendChild(tb);
+  });
+  sheet.appendChild(table);
+
+  var note = 'คอลัมน์รูป: จำนวนรูปสินค้า / จำนวนรูป Invoice (ตัวหนา = ขาดรูปอย่างใดอย่างหนึ่ง) ดูรูปได้ในแอปบันทึกการรับสินค้า';
+  if (more) note = 'รายงานนี้แสดงเฉพาะ ' + receipts.length + ' ครั้งแรกของวัน   ' + note;
+  sheet.appendChild(el('div', 'nt', note));
+
+  var sg = el('div', 'sg');
+  ['ผู้จัดทำ', 'ผู้ตรวจสอบ'].forEach(function(role){
+    var d = el('div');
+    d.appendChild(el('div', '', 'ลงชื่อ ........................................................'));
+    d.appendChild(el('div', '', '(........................................................)'));
+    d.appendChild(el('div', '', role + '     วันที่ ......../......../............'));
+    sg.appendChild(d);
+  });
+  sheet.appendChild(sg);
+}
+
+async function loadReport(){
+  var msg = $('reportMsg'), wrap = $('sheetWrap'), day = $('reportDay').value;
+  wrap.className = 'sheetwrap hide'; $('printReport').disabled = true;
+  msg.className = 'hint';
+  if (!day) { msg.textContent = 'เลือกวันที่ของรายงาน'; return; }
+  if (needPin && !$('pin').value) { msg.textContent = 'ใส่รหัส PIN ด้านบนก่อน แล้วกดแท็บนี้อีกครั้ง'; return; }
+  msg.textContent = 'กำลังโหลด...';
+  try {
+    var res = await api('/api/receipts?date=' + encodeURIComponent(day));
+    if (!res.ok) { msg.textContent = 'โหลดไม่สำเร็จ: ' + await readError(res); return; }
+    var data = await res.json();
+    if ($('reportDay').value !== day) return;   // the date was changed while this one was loading
+    remember('pin', $('pin').value);
+    drawReport(data.day, data.receipts, data.more);
+    msg.className = 'hide'; wrap.className = 'sheetwrap'; $('printReport').disabled = false;
+  } catch (e) { msg.textContent = 'โหลดไม่สำเร็จ: เชื่อมต่อไม่ได้ ตรวจสอบอินเทอร์เน็ต'; }
 }
 </script>
 </body>
