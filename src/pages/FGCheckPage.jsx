@@ -34,9 +34,11 @@ export default function FGCheckPage() {
   const [error, setError] = useState(null)
   const [saved, setSaved] = useState(null)
   const [rows, setRows] = useState([])
+  const [pending, setPending] = useState(null) // batches made the day before that still need this check
   const load = () => fgCheckApi.list({ from: date, to: date }).then(setRows).catch((e) => setError(e.message))
   useEffect(() => { fgCheckApi.packSizes().then((l) => setSizes(l.filter((x) => x.active))).catch((e) => setError(e.message)) }, [])
   useEffect(() => { load() }, [date])
+  useEffect(() => { fgCheckApi.pending(date).then(setPending).catch(() => setPending(null)) }, [date, saved])
   useEffect(() => {
     if (!f.product_code) { setBatches([]); return }
     weighApi.list({ product_code: f.product_code, from: addDays(date, -30), to: date }).then((l) => setBatches([...new Set(l.map((w) => w.batch_no))])).catch(() => setBatches([]))
@@ -87,6 +89,23 @@ export default function FGCheckPage() {
       )}
 
       <div className="bg-white rounded-xl shadow p-4 space-y-3 mb-4">
+        {pending && (
+          <div className={`rounded-lg border p-2.5 ${pending.pending.length ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+            <div className="text-xs font-semibold text-gray-800">
+              ตรวจ FG ที่ผลิตเมื่อวาน ({pending.produced_on.slice(8)}/{pending.produced_on.slice(5, 7)}) — {pending.pending.length ? `รอตรวจ ${pending.pending.length} จาก ${pending.made} Batch · แตะเพื่อเลือก` : pending.made ? `ตรวจครบแล้ว ${pending.made} Batch` : 'เมื่อวานไม่มีการผลิต'}
+            </div>
+            {pending.pending.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {pending.pending.map((b) => (
+                  <button key={`${b.product_code}-${b.batch_no}`} type="button" onClick={() => setF((x) => ({ ...x, product_code: b.product_code, batch_no: b.batch_no }))}
+                    className={`text-xs px-2.5 py-1 rounded-lg border ${f.product_code === b.product_code && f.batch_no === b.batch_no ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white border-amber-300 text-gray-700'}`}>
+                    {b.product_name || b.product_code} · {b.batch_no}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <label className="text-xs text-gray-600">วันที่ตรวจ<input type="date" max={bkkToday()} value={date} onChange={(e) => setDate(e.target.value || bkkToday())} className={input} /></label>
           <label className="text-xs text-gray-600 col-span-2">ผลิตภัณฑ์ *<select value={f.product_code} onChange={(e) => set('product_code', e.target.value)} className={input}>

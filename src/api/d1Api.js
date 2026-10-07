@@ -169,6 +169,7 @@ export const fgCheckApi = {
   packSizes: () => request('/api/pack-sizes'),
   list: (params = {}) => request(`/api/fgcheck?${new URLSearchParams(params)}`),
   save: (body) => post('/api/fgcheck', body),
+  pending: (date) => request(`/api/fgcheck/pending?date=${date}`),
 }
 
 export const coldApi = {

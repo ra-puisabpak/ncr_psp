@@ -353,7 +353,7 @@ check('the day lists every product checked with weights, re-checks and results',
 r = await call('GET', '/api/daily-progress?date=2026-10-05', { token: qc });
 check('daily progress is for the QA Manager only', r.status === 403, r);
 r = await call('GET', '/api/daily-progress?date=2026-10-05', { token: qa });
-check('daily progress counts each form and lists what is missing', r.status === 200 && r.j.fgcheck.done === 4 && r.j.fgcheck.expected === 0 && r.j.prodctl.done === 0
+check('daily progress counts each form and lists what is missing', r.status === 200 && r.j.fgcheck.done === 0 && r.j.fgcheck.expected === 0 && r.j.fgcheck.produced_on === '2026-10-04' && r.j.prodctl.done === 0
   && r.j.hygiene.expected >= 0 && Array.isArray(r.j.cold.missing) && r.j.oil.expected_stages === 3, r.j);
 
 // conditional acceptance
@@ -720,7 +720,14 @@ check('tracing a raw-material lot finds the batches that weighed it', r.status =
 r = await call('POST', '/api/weigh', { token: qc, body: wBody({ batch_no: 'B260922-09', lines: linesFor().map((l, i) => (i ? l : { ...l, lot: '' })) }) });
 check('a line may leave its raw-material lot blank', r.status === 201 && r.j.result === 'PASS', r);
 r = await call('GET', '/api/daily-progress?date=2026-09-22', { token: qa });
-check('batches weighed but not yet in production control or final check are listed as missing', r.status === 200 && r.j.weigh.done >= 3 && r.j.prodctl.missing.length === r.j.weigh.done && r.j.fgcheck.missing.length === r.j.weigh.done, r.j);
+check('batches weighed but not yet in production control are listed as missing', r.status === 200 && r.j.weigh.done >= 3 && r.j.prodctl.missing.length === r.j.weigh.done, r.j);
+r = await call('GET', '/api/daily-progress?date=2026-09-23', { token: qa });
+check('the final check expects the batches produced the day before', r.status === 200 && r.j.fgcheck.expected >= 3 && r.j.fgcheck.missing.length === r.j.fgcheck.expected && r.j.fgcheck.produced_on === '2026-09-22', r.j);
+r = await call('GET', '/api/fgcheck/pending?date=2026-09-23', { token: qc });
+check('staff see which batches made yesterday still need the final check', r.status === 200 && r.j.produced_on === '2026-09-22' && r.j.pending.length === r.j.made && r.j.made >= 3, r.j);
+r = await call('POST', '/api/fgcheck', { token: qc, body: { uid: 'fgc-yday-0001', check_date: '2026-09-23', product_code: 'FG0004', product_name: 'น้ำพริกหมูเสวย', batch_no: 'B260922-01', pack_key: 'J210', gross: [251, 252], sensory: { appearance: true, color: true, odor: true, taste: true }, pack: { pack_ok: true, seal_ok: true, label_ok: true } } });
+r = await call('GET', '/api/fgcheck/pending?date=2026-09-23', { token: qc });
+check('a batch checked the next day leaves the pending list', r.j.pending.length === r.j.made - 1 && !r.j.pending.some((x) => x.batch_no === 'B260922-01'), r.j);
 // Two sets in one form: each set is its own batch
 const twoSets = (o = {}, w2 = {}) => wBody({ prod_date: '2026-09-24', batch_no: 'B260924-01', sets: 2, batches: ['B260924-01', 'B260924-02'],
   lines: fgItems.map((it) => ({ name: it.name, lot: `LOT-${it.name}`, weights: [it.target, w2[it.name] ?? it.target] })), ...o });
