@@ -767,6 +767,8 @@ CREATE TABLE IF NOT EXISTS suppliers (
   updated_at TEXT NOT NULL DEFAULT '2026-10-07T00:00:00Z'
 );
 INSERT OR IGNORE INTO suppliers (name,kind,sort) VALUES ('Makro','RETAIL',1),('ตลาดสด','MARKET',2);
+-- Names already typed into receiving records join the list (QA can switch duplicates off).
+INSERT OR IGNORE INTO suppliers (name,kind,sort) SELECT DISTINCT trim(supplier),'COMPANY',100 FROM recv_records WHERE trim(supplier)<>'' AND lower(trim(supplier)) NOT IN (SELECT lower(name) FROM suppliers);
 -- A receiving record entered wrongly is voided by the QA Manager (kept, never deleted); it then leaves every list and count.
 CREATE TABLE IF NOT EXISTS recv_voids (
   doc_no    TEXT PRIMARY KEY,
