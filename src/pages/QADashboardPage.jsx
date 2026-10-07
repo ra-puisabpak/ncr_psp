@@ -37,6 +37,7 @@ export default function QADashboardPage() {
   const [summary, setSummary] = useState(null)
   const [points, setPoints] = useState([])
   const [loading, setLoading] = useState(true)
+  const [showCp, setShowCp] = useState(false)
   const [error, setError] = useState(null)
 
   const load = async () => {
@@ -52,6 +53,7 @@ export default function QADashboardPage() {
   const active = points.filter((c) => c.status !== 'RETIRED')
   const approved = active.filter((c) => c.status === 'APPROVED').length
   const byCp = Object.fromEntries((summary?.byCp || []).map((r) => [r.cp_id, r]))
+  const cpToday = (summary?.byCp || []).reduce((t, r) => ({ total: t.total + (r.total || 0), fail: t.fail + (r.fail || 0) }), { total: 0, fail: 0 })
   const cpName = Object.fromEntries(points.map((c) => [c.cp_id, c.name]))
 
   const pageActions = (
@@ -108,7 +110,7 @@ export default function QADashboardPage() {
           <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center shrink-0"><Scale className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">บันทึกการชั่งวัตถุดิบ</div>
-            <div className="text-[11px] text-gray-500">{FORMS.WEIGH.code} · ตามสูตร พร้อม LOT วัตถุดิบ</div>
+            <div className="text-[11px] text-gray-500">{FORMS.WEIGH.code} · น้ำหนักวัตถุดิบต่อ Batch</div>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
@@ -160,25 +162,39 @@ export default function QADashboardPage() {
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </a>
-        {active.map((c) => {
-          const today = byCp[c.cp_id]
-          return (
-            <button key={c.cp_id} onClick={() => navigate(`/qa/record/${c.cp_id}`)}
-              className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition text-left">
-              <div className="w-10 h-10 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0"><ClipboardCheck className="w-5 h-5" /></div>
-              <div className="min-w-0 flex-1">
-                <div className="font-semibold text-sm text-gray-800 truncate">{c.name}</div>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  <Badge cls={CP_TYPE_CLS[c.cp_type]}>{CP_TYPE_TH[c.cp_type]}</Badge>
-                  <Badge cls={CP_STATUS_CLS[c.status]}>{CP_STATUS_TH[c.status]}</Badge>
-                  {today && <Badge cls={today.fail ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}>{today.total} บันทึก{today.fail ? ` · ไม่ผ่าน ${today.fail}` : ''}</Badge>}
-                </div>
-              </div>
-              <ChevronRight className="w-4 h-4 text-gray-300" />
-            </button>
-          )
-        })}
       </div>
+
+      {active.length > 0 && (
+        <div className="mb-6">
+          <button type="button" onClick={() => setShowCp((v) => !v)} className="w-full flex items-center gap-2 text-left bg-white rounded-xl shadow px-4 py-3">
+            <ListChecks className="w-5 h-5 text-teal-700 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-sm text-gray-800">บันทึกจุดควบคุมโดยตรง (CCP / OPRP / PRP)</div>
+              <div className="text-[11px] text-gray-500">{active.length} จุด · CCP-01 / CCP-02 / OPRP-05 ระบบบันทึกให้จากแบบฟอร์มควบคุมการผลิตอยู่แล้ว</div>
+            </div>
+            {cpToday.fail > 0 && <Badge cls="bg-red-100 text-red-700">ไม่ผ่าน {cpToday.fail}</Badge>}
+            {cpToday.total > 0 && <Badge cls="bg-slate-100 text-slate-600">วันนี้ {cpToday.total}</Badge>}
+            <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${showCp ? 'rotate-90' : ''}`} />
+          </button>
+          {showCp && (
+            <div className="bg-white rounded-xl shadow mt-2 divide-y divide-gray-100">
+              {active.map((c) => {
+                const today = byCp[c.cp_id]
+                return (
+                  <button key={c.cp_id} onClick={() => navigate(`/qa/record/${c.cp_id}`)} className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50">
+                    <span className="font-mono text-[11px] text-gray-400 w-16 shrink-0">{c.cp_id}</span>
+                    <span className="min-w-0 flex-1 text-sm text-gray-800 truncate">{c.name}</span>
+                    <Badge cls={CP_TYPE_CLS[c.cp_type]}>{CP_TYPE_TH[c.cp_type]}</Badge>
+                    {today && <Badge cls={today.fail ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}>{today.total}{today.fail ? ` · ไม่ผ่าน ${today.fail}` : ''}</Badge>}
+                    <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+                  </button>
+                )
+              })}
+              <div className="px-3 py-2 text-[11px] text-gray-500">สถานะ "รอ validate" ของทุกจุดดูและกำหนดเกณฑ์ที่ทะเบียนจุดควบคุม (QA Manager)</div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-bold text-gray-700">บันทึกล่าสุด</h2>
