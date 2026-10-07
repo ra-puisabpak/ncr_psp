@@ -40,7 +40,8 @@ export default function WeighPrintPage() {
 
   // One column per set: a one-set record is headed by its Batch No.; a record of several sets (older forms) by Batch No. + set.
   const cols = (recs || []).flatMap((r) => Array.from({ length: r.sets }, (_, s) => ({ r, s, head: r.sets > 1 ? `${r.batch_no} ชุด ${s + 1}` : r.batch_no })))
-  const width = Math.max(4, cols.length)
+  const width = Math.max(1, cols.length)
+  const wcol = width > 5 ? `${Math.floor(90 / width)}mm` : '20mm'
   const first = recs?.[0]
   // Rows: every raw material named in any of the day's records, in formula order.
   const names = uniq((recs || []).flatMap((r) => r.lines.map((l) => l.name)))
@@ -77,13 +78,14 @@ export default function WeighPrintPage() {
             <div><b>Batch:</b> {recs.map((r) => r.batch_no).join(', ')}</div>
             <div><b>เครื่องชั่ง:</b> {uniq(recs.map((r) => r.scale_id)).join(', ') || '-'}</div>
           </div>
-          <table className="w-full border-collapse text-center">
+          <table className="w-full border-collapse text-center table-fixed">
+            <colgroup><col style={{ width: '9mm' }} /><col /><col style={{ width: '24mm' }} /><col style={{ width: '28mm' }} />{Array.from({ length: width }, (_, i) => <col key={i} style={{ width: wcol }} />)}</colgroup>
             <thead className="bg-violet-50">
               <tr>
                 <th className={td} rowSpan={2}>ลำดับ</th><th className={td} rowSpan={2}>รายการวัตถุดิบ</th><th className={td} rowSpan={2}>น้ำหนักที่กำหนด (กก./ชุด)</th>
                 <th className={td} rowSpan={2}>ผู้ชั่ง</th><th className={td} colSpan={width}>น้ำหนักวัตถุดิบ (กก.)</th>
               </tr>
-              <tr>{Array.from({ length: width }, (_, i) => <th key={i} className={`${td} w-[9%]`}>{cols[i] ? cols[i].head : 'Batch No.'}</th>)}</tr>
+              <tr>{Array.from({ length: width }, (_, i) => <th key={i} className={td}>{cols[i] ? cols[i].head : 'Batch No.'}</th>)}</tr>
             </thead>
             <tbody>
               {names.map((name, i) => {
