@@ -545,6 +545,9 @@ INSERT OR IGNORE INTO formulas (product_code,product_name,version,status,toleran
 -- Roasted ground chili: a single ingredient, 100% (100 kg per set).
 INSERT OR IGNORE INTO formulas (product_code,product_name,version,status,tolerance_pct,items,source,updated_by,updated_at) VALUES
 ('FG0011','พริกคั่วป่น 100%',1,'DRAFT',NULL,'[{"name": "พริกแห้ง (เด็ดขั้ว)", "target": 100}]','สูตร 100% (QA Manager)','system','2026-10-07T00:00:00Z');
+-- Vegetarian mushroom chili paste (FG0012), from the handwritten PD_03 sheet dated 05/10/2026; all amounts in kg (ml items: 1,000 ml = 1).
+INSERT OR IGNORE INTO formulas (product_code,product_name,version,status,tolerance_pct,items,source,updated_by,updated_at) VALUES
+('FG0012','น้ำพริกเห็ดหอม (สูตรเจ)',1,'DRAFT',NULL,'[{"name":"เห็ดหอม","target":10},{"name":"พริกแห้งคั่ว","target":0.8,"note":"ใบเดิมเขียน 800 g — อ่านชื่อรายการจากลายมือ ให้ตรวจชื่อ"},{"name":"พริกใหญ่","target":1.5,"note":"ใบเดิมเขียน 1.5 kg — อ่านชื่อรายการจากลายมือ ให้ตรวจชื่อ"},{"name":"น้ำมันปาล์ม","target":5.5,"note":"ใบเดิมวัดเป็นปริมาตร 5,500 ml — ตั้งเป็น 5.5 (1,000 ml = 1) ยืนยันวิธีชั่ง/ตวง"},{"name":"ซีอิ๊วขาว","target":2,"note":"ใบเดิมวัดเป็นปริมาตร 2,000 ml — ตั้งเป็น 2 (1,000 ml = 1) ยืนยันวิธีชั่ง/ตวง"},{"name":"แม็กกี้","target":1,"note":"ใบเดิมวัดเป็นปริมาตร 1,000 ml — ตั้งเป็น 1 (1,000 ml = 1) ยืนยันวิธีชั่ง/ตวง"},{"name":"เกลือเล็ก","target":1},{"name":"น้ำตาลปี๊บ","target":3},{"name":"ชูรส","target":0.8,"note":"ยืนยันว่าอยู่ในสูตรที่ขึ้นทะเบียนและฉลาก"},{"name":"โพแทสเซียม ซอร์เบต","target":0.01,"note":"วัตถุเจือปนอาหาร — ยืนยันชนิด ปริมาณสูงสุดตามประกาศ สธ. และการแสดงบนฉลาก"}]','ใบชั่งวัตถุดิบ PD_03 น้ำพริกเห็ดเจ (ลงวันที่ 05/10/2026) — หน่วยทั้งหมด กก.','system','2026-10-07T12:30:00Z');
 
 -- One weighing record (PD_03) of one production batch: every line with its raw-material lot and the weight of each set.
 CREATE TABLE IF NOT EXISTS weigh_records (
