@@ -349,6 +349,12 @@ r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ sensory: { ap
 check('every sensory check needs a result', r.status === 400, r);
 r = await call('GET', '/api/fgcheck?from=2026-10-05&to=2026-10-05', { token: qc });
 check('the day lists every product checked with weights, re-checks and results', r.status === 200 && r.j.length === 4 && r.j.some((x) => x.pack_key === 'J60' && x.aw === null) && r.j.some((x) => x.recheck[1]?.net === 211.5), r.j.length);
+// Daily progress for the QA Manager
+r = await call('GET', '/api/daily-progress?date=2026-10-05', { token: qc });
+check('daily progress is for the QA Manager only', r.status === 403, r);
+r = await call('GET', '/api/daily-progress?date=2026-10-05', { token: qa });
+check('daily progress counts each form and lists what is missing', r.status === 200 && r.j.fgcheck.done === 4 && r.j.fgcheck.expected === 0 && r.j.prodctl.done === 0
+  && r.j.hygiene.expected >= 0 && Array.isArray(r.j.cold.missing) && r.j.oil.expected_stages === 3, r.j);
 
 // conditional acceptance
 const condBody = (uid, note) => { const x = recvBody(uid, ''); x.record.mats = [{ idx: 1, code: 'PKG-001', result: 'COND', note, condBy: 'someone else', photo1: null, photo2: null }]; return x; };
@@ -713,6 +719,8 @@ r = await call('GET', '/api/trace?q=LOT-หมูบด', { token: qc });
 check('tracing a raw-material lot finds the batches that weighed it', r.status === 200 && r.j.weighings.length === 3 && r.j.weighings.some((w) => w.batch_no === 'B260922-02' && w.lots.some((l) => l.kg === 46.51)), r.j.weighings);
 r = await call('POST', '/api/weigh', { token: qc, body: wBody({ batch_no: 'B260922-09', lines: linesFor().map((l, i) => (i ? l : { ...l, lot: '' })) }) });
 check('a line may leave its raw-material lot blank', r.status === 201 && r.j.result === 'PASS', r);
+r = await call('GET', '/api/daily-progress?date=2026-09-22', { token: qa });
+check('batches weighed but not yet in production control or final check are listed as missing', r.status === 200 && r.j.weigh.done >= 3 && r.j.prodctl.missing.length === r.j.weigh.done && r.j.fgcheck.missing.length === r.j.weigh.done, r.j);
 // Two sets in one form: each set is its own batch
 const twoSets = (o = {}, w2 = {}) => wBody({ prod_date: '2026-09-24', batch_no: 'B260924-01', sets: 2, batches: ['B260924-01', 'B260924-02'],
   lines: fgItems.map((it) => ({ name: it.name, lot: `LOT-${it.name}`, weights: [it.target, w2[it.name] ?? it.target] })), ...o });

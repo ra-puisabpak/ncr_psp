@@ -30,6 +30,34 @@ function Tile({ icon: Icon, label, value, sub, tone, to }) {
   return to ? <Link to={to} className={`${cls} hover:shadow-md transition`}>{body}</Link> : <div className={cls}>{body}</div>
 }
 
+const PROG_CLS = { ok: 'bg-green-100 text-green-700', part: 'bg-amber-100 text-amber-800', none: 'bg-red-100 text-red-700', info: 'bg-sky-100 text-sky-800', idle: 'bg-gray-100 text-gray-500' }
+const STAGE_SHORT = { BEFORE: 'ก่อน', DURING: 'ระหว่าง', AFTER: 'หลัง' }
+const names = (l) => (l.length > 3 ? `${l.slice(0, 3).join(', ')} +${l.length - 3}` : l.join(', '))
+
+// One line under a form card: what has been recorded, and who/what is still missing.
+function Prog({ k, prog }) {
+  if (!prog) return null
+  const d = prog[k]
+  let cls, text, miss = ''
+  if (k === 'receiving') { cls = d.done ? 'info' : 'idle'; text = d.done ? `${d.done} ใบ · ${d.items} รายการ` : 'ยังไม่มีบันทึก' }
+  else if (k === 'weigh') { cls = d.done ? 'info' : 'idle'; text = d.done ? `${d.done} Batch` : 'ยังไม่มีบันทึก' }
+  else if (k === 'oil') {
+    const have = new Set(d.stages)
+    cls = have.size >= 3 ? 'ok' : have.size ? 'part' : 'idle'
+    text = `${d.done} ครั้ง · ${['BEFORE', 'DURING', 'AFTER'].map((x) => `${STAGE_SHORT[x]} ${have.has(x) ? '✓' : '–'}`).join(' ')}`
+  } else {
+    cls = d.expected === 0 ? (d.done ? 'info' : 'idle') : d.done >= d.expected ? 'ok' : d.done ? 'part' : 'none'
+    text = d.expected ? `${d.done}/${d.expected}${k === 'cold' ? ' ช่อง' : k === 'hygiene' ? ' คน' : ' Batch'}` : d.done ? `${d.done} รายการ` : 'ยังไม่มีบันทึก'
+    if (d.missing?.length) miss = `ขาด: ${names(d.missing)}`
+  }
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+      <Badge cls={PROG_CLS[cls]}>{prog.date === bkkToday() ? 'วันนี้' : prog.date.slice(5)} {text}</Badge>
+      {miss && <span className="text-[10.5px] text-red-700 truncate max-w-full">{miss}</span>}
+    </div>
+  )
+}
+
 export default function QADashboardPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -38,6 +66,7 @@ export default function QADashboardPage() {
   const [points, setPoints] = useState([])
   const [loading, setLoading] = useState(true)
   const [showCp, setShowCp] = useState(false)
+  const [prog, setProg] = useState(null) // how much each form has recorded today (QA Manager only)
   const [error, setError] = useState(null)
 
   const load = async () => {
@@ -49,6 +78,17 @@ export default function QADashboardPage() {
     finally { setLoading(false) }
   }
   useEffect(() => { load() }, [date]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Live count of what each form has recorded on the chosen day: every 30 s, and when the tab comes back to the front.
+  useEffect(() => {
+    if (user?.role !== 'QA_MANAGER') return undefined
+    let stop = false
+    const pull = () => qaApi.dailyProgress(date).then((p) => { if (!stop) setProg(p) }).catch(() => {})
+    pull()
+    const t = setInterval(pull, 30000)
+    const vis = () => { if (document.visibilityState === 'visible') pull() }
+    document.addEventListener('visibilitychange', vis)
+    return () => { stop = true; clearInterval(t); document.removeEventListener('visibilitychange', vis) }
+  }, [date, user?.role])
 
   const active = points.filter((c) => c.status !== 'RETIRED')
   const approved = active.filter((c) => c.status === 'APPROVED').length
@@ -104,13 +144,17 @@ export default function QADashboardPage() {
         </Link>
       </div>
 
-      <h2 className="text-sm font-bold text-gray-700 mb-2">บันทึกตรวจ</h2>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-sm font-bold text-gray-700">บันทึกตรวจ</h2>
+        {prog && <span className="text-[11px] text-gray-500 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />สด · ข้อมูล{date === bkkToday() ? 'วันนี้' : ` ${date}`} · อัปเดต {prog.at}</span>}
+      </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
         <Link to="/qa/weigh" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
           <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center shrink-0"><Scale className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">บันทึกการชั่งวัตถุดิบ</div>
             <div className="text-[11px] text-gray-500">{FORMS.WEIGH.code} · น้ำหนักวัตถุดิบต่อ Batch</div>
+            {user?.role === 'QA_MANAGER' && <Prog k="weigh" prog={prog} />}
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
@@ -119,6 +163,7 @@ export default function QADashboardPage() {
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">แบบฟอร์มควบคุมการผลิต</div>
             <div className="text-[11px] text-gray-500">{FORMS.PRODCTL.code} · ทอด/เจียว ผัดฆ่าเชื้อ พักเย็น → CCP อัตโนมัติ</div>
+            {user?.role === 'QA_MANAGER' && <Prog k="prodctl" prog={prog} />}
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
@@ -127,6 +172,7 @@ export default function QADashboardPage() {
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">คุณภาพน้ำมันทอด</div>
             <div className="text-[11px] text-gray-500">{FORMS.OIL.code} · TPM และอุณหภูมิ</div>
+            {user?.role === 'QA_MANAGER' && <Prog k="oil" prog={prog} />}
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
@@ -135,6 +181,7 @@ export default function QADashboardPage() {
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">อุณหภูมิตู้เย็น / ตู้แช่แข็ง</div>
             <div className="text-[11px] text-gray-500">{FORMS.COLD.code} · 08:00 · 11:00 · 15:00 · 17:00</div>
+            {user?.role === 'QA_MANAGER' && <Prog k="cold" prog={prog} />}
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
@@ -143,6 +190,7 @@ export default function QADashboardPage() {
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">ตรวจสอบผลิตภัณฑ์สุดท้าย</div>
             <div className="text-[11px] text-gray-500">{FORMS.FG_CHECK.code} · น้ำหนักสุทธิหลังหักกระปุก aw pH บรรจุภัณฑ์</div>
+            {user?.role === 'QA_MANAGER' && <Prog k="fgcheck" prog={prog} />}
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
@@ -151,6 +199,7 @@ export default function QADashboardPage() {
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">สุขลักษณะส่วนบุคคล</div>
             <div className="text-[11px] text-gray-500">{FORMS.HYGIENE.code} · ตรวจก่อนเข้างาน{summary ? ` · ${date === bkkToday() ? 'วันนี้' : date} ${summary.hygTotal} คน${summary.hygFail ? ` · ไม่ผ่าน ${summary.hygFail}` : ''}` : ''}</div>
+            {user?.role === 'QA_MANAGER' && <Prog k="hygiene" prog={prog} />}
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
@@ -159,6 +208,7 @@ export default function QADashboardPage() {
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">ตรวจรับวัตถุดิบ</div>
             <div className="text-[11px] text-gray-500">{FORMS.RECEIVING.code} · บันทึกการตรวจรับ</div>
+            {user?.role === 'QA_MANAGER' && <Prog k="receiving" prog={prog} />}
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </a>

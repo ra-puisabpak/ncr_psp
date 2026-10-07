@@ -123,6 +123,7 @@ export const supplierApi = {
 
 // PSP QUALITY APP: control point register and monitoring records.
 export const qaApi = {
+  dailyProgress: (date) => request(`/api/daily-progress?date=${date}`),
   controlPoints: () => request('/api/control-points'),
   createControlPoint: (body) => post('/api/control-points', body),
   updateControlPoint: (id, body) => patch(`/api/control-points/${enc(id)}`, body),

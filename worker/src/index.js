@@ -1459,6 +1459,39 @@ export default {
           `SELECT * FROM qc_records WHERE ${where.join(' AND ')} ORDER BY record_date DESC, rec_id DESC LIMIT ?`).bind(...p, limit).all();
         return json(results.map((r) => ({ ...r, values: JSON.parse(r.values), failed: r.failed ? JSON.parse(r.failed) : [] })));
       }
+      // How much each form has been recorded on a day, for the QA Manager to check the team has recorded everything.
+      if (path === '/api/daily-progress' && method === 'GET') {
+        need(user, QAM, 'ดูได้เฉพาะ QA Manager');
+        const day = isDate(url.searchParams.get('date')) ? url.searchParams.get('date') : today();
+        const nowHm = bkk().slice(11, 16);
+        const first = async (sql, ...a) => (await DB.prepare(sql).bind(...a).first()) || {};
+        const all = async (sql, ...a) => (await DB.prepare(sql).bind(...a).all()).results;
+        const label = (r) => `${r.product_name || r.product_code} ${r.batch_no}`;
+        const weighed = await all('SELECT product_code, product_name, batch_no FROM weigh_records WHERE prod_date=? ORDER BY wr_id', day);
+        const prodctl = await all('SELECT product_code, batch_no FROM prod_controls WHERE prod_date=?', day);
+        const fgc = await all('SELECT product_code, batch_no FROM fg_checks WHERE check_date=?', day);
+        const missingFrom = (done) => weighed.filter((w) => !done.some((d) => d.product_code === w.product_code && d.batch_no === w.batch_no)).map(label);
+        const recv = await first("SELECT COUNT(*) AS n, COALESCE(SUM(json_array_length(json_extract(data,'$.mats'))),0) AS items FROM recv_records WHERE recv_date=?", day);
+        const oil = await all('SELECT DISTINCT stage FROM oil_checks WHERE check_date=?', day);
+        const oilN = await first('SELECT COUNT(*) AS n FROM oil_checks WHERE check_date=?', day);
+        const units = await all('SELECT unit_id, name FROM cold_units WHERE active=1 ORDER BY unit_id');
+        const reads = await all("SELECT unit_id, slot FROM cold_readings WHERE read_date=? AND slot<>'RECHECK'", day);
+        const SLOTS = ['08:00', '11:00', '15:00', '17:00'];
+        const dueSlots = SLOTS.filter((t) => day < today() || t <= nowHm);
+        const coldMissing = units.flatMap((u) => dueSlots.filter((t) => !reads.some((r) => r.unit_id === u.unit_id && r.slot === t)).map((t) => `${u.unit_id} ${t}`));
+        const emps = await all('SELECT emp_id, name FROM hyg_employees WHERE active=1 ORDER BY name');
+        const checked = new Set((await all('SELECT DISTINCT emp_id FROM hyg_records WHERE inspect_date=?', day)).map((r) => r.emp_id));
+        return json({
+          date: day, at: bkk().slice(11, 19),
+          receiving: { done: recv.n, items: recv.items },
+          weigh: { done: weighed.length },
+          prodctl: { done: prodctl.length, expected: weighed.length, missing: missingFrom(prodctl) },
+          oil: { done: oilN.n, stages: oil.map((r) => r.stage), expected_stages: 3 },
+          cold: { done: units.length * dueSlots.length - coldMissing.length, expected: units.length * dueSlots.length, missing: coldMissing, slots_due: dueSlots },
+          fgcheck: { done: fgc.length, expected: weighed.length, missing: missingFrom(fgc) },
+          hygiene: { done: emps.filter((e) => checked.has(e.emp_id)).length, expected: emps.length, missing: emps.filter((e) => !checked.has(e.emp_id)).map((e) => e.name) },
+        });
+      }
       if (path === '/api/qc/summary' && method === 'GET') {
         const day = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('date') || '') ? url.searchParams.get('date') : today();
         const { results: byCp } = await DB.prepare(
