@@ -13,6 +13,8 @@ ENVIRONMENT = "production"
 ALLOWED_ORIGINS = "https://puisabpak-ncr.pages.dev,https://puisabpak-receiving.rapuisabpak.workers.dev"
 # Production-side checks open NCRs automatically when "on". "off" during the trial (receiving NCs are not affected).
 AUTO_NCR_PRODUCTION = "off"
+# Receiving NCs become NCRs when "on". "off": NCs are followed up and closed in the receiving app (with the re-check result).
+AUTO_NCR_RECEIVING = "off"
 
 # Secret (set from the GitHub secret SETUP_KEY by the deploy workflow): SETUP_KEY
 

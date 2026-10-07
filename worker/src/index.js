@@ -18,6 +18,9 @@ const QA = new Set(['QA_MANAGER', 'FSTL']);
 // Production-side checks (CCP/OPRP records, FM-QC-002, FM-QC-005, FM-QC-006) open NCRs only when
 // AUTO_NCR_PRODUCTION = "on". Off during the trial: a failed check is still recorded as FAIL. Receiving NCs are unaffected.
 let AUTO_NCR = false;
+// Receiving NCs become NCRs only when AUTO_NCR_RECEIVING = "on". Off: an NC (NC-YYMM-NNN) is followed up and closed
+// in the receiving app with what was done and the re-check result, with no NCR.
+let AUTO_NCR_RECV = false;
 const COND_ROLES = new Set(['QA_MANAGER', 'FSTL', 'SUPERVISOR', 'QC']); // who may receive material with conditions
 const ASSESSORS = new Set(['QA_MANAGER', 'FSTL', 'SUPERVISOR']); // who may assess a weighing out of tolerance (FM-QC-004)
 
@@ -487,6 +490,7 @@ const DERIVED_CPS = ['CCP-01', 'CCP-02', 'OPRP-05'];
 export default {
   async fetch(req, env) {
     AUTO_NCR = env.AUTO_NCR_PRODUCTION === 'on';
+    AUTO_NCR_RECV = env.AUTO_NCR_RECEIVING === 'on';
     const url = new URL(req.url);
     const path = url.pathname.replace(/\/+$/, '') || '/';
     const method = req.method;
@@ -551,7 +555,7 @@ export default {
             .bind(await sha256(token), username, expires),
         ]);
         await audit(DB, username, 'user', 'login', 'user', username, null);
-        return json({ token, expires_at: expires, user: { username, display_name: u.display_name, role: u.role, auto_ncr: AUTO_NCR } });
+        return json({ token, expires_at: expires, user: { username, display_name: u.display_name, role: u.role, auto_ncr: AUTO_NCR, auto_ncr_recv: AUTO_NCR_RECV } });
       }
 
       // ----- supplier link endpoints (the token is the only credential; no login) -----
@@ -649,7 +653,7 @@ export default {
       const user = await currentUser(req, DB);
 
       if (method === 'GET' && path === '/api/me') {
-        return json({ username: user.username, display_name: user.display_name, role: user.role, auto_ncr: AUTO_NCR });
+        return json({ username: user.username, display_name: user.display_name, role: user.role, auto_ncr: AUTO_NCR, auto_ncr_recv: AUTO_NCR_RECV });
       }
       if (method === 'POST' && path === '/api/logout') {
         await DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(user.token_hash).run();
@@ -1060,7 +1064,7 @@ export default {
       };
       // Every NC raised at receiving is an NCR in the e-Form from the start, so both apps show one number.
       const nextNcrIds = async (count) => {
-        const first = await nextId(DB, 'ncr_records', 'ncr_id', 'NCR');
+        const first = AUTO_NCR_RECV ? await nextId(DB, 'ncr_records', 'ncr_id', 'NCR') : await nextId(DB, 'recv_nc', 'nc_id', 'NC');
         const cut = first.lastIndexOf('-') + 1, n0 = parseInt(first.slice(cut), 10), stem = first.slice(0, cut);
         return Array.from({ length: count }, (_, i) => stem + String(n0 + i).padStart(3, '0'));
       };
@@ -1159,6 +1163,7 @@ export default {
             'INSERT INTO recv_photos (doc_no,mat_idx,slot,content_type,size,data,created_by,created_at) VALUES (?,?,?,?,?,?,?,?)'
           ).bind(docNo, p.idx, p.slot, p.ph.type, p.ph.size, p.ph.b64, user.username, nowIso()));
           ncList.forEach((nc, i) => {
+            if (!AUTO_NCR_RECV) { stmts.push(ncInsert(ncIds[i], recvUid(nc.uid), docNo, nc)); return; }
             stmts.push(ncrFromNc(ncIds[i], docNo, nc, rec), ncInsert(ncIds[i], recvUid(nc.uid), docNo, nc));
             // the inspection photos of that item become the NCR's problem photos
             for (const p of photos.filter((x) => x.slot && x.idx === nc.matIdx)) stmts.push(DB.prepare(
@@ -1169,7 +1174,7 @@ export default {
             if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) continue; // another phone took the number first
             throw e;
           }
-          for (const id of ncIds) await audit(DB, user.username, 'user', 'create', 'ncr', id, { source_type: 'RM_RECEIVING', receiving_doc: docNo });
+          for (const id of ncIds) await audit(DB, user.username, 'user', 'create', AUTO_NCR_RECV ? 'ncr' : 'recv_nc', id, { source_type: 'RM_RECEIVING', receiving_doc: docNo });
           await audit(DB, user.username, 'user', 'create', 'recv', docNo, { supplier: rec.supplier, result: worst, items: mats.length, photos: photos.filter((p) => p.slot).length, nc: ncIds });
           return json({ docNo, ncs: ncList.map((nc, i) => ({ uid: nc.uid, id: ncIds[i] })) }, 201);
         }
@@ -1192,19 +1197,19 @@ export default {
           const [id] = await nextNcrIds(1);
           const parent = await DB.prepare('SELECT data, supplier, inspector, recv_date FROM recv_records WHERE doc_no=?').bind(String(nc.docNo)).first();
           const prec = parent ? { ...JSON.parse(parent.data), supplier: parent.supplier, inspector: nz(nc.qa) || parent.inspector, date: parent.recv_date } : null;
-          try { await DB.batch([ncrFromNc(id, String(nc.docNo), nc, prec), ncInsert(id, uid, String(nc.docNo), nc)]); } catch (e) {
+          try { await DB.batch(AUTO_NCR_RECV ? [ncrFromNc(id, String(nc.docNo), nc, prec), ncInsert(id, uid, String(nc.docNo), nc)] : [ncInsert(id, uid, String(nc.docNo), nc)]); } catch (e) {
             if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) continue;
             throw e;
           }
-          await audit(DB, user.username, 'user', 'create', 'ncr', id, { source_type: 'RM_RECEIVING', receiving_doc: nc.docNo, fail_type: nc.failType });
+          await audit(DB, user.username, 'user', 'create', AUTO_NCR_RECV ? 'ncr' : 'recv_nc', id, { source_type: 'RM_RECEIVING', receiving_doc: nc.docNo, fail_type: nc.failType });
           return json({ id }, 201);
         }
       }
-      const rn = path.match(/^\/api\/recv-nc\/(NC\d{3,6}|NCR-\d{4}-\d{3,})$/);
+      const rn = path.match(/^\/api\/recv-nc\/(NC\d{3,6}|NC-\d{4}-\d{3,}|NCR-\d{4}-\d{3,})$/);
       if (rn && method === 'PATCH') {
         need(user, WRITERS);
         const b = await body();
-        const row = await DB.prepare('SELECT status, ncr_id, closed_date FROM recv_nc WHERE nc_id=?').bind(rn[1]).first();
+        const row = await DB.prepare('SELECT status, ncr_id, closed_date, data FROM recv_nc WHERE nc_id=?').bind(rn[1]).first();
         if (!row) fail(404, 'ไม่พบ NC นี้');
         if (rn[1].startsWith('NCR-')) fail(409, 'NC นี้คือ NCR ในระบบ NCR e-Form ให้แก้ไขและปิดในระบบ NCR e-Form');
         const next = { ...row };
@@ -1212,14 +1217,22 @@ export default {
           if (!blank(b.ncrId) && !/^NCR-\d{4}-\d{3,}$/.test(String(b.ncrId))) fail(400, 'รูปแบบเลข NCR ไม่ถูกต้อง');
           next.ncr_id = nz(b.ncrId);
         }
-        if (b.status === 'Closed' && row.status !== 'Closed') { next.status = 'Closed'; next.closed_date = today(); }
+        let data = row.data;
+        if (b.status === 'Closed' && row.status !== 'Closed') {
+          // Closed here (no NCR): what was done and the re-check result are kept with the NC, e.g. re-weighed 3 bags, 10.02 kg each.
+          const closeNote = txt(b.closeNote, 1000);
+          if (!next.ncr_id && !closeNote) fail(400, 'กรุณาระบุการแก้ไขและผลการตรวจซ้ำก่อนปิด NC');
+          next.status = 'Closed'; next.closed_date = today();
+          if (closeNote) data = JSON.stringify({ ...JSON.parse(row.data || '{}'), closeNote, closedBy: user.display_name });
+        }
         const changes = diff(row, next, ['status', 'ncr_id', 'closed_date']);
+        if (data !== row.data) changes.close_note = txt(b.closeNote, 1000);
         if (Object.keys(changes).length) {
-          await DB.prepare('UPDATE recv_nc SET status=?, ncr_id=?, closed_date=?, updated_by=?, updated_at=? WHERE nc_id=?')
-            .bind(next.status, next.ncr_id, next.closed_date, user.username, nowIso(), rn[1]).run();
+          await DB.prepare('UPDATE recv_nc SET status=?, ncr_id=?, closed_date=?, data=?, updated_by=?, updated_at=? WHERE nc_id=?')
+            .bind(next.status, next.ncr_id, next.closed_date, data, user.username, nowIso(), rn[1]).run();
           await audit(DB, user.username, 'user', next.status !== row.status ? 'close' : 'update', 'recv_nc', rn[1], changes);
         }
-        return json({ success: true, status: next.status, closedDate: next.closed_date || '', ncrId: next.ncr_id || '' });
+        return json({ success: true, status: next.status, closedDate: next.closed_date || '', ncrId: next.ncr_id || '', closeNote: JSON.parse(data || '{}').closeNote || '' });
       }
 
       // ===== PSP QUALITY APP: control point register =====

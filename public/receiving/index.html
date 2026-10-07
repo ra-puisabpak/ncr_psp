@@ -84,8 +84,8 @@ async function _syncRun(){
     }
     for(const n of ncLogs.filter(x=>x.synced&&x.dirty)){
       if(isNcr(n)){n.dirty=false;continue;}
-      try{const res=await api('PATCH','/api/recv-nc/'+encodeURIComponent(n.id),{ncrId:n.ncrId||'',status:n.status});
-        n.status=res.status;n.closedDate=res.closedDate;n.ncrId=res.ncrId;n.dirty=false;}catch(e){err=e.message||'เชื่อมต่อไม่ได้';if(e.status!==400)break;}
+      try{const res=await api('PATCH','/api/recv-nc/'+encodeURIComponent(n.id),{ncrId:n.ncrId||'',status:n.status,closeNote:n.closeNote||''});
+        n.status=res.status;n.closedDate=res.closedDate;n.ncrId=res.ncrId;if(res.closeNote)n.closeNote=res.closeNote;n.dirty=false;}catch(e){err=e.message||'เชื่อมต่อไม่ได้';if(e.status!==400)break;}
     }
   }
   saveLocal();renderAll();
@@ -1561,7 +1561,7 @@ function saveRecord(){
     }
   });
   const spInfo=SUPPLIERS.find(s=>s.id===sup)||{name:sup};
-  const subHtml=st=>`Doc: <strong>${escH(rec.docNo)}</strong><br>${rec.mats.length} รายการ | ${escH(spInfo.name)}<br>${st}${ncCreated?'<br>&#x26A0; สร้าง NC อัตโนมัติ<br><button class="bm" style="margin-top:10px;padding:10px;font-size:13px;background:#1e3a8a;color:#fff;width:100%" onclick="closeSaveModal();goS(\'sc-nc\')">&#x1F4DD; ไปหน้า NC Log เพื่อดูเลข NCR</button>':''}`;
+  const subHtml=st=>`Doc: <strong>${escH(rec.docNo)}</strong><br>${rec.mats.length} รายการ | ${escH(spInfo.name)}<br>${st}${ncCreated?'<br>&#x26A0; สร้าง NC อัตโนมัติ<br><button class="bm" style="margin-top:10px;padding:10px;font-size:13px;background:#1e3a8a;color:#fff;width:100%" onclick="closeSaveModal();goS(\'sc-nc\')">&#x1F4DD; ไปหน้า NC Log เพื่อดูเลข '+(ncrOn()?'NCR':'NC')+'</button>':''}`;
   const setSub=st=>{if(_lastRec===rec)document.getElementById('save-sub').innerHTML=subHtml(st);};
   setSub('<span style="color:#e8900a">&#x23F3; กำลังส่งขึ้นฐานข้อมูล...</span>');
   syncAll().then(r=>{
@@ -1642,7 +1642,7 @@ function renderNC(){
       ${br.detail?`<div style="font-size:13px;margin-bottom:4px">${escH(br.detail)}</div>`:''}
       <div style="font-size:12px;color:var(--gray3)">ใบตรวจรับ ${escH(nc.docNo)} | ${escH(sp.name)}${nc.mat&&nc.mat.lot?' | Lot '+escH(nc.mat.lot):''}</div>
       ${ncrBox(nc)}
-      ${isNcr(nc)||!nc.synced?(nc.status==='Closed'?`<div style="font-size:12px;color:var(--gray3);margin-top:6px">ปิดในระบบ NCR e-Form${nc.closedDate?' วันที่ '+fmtD(nc.closedDate):''}</div>`:'')
+      ${isNcr(nc)||!nc.synced?(nc.status==='Closed'?`<div style="font-size:12px;color:var(--gray3);margin-top:6px">${isNcr(nc)?'ปิดในระบบ NCR e-Form':'ปิดแล้ว'}${nc.closedDate?' วันที่ '+fmtD(nc.closedDate):''}</div>`:'')
         :nc.status==='Open'?`<button class="bm bt" style="margin-top:10px;padding:10px;font-size:13px" onclick="closeNC('${nc.id}')">&#x2714; ปิด NC</button>`:`<div style="font-size:12px;color:var(--gray3);margin-top:6px">ปิดวันที่ ${nc.closedDate}</div>`}
     </div>`;
   }).join('');
@@ -1651,8 +1651,10 @@ function renderNC(){
 const NCR_APP_URL=OLD_HOST?'https://puisabpak-ncr.pages.dev':location.origin;
 let _ncrWin=null,_ncrFor=null;
 function nextNcId(){return 'NC'+String(Math.max(0,...ncLogs.map(n=>parseInt(String(n.id).slice(2))||0))+1).padStart(3,'0');}
-function isNcr(nc){return /^NCR-/.test(String(nc.id||''));}          // NC ที่ออกเลขร่วมกับระบบ NCR e-Form แล้ว
-function ncNo(nc){return isDemo()?'NCR (ทดลอง)':nc.synced?(nc.ncrId||nc.id):'รอออกเลข NCR';}
+function isNcr(nc){return /^NCR-/.test(String(nc.id||''));}
+// NC รับวัตถุดิบเปิดเป็น NCR หรือไม่ ตามที่เซิร์ฟเวอร์ตั้งไว้ (ปิดอยู่: ติดตามและปิด NC ในแอปนี้พร้อมผลตรวจซ้ำ)
+function ncrOn(){return !!(session&&session.user&&session.user.auto_ncr_recv);}          // NC ที่ออกเลขร่วมกับระบบ NCR e-Form แล้ว
+function ncNo(nc){return isDemo()?(ncrOn()?'NCR (ทดลอง)':'NC (ทดลอง)'):nc.synced?(nc.ncrId||nc.id):(ncrOn()?'รอออกเลข NCR':'รอออกเลข NC');}
 function ncBrief(nc){                                              // ข้อความสั้นของปัญหา: ชนิดผล + หมายเหตุของผู้ตรวจ (ไม่เอาผลสุ่มตรวจทั้งชุด)
   const t=RES_TXT[nc.result]&&nc.result!=='PASS'?RES_TXT[nc.result]:String(nc.failType||'').split(' — ')[0];
   const rec=records.find(r=>r.docNo===nc.docNo);const m=rec&&nc.matIdx!=null?(rec.mats||[]).find(x=>x.idx===nc.matIdx):null;
@@ -1663,7 +1665,11 @@ function matName(code){const m=MATERIALS.find(x=>x.code===code);return m?m.name:
 function ncrRef(nc){return nc.docNo+' / '+nc.id;}
 function ncrBox(nc){
   const b='margin-top:8px;padding:10px;font-size:13px;width:100%;';
-  if(isDemo())return `<div style="margin-top:8px;font-size:12px;color:#8a5200">โหมดทดลองใช้ — ไม่มีการออกเลข NCR จริง</div>`;
+  if(isDemo())return `<div style="margin-top:8px;font-size:12px;color:#8a5200">โหมดทดลองใช้ — ไม่มีการออกเลข ${ncrOn()?'NCR':'NC'} จริง</div>`;
+  if(!ncrOn()&&!isNcr(nc)&&!nc.ncrId){
+    if(!nc.synced)return `<div style="margin-top:8px;font-size:12px;color:#e8900a">ยังไม่ได้ส่งขึ้นฐานข้อมูล — เลข NC จะออกเมื่อส่งสำเร็จ (กด "ซิงก์" ที่หน้าหลัก)</div>`;
+    return nc.closeNote?`<div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:#e8f5e9;font-size:12px;color:#1b5e20"><b>การแก้ไข / ผลตรวจซ้ำ:</b> ${escH(nc.closeNote)}${nc.closedBy?' — '+escH(nc.closedBy):''}</div>`:'';
+  }
   if(!nc.synced)return `<div style="margin-top:8px;font-size:12px;color:#e8900a">ยังไม่ได้ส่งขึ้นฐานข้อมูล — เลข NCR จะออกเมื่อส่งสำเร็จ (กด "ซิงก์" ที่หน้าหลัก)</div>`;
   if(isNcr(nc))return `<button class="bm" style="${b}background:#1e3a8a;color:#fff" onclick="viewNCR('${nc.id}')">&#x1F517; เปิดใน NCR e-Form${nc.status==='Open'?' (สอบสวน / ปิด)':''}</button>`;
   // NC รุ่นเก่าที่ยังใช้เลข NCxxx: ผูกกับ NCR เองได้
@@ -1733,9 +1739,14 @@ window.addEventListener('message',e=>{
 });
 function closeNC(id){
   const _n=ncLogs.find(n=>n.id===id);
-  if(_n&&!_n.ncrId&&!confirm('NC นี้ยังไม่มีเลข NCR ในระบบ NCR e-Form\nต้องการปิดในแอปนี้เลยหรือไม่?'))return;
+  let note='';
+  if(_n&&!_n.ncrId){
+    if(ncrOn()&&!confirm('NC นี้ยังไม่มีเลข NCR ในระบบ NCR e-Form\nต้องการปิดในแอปนี้เลยหรือไม่?'))return;
+    note=(prompt('การแก้ไขและผลการตรวจซ้ำ (จำเป็น)\nเช่น สุ่มชั่งซ้ำ 3 ถุง ได้ 10.02 kg ครบตามหน้าถุง / Supplier ส่งของทดแทนแล้ว ตรวจผ่าน')||'').trim();
+    if(!note){showToast('ต้องระบุการแก้ไขและผลการตรวจซ้ำก่อนปิด NC','err');return;}
+  }
   const nc=ncLogs.find(n=>n.id===id);
-  if(nc){nc.status='Closed';nc.closedDate=todayStr();nc.dirty=true;syncAll();cloudCloseNC(id,{status:'Closed',closed_date:nc.closedDate}).catch(()=>{});}
+  if(nc){if(note){nc.closeNote=note;nc.closedBy=session&&session.user?session.user.display_name:'';}nc.status='Closed';nc.closedDate=todayStr();nc.dirty=true;syncAll();cloudCloseNC(id,{status:'Closed',closed_date:nc.closedDate}).catch(()=>{});}
   renderNC();renderHome();showToast('ปิด NC เรียบร้อย','ok');
 }
 function openNCModal(){
@@ -1769,7 +1780,7 @@ function exportExcel(){
   records.forEach(r=>{const sp=SUPPLIERS.find(s=>s.id===r.supplier)||{name:r.supplier};(r.mats||r.materials||[]).forEach((m,i)=>{const mi=MATERIALS.find(x=>x.code===m.code)||{};const ts=[m.t1,m.t2,m.t3].filter(t=>t!==''&&t!==null&&t!==undefined).map(Number).filter(t=>!isNaN(t));const avg=ts.length?parseFloat((ts.reduce((a,b)=>a+b,0)/ts.length).toFixed(1)):'';const mn=mi.minTemp??mi.minT;const mx2=mi.maxTemp??mi.maxT;const tst=ts.length&&mn!=null?(ts.every(t=>t>=mn&&t<=mx2)?'PASS':'FAIL'):'';d1.push([r.docNo+'_'+String(i+1).padStart(2,'0'),r.docNo,r.date,sp.name,m.code,m.name||'',mi.type||'',m.lot||'',m.qty!==''&&m.qty!=null?parseFloat(m.qty):'',m.unit||'',m.mfg||'',m.exp||'',m.t1!==''&&m.t1!=null?parseFloat(m.t1):'',m.t2!==''&&m.t2!=null?parseFloat(m.t2):'',m.t3!==''&&m.t3!=null?parseFloat(m.t3):'',avg,tst,m.visual||'',m.leak||'',m.doc||'',m.result||'',m.note||''].concat(m.aql?(c=>[AQL_CROPS[m.crop]||'',c.bags,c.plan?c.plan.n:'',c.plan?c.plan.g:'',c.sBags,c.totG,m.bagKg??'',m.pos||'',c.cr,c.maG,c.maPct==null?'':+c.maPct.toFixed(2),c.miG,c.miPct==null?'':+c.miPct.toFixed(2),aqlVerdictTxt(c.verdict)])(aqlCalc(m)):Array(14).fill('')).concat(isPork(m)&&Array.isArray(m.pk)?(p=>[p.iqc_lot_bags,p.iqc_sample_bags,p.iqc_net_kg,p.iqc_core_temp,p.iqc_ph,p.iqc_ph_min,p.iqc_ph_max,p.iqc_packaging,p.iqc_label,p.iqc_color,p.iqc_odor,p.iqc_foreign_matter,p.iqc_verdict])(porkCloud(m)):m.aql&&aqlNeedsPh(m)?['','','','',aqlPhVal(m.ph)??'',AQL_PH_SPEC[m.crop][0],AQL_PH_SPEC[m.crop][1],'','','','','','']:Array(13).fill('')).concat([r.poNo||'',m.docDo||'',COA_TXT[m.coa]||'',m.coaNo||'',m.coaOk||'',m.docLabel||''],(w=>w&&Array.isArray(m.wt)?[w.N,w.n,w.lab??'',w.vals.join('/'),w.verdict==='HOLD'?'FAIL':w.verdict==='PASS'&&w.lab!==null?'PASS':'']:[])(wtCalc(m))));});});
   const wsD=XLSX.utils.aoa_to_sheet(d1);wsD['!cols']=[18,14,12,24,10,18,6,14,10,8,12,12,10,10,10,10,10,8,8,10,8,20,10,9,10,10,10,10,8,8,10,9,9,9,9,12,10,10,14,14,14,8,8,10,8,8,8,10,12,16,10,10,16,10,10,10,10,10,20,8].map(w=>({wch:w}));XLSX.utils.book_append_sheet(wb,wsD,'Receiving_Detail');
   const n1=[['NC_ID','Doc_No','Supplier','Fail_Type','Corrective_Action','QA','Status','Closed_Date','Note']];
-  ncLogs.forEach(nc=>{const sp=SUPPLIERS.find(s=>s.id===nc.supplier)||{name:nc.supplier||'—'};n1.push([nc.id,nc.docNo,sp.name,nc.failType,nc.corrective,nc.qa,nc.status,nc.closedDate||'',nc.note||'']);});
+  ncLogs.forEach(nc=>{const sp=SUPPLIERS.find(s=>s.id===nc.supplier)||{name:nc.supplier||'—'};n1.push([nc.id,nc.docNo,sp.name,nc.failType,nc.closeNote||nc.corrective,nc.qa,nc.status,nc.closedDate||'',nc.note||'']);});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(n1),'NC_Log');
   const sig=[['Doc_No','Date','Signer_Name','Signed_At']];
   records.forEach(r=>{sig.push([r.docNo,r.date,r.sig?.signerName||'',r.sig?.signedAt||'']);});

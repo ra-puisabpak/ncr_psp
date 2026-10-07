@@ -13,7 +13,7 @@ const stmt = (sql, args = []) => ({
   run: async () => { db.prepare(sql).run(...args); return { success: true }; },
 });
 const DB = { prepare: (sql) => stmt(sql), batch: async (list) => { for (const s of list) await s.run(); } };
-const env = { DB, SETUP_KEY: 'setup-secret', ALLOWED_ORIGINS: 'https://app.example', AUTO_NCR_PRODUCTION: 'on' };
+const env = { DB, SETUP_KEY: 'setup-secret', ALLOWED_ORIGINS: 'https://app.example', AUTO_NCR_PRODUCTION: 'on', AUTO_NCR_RECEIVING: 'on' };
 
 let pass = 0, failed = 0;
 const call = async (method, path, { token, body, headers = {} } = {}) => {
@@ -281,6 +281,23 @@ r = await call('PATCH', '/api/recv-nc/NC001', { token: qc, body: { ncrId: id, st
 check('old NC linked to its NCR and closed', r.status === 200 && r.j.ncrId === id && r.j.status === 'Closed' && r.j.closedDate, r);
 r = await call('GET', '/api/audit?entity_id=NC001', { token: qa });
 check('receiving changes are in the audit log', r.status === 200 && r.j.some((x) => x.entity === 'recv_nc' && x.action === 'close'), r.j);
+// Receiving NCs without NCRs: followed up and closed in the receiving app
+env.AUTO_NCR_RECEIVING = 'off';
+const ncrsBefore = db.prepare('SELECT COUNT(*) AS n FROM ncr_records').get().n;
+r = await call('POST', '/api/recv', { token: qc, body: recvBody('uid-off-00001', 'FM-QC-001-20261003-009', [{ uid: 'uid-nc-off01', id: 'NC009', failType: 'Hold — Pending Investigation', supplier: 'ABC Supply', matIdx: 1, result: 'HOLD' }]) });
+check('with receiving NCRs off, a receiving NC gets an NC number and no NCR', r.status === 201 && /^NC-\d{4}-\d{3}$/.test(r.j.ncs[0].id) && db.prepare('SELECT COUNT(*) AS n FROM ncr_records').get().n === ncrsBefore, r.j);
+const offNc = r.j.ncs[0].id;
+r = await call('POST', '/api/recv-nc', { token: qc, body: { uid: 'uid-nc-off02', docNo: 'FM-QC-001-20261003-009', failType: 'Other', note: 'น้ำหนักขาด' } });
+check('with receiving NCRs off, a manual NC gets the next NC number', r.status === 201 && /^NC-\d{4}-\d{3}$/.test(r.j.id) && r.j.id !== offNc && db.prepare('SELECT COUNT(*) AS n FROM ncr_records').get().n === ncrsBefore, r.j);
+r = await call('PATCH', `/api/recv-nc/${offNc}`, { token: qc, body: { status: 'Closed' } });
+check('closing an NC without an NCR needs what was done and the re-check', r.status === 400, r);
+r = await call('PATCH', `/api/recv-nc/${offNc}`, { token: qc, body: { status: 'Closed', closeNote: 'สุ่มชั่งซ้ำ 3 ถุง ได้ 10.02 kg ครบตามหน้าถุง' } });
+check('an NC is closed in the receiving app with its re-check', r.status === 200 && r.j.status === 'Closed' && /10.02/.test(r.j.closeNote), r);
+r = await call('GET', '/api/recv', { token: qc });
+check('the closed NC keeps the note and who closed it', /10.02/.test(r.j.ncLogs.find((n) => n.id === offNc).closeNote) && r.j.ncLogs.find((n) => n.id === offNc).closedBy === 'QC One', r.j.ncLogs.find((n) => n.id === offNc));
+r = await call('GET', '/api/me', { token: qc });
+check('the app is told receiving NCRs are off', r.j.auto_ncr_recv === false, r.j);
+env.AUTO_NCR_RECEIVING = 'on';
 
 // conditional acceptance
 const condBody = (uid, note) => { const x = recvBody(uid, ''); x.record.mats = [{ idx: 1, code: 'PKG-001', result: 'COND', note, condBy: 'someone else', photo1: null, photo2: null }]; return x; };
