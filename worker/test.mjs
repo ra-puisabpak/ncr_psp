@@ -420,6 +420,20 @@ check('a voided record leaves the receiving list', !r.j.records.some((x) => x.do
 r = await call('POST', '/api/recv', { token: qc, body: recvBody('uid-void-0002', 'FM-QC-001-20261004-001') });
 check('the voided number is not reused', r.status === 201 && r.j.docNo !== 'FM-QC-001-20261004-001', r);
 
+// ----- central supplier list -----
+r = await call('GET', '/api/suppliers', { token: qc });
+check('the supplier list starts with Makro and the fresh market', r.status === 200 && r.j[0].name === 'Makro' && r.j[0].kind === 'RETAIL' && r.j[1].name === 'ตลาดสด' && r.j[1].kind === 'MARKET', r.j);
+r = await call('POST', '/api/suppliers', { token: qc, body: { name: 'ABC Supply', kind: 'COMPANY' } });
+check('QC cannot edit the supplier list', r.status === 403, r);
+r = await call('POST', '/api/suppliers', { token: qa, body: { name: ' ABC   Supply ', kind: 'COMPANY' } });
+check('QA adds a supplier (spaces tidied)', r.status === 201 && r.j.name === 'ABC Supply', r);
+r = await call('POST', '/api/suppliers', { token: qa, body: { name: 'abc supply' } });
+check('a supplier name is unique ignoring case', r.status === 409, r);
+r = await call('PATCH', '/api/suppliers', { token: qa, body: { name: 'ABC Supply', active: false } });
+check('QA switches a supplier off', r.status === 200 && r.j.active === false, r);
+r = await call('POST', '/api/suppliers', { token: qa, body: { name: 'X', kind: 'BAD' } });
+check('the kind must be known', r.status === 400, r);
+
 // ----- Smart QA: control points and monitoring records -----
 r = await call('GET', '/api/control-points', { token: qc });
 check('control point register follows QP-HA-001 Rev.01 plus the pH/aw record, all draft', r.status === 200 && r.j.length === 9 && r.j.every((c) => c.status === 'DRAFT')

@@ -13,6 +13,7 @@ import LoginPage from './pages/LoginPage'
 import SetupPage from './pages/SetupPage'
 import UsersPage from './pages/UsersPage'
 import MaterialsPage from './pages/MaterialsPage'
+import SuppliersPage from './pages/SuppliersPage'
 import FGCheckPage from './pages/FGCheckPage'
 import FGCheckReportPage from './pages/FGCheckReportPage'
 import AccountPage from './pages/AccountPage'
@@ -80,6 +81,7 @@ export default function App() {
           <Route path="/qa/fgcheck" element={<Private><FGCheckPage /></Private>} />
           <Route path="/qa/fgcheck/report" element={<Private><FGCheckReportPage /></Private>} />
           <Route path="/qa/materials" element={<Private><MaterialsPage /></Private>} />
+          <Route path="/qa/suppliers" element={<Private><SuppliersPage /></Private>} />
           <Route path="/qa/formulas" element={<Private><FormulasPage /></Private>} />
           <Route path="/qa/prodctl" element={<Private><ProdControlPage /></Private>} />
           <Route path="/qa/prodctl/report" element={<Private><ProdControlReportPage /></Private>} />

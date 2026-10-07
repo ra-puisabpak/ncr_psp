@@ -1072,6 +1072,30 @@ export default {
       }
 
       // ===== Receiving inspection (FM-QC-001) =====
+      if (path === '/api/suppliers' && method === 'GET') {
+        return json((await DB.prepare('SELECT name, kind, active, sort FROM suppliers ORDER BY active DESC, sort, name').all()).results.map((x) => ({ ...x, active: !!x.active })));
+      }
+      if (path === '/api/suppliers' && (method === 'POST' || method === 'PATCH')) {
+        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่จัดการรายชื่อ Supplier ได้');
+        const b = await body();
+        const name = String(b.name ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
+        if (!name) fail(400, 'กรุณาระบุชื่อ Supplier');
+        const row = await DB.prepare('SELECT * FROM suppliers WHERE lower(name)=lower(?)').bind(name).first();
+        if (method === 'POST' && row) fail(409, 'มีชื่อ Supplier นี้แล้ว');
+        if (method === 'PATCH' && !row) fail(404, 'ไม่พบ Supplier');
+        const kind = 'kind' in b ? b.kind : (row?.kind || 'COMPANY');
+        if (!['COMPANY', 'RETAIL', 'MARKET'].includes(kind)) fail(400, 'ประเภทต้องเป็น บริษัท / ห้างค้าปลีก / ตลาดสด');
+        const active = 'active' in b ? (b.active ? 1 : 0) : (row ? row.active : 1);
+        const sort = 'sort' in b && Number.isFinite(Number(b.sort)) ? Math.round(Number(b.sort)) : (row?.sort ?? 100);
+        if (row) {
+          await DB.prepare('UPDATE suppliers SET kind=?, active=?, sort=?, updated_by=?, updated_at=? WHERE name=?').bind(kind, active, sort, user.username, nowIso(), row.name).run();
+          await audit(DB, user.username, 'user', 'update', 'supplier', row.name, { kind, active, sort });
+          return json({ name: row.name, kind, active: !!active, sort });
+        }
+        await DB.prepare('INSERT INTO suppliers (name,kind,active,sort,updated_by,updated_at) VALUES (?,?,?,?,?,?)').bind(name, kind, active, sort, user.username, nowIso()).run();
+        await audit(DB, user.username, 'user', 'create', 'supplier', name, { kind });
+        return json({ name, kind, active: !!active, sort }, 201);
+      }
       const RECV_LIVE = 'doc_no NOT IN (SELECT doc_no FROM recv_voids)';
       const rvoid = path.match(/^\/api\/recv\/(FM-QC-001-\d{8}-\d{3})\/void$/);
       if (rvoid && method === 'POST') {

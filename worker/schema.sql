@@ -757,6 +757,16 @@ INSERT OR IGNORE INTO pack_sizes (pack_key,label,label_net_g,tare_g,sort) VALUES
  ('J210','กระปุกใหญ่ 210 g (กระปุก + ฝาอลู + ฝาพลาสติก + สติ๊กเกอร์ 40 g)',210,40,1),
  ('J60','กระปุกเล็ก 60 g (กระปุก + ฝา + สติ๊กเกอร์ 15 g)',60,15,2),
  ('J160','กระปุก 160 g (กระปุก + ฝา + สติ๊กเกอร์ 40 g)',160,40,3);
+-- Central supplier list shared by the receiving app: companies, retail stores (Makro) and the fresh market.
+CREATE TABLE IF NOT EXISTS suppliers (
+  name       TEXT PRIMARY KEY,
+  kind       TEXT NOT NULL DEFAULT 'COMPANY' CHECK(kind IN ('COMPANY','RETAIL','MARKET')),
+  active     INTEGER NOT NULL DEFAULT 1,
+  sort       INTEGER NOT NULL DEFAULT 100,
+  updated_by TEXT NOT NULL DEFAULT 'system',
+  updated_at TEXT NOT NULL DEFAULT '2026-10-07T00:00:00Z'
+);
+INSERT OR IGNORE INTO suppliers (name,kind,sort) VALUES ('Makro','RETAIL',1),('ตลาดสด','MARKET',2);
 -- A receiving record entered wrongly is voided by the QA Manager (kept, never deleted); it then leaves every list and count.
 CREATE TABLE IF NOT EXISTS recv_voids (
   doc_no    TEXT PRIMARY KEY,

@@ -93,6 +93,7 @@ async function _syncRun(){
 }
 async function pullAll(){
   await loadMaterials().catch(()=>{});
+  await loadSuppliers().catch(()=>{});
   if(isDemo())return;
   const d=await api('GET','/api/recv');
   const mem=new Map(records.filter(r=>r.synced).map(r=>[r.docNo,r]));
@@ -855,6 +856,16 @@ async function loadMaterials(){
     cat:x.cat||'',store:x.store||'',crop:x.aql_crop||'',phMin:x.ph_min,phMax:x.ph_max,active:!!x.active,reg:true}));
   try{localStorage.setItem(MAT_KEY,JSON.stringify(MATERIALS));}catch(e){}
 }
+// รายชื่อ Supplier กลาง (แม็คโครอยู่บนสุด · ตลาดสด) — ใช้เป็นตัวเลือกในช่อง Supplier
+const SUP_KEY='psp_recv_suppliers';
+let SUP_REG=(()=>{try{const v=JSON.parse(localStorage.getItem(SUP_KEY)||'null');return Array.isArray(v)?v:[];}catch(e){return [];}})();
+async function loadSuppliers(){
+  const rows=await api('GET','/api/suppliers');
+  if(!Array.isArray(rows))return;
+  SUP_REG=rows.filter(x=>x.active).map(x=>x.name);
+  try{localStorage.setItem(SUP_KEY,JSON.stringify(SUP_REG));}catch(e){}
+  const dl=document.getElementById('sup-list');if(dl)dl.innerHTML=supNames().map(n=>`<option value="${escH(n)}">`).join('');
+}
 function matInfo(code){return MATERIALS.find(x=>x.code===code)||null;}
 
 
@@ -1610,7 +1621,11 @@ function resetForm(){
 function closeSaveModal(){document.getElementById('save-modal').classList.remove('open');}
 function dlExcel(){exportExcel();closeSaveModal();}
 function dlPDF(){closeSaveModal();printRec(_lastRec);}
-function supNames(){return [...new Set(records.map(r=>r.supplier).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'));}
+function supNames(){
+  const seen=new Set(SUP_REG.map(n=>n.toLowerCase()));
+  const used=[...new Set(records.map(r=>r.supplier).filter(Boolean))].filter(n=>!seen.has(n.toLowerCase())).sort((a,b)=>a.localeCompare(b,'th'));
+  return [...SUP_REG,...used];   // รายชื่อกลางก่อน (เรียงตามลำดับที่ตั้งไว้) ตามด้วยชื่อที่เคยกรอกมาก่อน
+}
 // สรุปการรับของวันที่เลือกบนหน้าแรก: จำนวนใบรับ รายการ ผลตรวจ NC และรายการวัตถุดิบที่รับ
 function renderDaily(){
   const box=document.getElementById('hd-box');if(!box)return;
