@@ -918,7 +918,7 @@ function aqlCalc(m){
 }
 function aqlFmtG(g){return g>=1000?(g/1000)+' kg':g+' g';}
 function aqlPct(p){return p==null?'—':p.toFixed(2)+'%';}
-function aqlVerdictTxt(v){return v==='PASS'?'ACCEPT':v==='HOLD'?'CAR / HOLD':v==='REJECT'?'REJECT':'—';}
+function aqlVerdictTxt(v){return v==='PASS'?'ACCEPT':v==='COND'?'รับแบบมีเงื่อนไข':v==='HOLD'?'CAR / HOLD':v==='REJECT'?'REJECT':'—';}
 function aqlSummary(m){
   if(!m||!m.aql)return'';const c=aqlCalc(m);
   return 'OPL-AQL['+(AQL_CROPS[m.crop]||'-')+'] Lot '+c.bags+' ถุง | สุ่ม '+c.sBags+' ถุง '+c.totG+' g | CR '+c.cr+' ชิ้น | MA '+aqlPct(c.maPct)+' | MI '+aqlPct(c.miPct)+(aqlNeedsPh(m)&&aqlPhVal(m.ph)!==null?' | pH '+aqlPhVal(m.ph):'')+' | '+aqlVerdictTxt(c.verdict);
@@ -1063,21 +1063,21 @@ function porkCalc(m){
   const bags=pkNum(m.pkBags)!==null?Math.floor(pkNum(m.pkBags)):(qty?Math.ceil(qty/lab):0);
   const plan=aqlPlan(bags);const n=plan?plan.n:bags===1?1:bags>150?5:0;
   while(m.pk.length<n)m.pk.push({w:'',t:'',ph:''});
-  const rows=m.pk.slice(0,n);const rej=[],hold=[],miss=[],warn=[];
+  const rows=m.pk.slice(0,n);const rej=[],hold=[],short=[],miss=[],warn=[];
   if(bags>150)warn.push('จำนวน '+bags+' ถุง อยู่นอกตารางสุ่ม (2–150 ถุง) — ให้ QC Supervisor ยืนยันจำนวนสุ่ม');
   if(!bags)miss.push('จำนวนถุงที่รับเข้า');
   rows.forEach((r,i)=>{
     const w=pkNum(r.w),t=pkNum(r.t),ph=pkNum(r.ph),b='ถุงที่ '+(i+1)+': ';
     if(w===null||t===null||ph===null){miss.push('ค่าตรวจถุงที่ '+(i+1));}
-    if(w!==null&&w<lab)hold.push(b+'น้ำหนักสุทธิ '+w+' kg ไม่ครบ '+lab+' kg');
+    if(w!==null&&w<lab)short.push(b+'น้ำหนักสุทธิ '+w+' kg ไม่ครบ '+lab+' kg');   // น้ำหนักขาด = รับแบบมีเงื่อนไข
     if(t!==null&&(t<PORK.tMin||t>PORK.tMax))hold.push(b+'อุณหภูมิใจกลาง '+t+'°C นอกช่วง '+PORK.tMin+'–'+PORK.tMax+'°C');
     if(ph!==null){const c=phClass(ph);if(c.r==='REJECT')rej.push(b+'pH '+ph+' — '+c.t);else if(c.r==='HOLD')hold.push(b+'pH '+ph+' '+c.t);}
   });
   PORK_CHK.forEach(c=>{if(!m[c[0]])miss.push(c[1].split(/[:(/]/)[0].trim());else if(m[c[0]]==='FAIL')hold.push('ไม่ผ่าน: '+c[1]);});
   if(m.pkProbe!=='Y')miss.push('ยืนยันทำความสะอาดหัววัด pH');
-  const verdict=miss.length?null:rej.length?'REJECT':hold.length?'HOLD':'PASS';
+  const verdict=miss.length?null:rej.length?'REJECT':hold.length?'HOLD':short.length?'COND':'PASS';
   const early=rej.length?'REJECT':null;        // pH ตกเกณฑ์ → REJECT ทันทีแม้ข้อมูลยังไม่ครบ
-  return{bags,plan,n,rows,lab,rej,hold,miss,warn,verdict:verdict||early};
+  return{bags,plan,n,rows,lab,rej,hold,short,miss,warn,verdict:verdict||early};
 }
 function porkSummary(m){
   if(!isPork(m))return'';const c=porkCalc(m);const j=f=>c.rows.map(r=>r[f]===''?'-':r[f]).join('/');
@@ -1104,6 +1104,7 @@ function porkFromCloud(d){
 function porkApply(m){
   const c=porkCalc(m);const prev=m.pkV;m.pkV=c.verdict||'';
   if(c.verdict&&(m.result===prev||RES_RANK[m.result]<RES_RANK[c.verdict]))m.result=c.verdict;
+  if(c.verdict==='COND'&&m.result==='COND'&&!String(m.note||'').trim())m.note='น้ำหนักไม่ครบตามฉลาก ('+c.short.join('; ')+') — รับแบบมีเงื่อนไข แจ้ง Supplier ปรับปรุงการบรรจุ และสุ่มชั่งซ้ำแล้ว';
   [1,2,3].forEach(k=>{m['t'+k]=c.rows[k-1]?c.rows[k-1].t:'';});          // คงคอลัมน์ Temp1–3 เดิมใน Sheets
   const ok=k=>m[k]==='PASS';
   if(m.pkSeal)m.leak=m.pkSeal;
@@ -1126,9 +1127,9 @@ function porkCellSt(r,lab){
   return{w:w===null?'':w>=lab?'pass':'fail',t:t===null?'':t>=PORK.tMin&&t<=PORK.tMax?'pass':'fail',ph:pc===null?'':pc==='PASS'?'pass':pc==='HOLD'?'hold':'fail'};
 }
 function porkVerdictHtml(idx,c){
-  const cls=c.verdict==='PASS'?'pass':c.verdict==='HOLD'?'hold':c.verdict==='REJECT'?'fail':'na';
-  const head=c.verdict==='PASS'?'&#x2714; ACCEPT — ผ่านเกณฑ์ IQC หมูบด':c.verdict==='HOLD'?'&#x26A0; HOLD — ออก NC ให้ QC Supervisor ตัดสิน':c.verdict==='REJECT'?'&#x2716; REJECT':'รอข้อมูลการตรวจ';
-  return'<div class="aq-v '+cls+'" id="pkv-'+idx+'">'+head+c.rej.concat(c.hold).map(x=>'<small>'+x+'</small>').join('')+(c.miss.length?'<small>ยังไม่ครบ: '+c.miss.join(', ')+'</small>':'')+'</div>';
+  const cls=c.verdict==='PASS'?'pass':c.verdict==='HOLD'||c.verdict==='COND'?'hold':c.verdict==='REJECT'?'fail':'na';
+  const head=c.verdict==='PASS'?'&#x2714; ACCEPT — ผ่านเกณฑ์ IQC หมูบด':c.verdict==='HOLD'?'&#x26A0; HOLD — ออก NC ให้ QC Supervisor ตัดสิน':c.verdict==='COND'?'&#x26A0; น้ำหนักไม่ครบตามฉลาก — รับแบบมีเงื่อนไข (ไม่ HOLD) แจ้ง Supplier และปิด NC อัตโนมัติ':c.verdict==='REJECT'?'&#x2716; REJECT':'รอข้อมูลการตรวจ';
+  return'<div class="aq-v '+cls+'" id="pkv-'+idx+'">'+head+c.rej.concat(c.hold,c.short).map(x=>'<small>'+x+'</small>').join('')+(c.miss.length?'<small>ยังไม่ครบ: '+c.miss.join(', ')+'</small>':'')+'</div>';
 }
 function porkHtml(m){
   const c=porkCalc(m);const i=m.idx;
@@ -1286,7 +1287,7 @@ function generatePDF(rec){
         <table><thead><tr><th>รายการตรวจ</th><th style="width:34%">ผล</th></tr></thead><tbody>
           ${PORK_CHK.map(k=>`<tr><td>${k[1]}</td><td class="c">${pf(m[k[0]])}</td></tr>`).join('')}
           <tr><td>ทำความสะอาดหัววัด pH และเช็ดแอลกอฮอล์ (Food Grade) ทุกครั้งก่อนวัดถุงต่อไป</td><td class="c">${cb(m.pkProbe==='Y','ทำแล้วทุกครั้ง')}</td></tr></tbody></table></div></div>
-      <div class="vd"><b>ผล IQC หมูบด:</b> ${cb(c.verdict==='PASS','ACCEPT')+cb(c.verdict==='HOLD','HOLD')+cb(c.verdict==='REJECT','REJECT')}${c.rej.concat(c.hold).length?'<span class="sm bad" style="margin-left:auto">'+E(c.rej.concat(c.hold).join(' ; '))+'</span>':''}</div></div>`;}).join('');
+      <div class="vd"><b>ผล IQC หมูบด:</b> ${cb(c.verdict==='PASS','ACCEPT')+cb(c.verdict==='COND','รับแบบมีเงื่อนไข')+cb(c.verdict==='HOLD','HOLD')+cb(c.verdict==='REJECT','REJECT')}${c.rej.concat(c.hold,c.short).length?'<span class="sm bad" style="margin-left:auto">'+E(c.rej.concat(c.hold,c.short).join(' ; '))+'</span>':''}</div></div>`;}).join('');
     body+=aqlBlk+porkBlk;
   }
   body+=`<div class="keep"><div class="sec">7. หมายเหตุ / การดำเนินการ</div><div class="box">${E(rec.note||'')}</div></div>`;
@@ -1575,7 +1576,7 @@ function saveRecord(){
   let ncCreated=false;
   rec.mats.forEach(m=>{
     if(m.result==='HOLD'||m.result==='REJECT'||m.result==='COND'){
-      const wtOnly=m.result==='COND'&&m.wtV==='COND'&&docEval(m)!=='FAIL'&&(!m.aql||aqlCalc(m).verdict==='PASS')&&(!isPork(m)||porkCalc(m).verdict==='PASS');
+      const wtOnly=m.result==='COND'&&(m.wtV==='COND'||m.pkV==='COND')&&docEval(m)!=='FAIL'&&(!m.aql||aqlCalc(m).verdict==='PASS')&&(!isPork(m)||['PASS','COND'].includes(porkCalc(m).verdict))&&(!wtOn(m)||['PASS','COND'].includes(wtCalc(m).verdict));
       const _nc={id:nextNcId(),uid:newUid(),recUid:rec.uid,synced:false,docNo,supplier:sup,
         failType:m.result==='REJECT'?'Rejected Material':m.result==='COND'?'Conditional Acceptance — รับแบบมีเงื่อนไข':'Hold — Pending Investigation',
         corrective:wtOnly?'แจ้ง Supplier / สุ่มชั่งซ้ำ — รับแบบมีเงื่อนไข (ปิดอัตโนมัติ)':'—',qa:insp,status:wtOnly?'Closed':'Open',closedDate:wtOnly?date:'',ncrId:'',date,result:m.result,matIdx:m.idx,brief:m.note||'',mat:{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit},note:[m.note||m.code,inspSummary(m),m.doc==='FAIL'?'เอกสาร: '+docSummary(m):'',m.wtV==='COND'?wtSummary(m):''].filter(Boolean).join(' | ')};
@@ -2017,8 +2018,9 @@ function docHtml(m){
     (bad&&m.coa!=='N'?'<div class="aq-v hold" style="margin-top:10px">เอกสารไม่ผ่าน — HOLD และออก NC</div>':'')+'</div>';
 }
 
-// ════ สุ่มชั่งน้ำหนักตามจำนวนตัวอย่าง (วัตถุดิบทุกรายการ ยกเว้นหมูบดซึ่งชั่งในฟอร์ม IQC) ════
-function wtOn(m){const mi=MATERIALS.find(x=>x.code===m.code);return !!mi&&mi.type==='RM'&&!isPork(m);}
+// ════ สุ่มชั่งน้ำหนักตามจำนวนตัวอย่าง (วัตถุดิบที่ต้องชั่ง ยกเว้นหมูบดซึ่งชั่งในฟอร์ม IQC และกลุ่มน้ำมัน/ของเหลว) ════
+function wtOn(m){const mi=MATERIALS.find(x=>x.code===m.code);return !!mi&&mi.type==='RM'&&!isPork(m)&&!WT_SKIP.includes(mi.cat);}
+const WT_SKIP=['Oil','Sauce'];   // น้ำมันและของเหลว ไม่ต้องสุ่มชั่งน้ำหนักสุทธิ
 function wtCalc(m){
   if(!wtOn(m))return null;
   const mi=MATERIALS.find(x=>x.code===m.code);
