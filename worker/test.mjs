@@ -786,7 +786,7 @@ check('a set whose batch is already weighed is refused', r.status === 409 && /B2
 
 // ----- QC_08 production control → CCP-01 / CCP-02 / OPRP-05 records -----
 const fryOff = { garlic: { done: false }, shallot: { done: false }, chili: { done: false } };
-const pcA = (o = {}) => ({ uid: 'pc-uid-' + Math.random().toString(36).slice(2, 10), product_code: 'FG0002', product_name: 'น้ำพริกตาแดงมันกุ้ง', prod_date: '2026-09-23', batch_no: 'B260923-01', oil_type: 'น้ำมันรำข้าว',
+const pcA = (o = {}) => ({ note: 'ค่าไม่ผ่าน ทดสอบ', uid: 'pc-uid-' + Math.random().toString(36).slice(2, 10), product_code: 'FG0002', product_name: 'น้ำพริกตาแดงมันกุ้ง', prod_date: '2026-09-23', batch_no: 'B260923-01', oil_type: 'น้ำมันรำข้าว',
   fry: { garlic: { done: true, temp: 87, min: 9 }, shallot: { done: true, w_before: 15.5, w_after: 6.2, temp: 93.6, min: 7 }, chili: { done: false } },
   ccp1: { reach_time: '09:10', end_time: '11:15', readings: [86.5, 88, 87.2, 88.4, 89], thermo_ok: true },
   heat: { temp: 88, min: 125 }, cool: { temp: 58, min: 40, foreign_ok: true, fill_temp: 55, to_cap_min: 60, cap_temp: 45, chilled: true }, ...o });
@@ -814,7 +814,7 @@ check('heating held 100 min with a dip below 85 °C fails CCP-01 and opens a cri
   && r.j.derived.find((x) => x.cp_id === 'CCP-01').result === 'FAIL' && /^NCR-/.test(r.j.derived.find((x) => x.cp_id === 'CCP-01').ncr_id), r.j);
 r = await call('GET', `/api/ncr/${r.j.derived.find((x) => x.cp_id === 'CCP-01').ncr_id}`, { token: qa });
 check('that NCR names the dip and the short hold', r.j.severity === 'Critical' && /84.2/.test(r.j.actual_result) && /100/.test(r.j.actual_result), r.j.actual_result);
-const pcB = (o = {}) => pcA({ product_code: 'FG0007', product_name: 'พริกผัดน้ำมันมะกอก สูตรออริจินอล', batch_no: 'B260923-11', ccp1: null,
+const pcB = (o = {}) => pcA({ note: '', product_code: 'FG0007', product_name: 'พริกผัดน้ำมันมะกอก สูตรออริจินอล', batch_no: 'B260923-11', ccp1: null,
   fry: { garlic: { done: true, w_after: 9.58, temp: 122.4, min: 8 }, shallot: { done: true, w_after: 15.92, temp: 132.2, min: 18 }, chili: { done: false } },
   fry_thermo_ok: true, heat: { temp: 46.6, min: 21 }, cool: { temp: 39.5, min: 9, fill_temp: 50, cap_temp: 48, foreign_ok: true }, ...o });
 r = await call('POST', '/api/prodctl', { token: qc, body: pcB() });
@@ -822,6 +822,8 @@ check('a group B batch derives CCP-02 and the cooling check, with chili frying n
 r = await call('GET', `/api/qc?cp_id=CCP-02&q=B260923-11`, { token: qc });
 check('the CCP-02 record marks chili as N/A and takes the lowest oil temperature', r.j[0].values.chili_min === 'NA' && r.j[0].values.oil_temp === 122.4, r.j[0].values);
 r = await call('POST', '/api/prodctl', { token: qc, body: pcB({ batch_no: 'B260923-12', fry: { garlic: { done: true, temp: 121.1, min: 6 }, shallot: { done: true, temp: 132.5, min: 20 }, chili: { done: false } } }) });
+check('a value outside its limit needs a remark saying why and what was done', r.status === 400 && /หมายเหตุ/.test(r.j.error), r);
+r = await call('POST', '/api/prodctl', { token: qc, body: pcB({ batch_no: 'B260923-12', note: 'เจียวไม่ครบเวลา แจ้งหัวหน้างาน', fry: { garlic: { done: true, temp: 121.1, min: 6 }, shallot: { done: true, temp: 132.5, min: 20 }, chili: { done: false } } }) });
 check('garlic fried 6 min (as on the paper form of 02/10) fails CCP-02', r.status === 201 && r.j.result === 'FAIL' && r.j.derived[0].result === 'FAIL', r.j);
 r = await call('POST', '/api/prodctl', { token: qc, body: pcB({ batch_no: 'B260923-13', cool: { temp: 40, min: 9, fill_temp: 50, cap_temp: 48, foreign_ok: false } }) });
 check('foreign matter needs details', r.status === 400, r);

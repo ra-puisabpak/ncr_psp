@@ -63,7 +63,7 @@ export default function ProdControlReportPage() {
                 <th className={td} rowSpan={3}>Product name</th><th className={td} rowSpan={3}>Lot No.</th>
                 <th className={td} colSpan={12}>กระทะคั่ว / ทอด / เจียว</th>
                 <th className={td} colSpan={2} rowSpan={2}>บด</th><th className={td} colSpan={2} rowSpan={2}>ผัด / กวนผสม</th><th className={td} colSpan={4} rowSpan={2}>พักให้เย็น / บรรจุ / ปิดฝา</th>
-                <th className={td} rowSpan={3}>ผล CCP / NCR</th>
+                <th className={td} rowSpan={3}>ผล / NCR</th><th className={td} rowSpan={3}>หมายเหตุ<br /><span className="font-normal text-[9px]">(กรณีค่าไม่ผ่าน)</span></th>
               </tr>
               <tr>{['กระเทียม', 'หอม', 'พริก / เห็ด / หมูบด'].map((x) => <th key={x} className={td} colSpan={4}>{x}</th>)}</tr>
               <tr>
@@ -78,6 +78,12 @@ export default function ProdControlReportPage() {
                 const d = r.data, c1 = d.ccp1
                 const heatT = c1 ? `${Math.min(...c1.readings)}–${Math.max(...c1.readings)}` : v(d.heat.temp)
                 const heatM = c1 ? `${c1.reach_time}–${c1.end_time}` : v(d.heat.min)
+                // What failed, in words, then what the QC wrote about it.
+                const why = [
+                  Number(d.cool.fill_temp) >= 60 && `บรรจุ ${d.cool.fill_temp}°C ≥ 60`,
+                  Number(d.cool.cap_temp) >= 60 && `ปิดฝา ${d.cool.cap_temp}°C ≥ 60`,
+                  d.cool.foreign_ok === false && 'พบสิ่งปลอมปน',
+                ].filter(Boolean)
                 return (
                   <tr key={r.pc_id} className="avoid-break">
                     <td className={`${td} text-left`}>{r.product_name || r.product_code}{d.fry.chili.done ? <span className="text-gray-600"> ({d.fry.chili.kind})</span> : null}</td>
@@ -90,12 +96,13 @@ export default function ProdControlReportPage() {
                     <td className={`${td} ${bad(r, 'OPRP-05') ? 'text-red-700 font-bold' : ''}`}>{v(d.cool.cap_temp)}</td>
                     <td className={`${td} ${d.cool.foreign_ok === false ? 'text-red-700 font-bold' : ''}`}>{d.cool.foreign_ok === true ? '✓' : d.cool.foreign_ok === false ? '✗' : ''}</td>
                     <td className={`${td} text-left whitespace-nowrap`}>{[...r.derived.map((x) => `${x.cp_id} ${x.result === 'PASS' ? '✓' : '✗'}${x.ncr_id ? ' ' + x.ncr_id : ''}`), r.ncr_id].filter(Boolean).join(' · ')}</td>
+                    <td className={`${td} text-left min-w-[28mm]`}>{why.length > 0 && <span className="text-red-700 font-semibold">{why.join(' · ')}{r.note ? ' — ' : ''}</span>}{r.note}</td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
-          <div className="mt-1 text-[9px]">ผัด/กวนกลุ่ม A (CCP-01): อุณหภูมิแกนกลางต่ำสุด–สูงสุด และเวลาที่ถึง 85°C–สิ้นสุด · ตัวหนาสีแดง = ไม่ผ่านเกณฑ์จุดควบคุม (เปิด NCR แล้ว) · รายละเอียดค่าที่วัดทุก 30 นาทีอยู่ในบันทึกตรวจของแต่ละ Batch</div>
+          <div className="mt-1 text-[9px]">ตัวหนาสีแดง = ไม่ผ่านเกณฑ์ (อุณหภูมิบรรจุและปิดฝาต้องต่ำกว่า 60°C) · ช่องหมายเหตุระบุสาเหตุและสิ่งที่ทำเมื่อค่าไม่ผ่าน</div>
           <div className="mt-8 flex justify-around text-center avoid-break text-[10.5px]">
             <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้บันทึก ({[...new Set(rows.map((r) => r.inspector))].join(', ')})<br />(เจ้าหน้าที่ฝ่ายควบคุมคุณภาพ)</div>
             <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้รับทราบ<br />(หัวหน้าฝ่ายควบคุมคุณภาพ)</div>

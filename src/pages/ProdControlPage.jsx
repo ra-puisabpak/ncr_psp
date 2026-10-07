@@ -235,10 +235,10 @@ export default function ProdControlPage() {
                 <ul className="list-disc ml-4">{preview.map((x) => <li key={x}>{x}</li>)}</ul>
               </div>
             )}
-            <label className="text-xs text-gray-600 block">หมายเหตุ{f.cool.foreign_ok === false ? ' * (สิ่งที่พบและสิ่งที่ทำ)' : ''}<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} className={input} /></label>
+            <label className="text-xs text-gray-600 block">หมายเหตุ{preview.length > 0 ? ' * (สาเหตุที่ค่าไม่ผ่านและสิ่งที่ทำ)' : ''}<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} className={input} /></label>
             {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{error}</div>}
             {canWrite(user) ? (
-              <button onClick={save} disabled={saving || !batch.trim()} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold disabled:opacity-40">
+              <button onClick={save} disabled={saving || !batch.trim() || (preview.length > 0 && !note.trim())} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold disabled:opacity-40">
                 <Save className="w-5 h-5" />{saving ? 'กำลังบันทึก…' : 'บันทึก'}
               </button>
             ) : <div className="text-sm text-gray-500">บัญชีนี้ดูได้อย่างเดียว บันทึกไม่ได้</div>}

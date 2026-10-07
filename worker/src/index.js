@@ -2055,7 +2055,7 @@ export default {
         for (const cp of cpRows.map(cpRow)) {
           if (cp.products.length && !cp.products.includes(product)) continue;
           const dv = deriveValues(cp.cp_id, d);
-          if (dv) evaluate(cp.params, dv.values, dv.na);
+          if (dv && evaluate(cp.params, dv.values, dv.na).failed.length && !note) fail(400, 'ค่าไม่ผ่านเกณฑ์ กรุณาระบุสาเหตุและสิ่งที่ทำในหมายเหตุ');
         }
         const productName = txt(b.product_name, 200);
         for (let attempt = 0; ; attempt++) {
