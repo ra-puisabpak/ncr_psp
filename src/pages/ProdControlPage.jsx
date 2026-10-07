@@ -107,7 +107,7 @@ export default function ProdControlPage() {
       <div className="flex flex-wrap items-end justify-between gap-2 mb-3">
         <div>
           <h1 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Flame className="w-5 h-5 text-orange-600" />แบบฟอร์มควบคุมการผลิต</h1>
-          <div className="text-xs text-gray-500">{FORMS.PRODCTL.code} · ต่อ Batch · ระบบสร้างบันทึก CCP-01 / CCP-02 / OPRP-05 ให้จากค่าที่กรอก</div>
+          <div className="text-xs text-gray-500">{FORMS.PRODCTL.code} · ต่อ Batch · ระบบสร้างบันทึก OPRP-05 (พักเย็น / บรรจุ / ปิดฝา) ให้จากค่าที่กรอก</div>
         </div>
         <Link to={`/qa/prodctl/report?date=${date}`} className="flex items-center gap-1.5 text-sm bg-white border border-gray-300 rounded-lg px-3 py-1.5"><Printer className="w-4 h-4" />รายงาน A4</Link>
       </div>
@@ -149,7 +149,8 @@ export default function ProdControlPage() {
           <div className="flex flex-wrap gap-1.5">
             {groupA && <Badge cls="bg-red-100 text-red-700">กลุ่ม A · CCP-01 ผัดฆ่าเชื้อ + OPRP-05</Badge>}
             {groupB && <Badge cls="bg-orange-100 text-orange-700">กลุ่ม B · CCP-02 ทอด/เจียว</Badge>}
-            {!groupA && !groupB && <Badge cls="bg-gray-100 text-gray-600">ยังไม่อยู่ในแผน HACCP — บันทึกค่าได้ ไม่มีการตัดสิน CCP</Badge>}
+            {packCp && !groupA && !groupB && <Badge cls="bg-amber-100 text-amber-800">OPRP-05 พักเย็น / บรรจุ / ปิดฝา</Badge>}
+            {!packCp && !groupA && !groupB && <Badge cls="bg-gray-100 text-gray-600">บันทึกค่า — ไม่มีการตัดสิน</Badge>}
           </div>
         )}
       </div>
