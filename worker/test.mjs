@@ -841,6 +841,16 @@ check('re-applying the schema keeps edits and retires untouched old entries once
   && cpAfter['CP-HEAT'].status === 'RETIRED' && cpAfter['CP-HEAT'].version === 2 && cpAfter['CP-BONE'].status === 'DRAFT'
   && db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity_id='CP-HEAT'").get().n === 1, cpAfter);
 
+// A retired control point no longer judges a batch: the form list hides its records and the batch reads PASS.
+r = await call('GET', '/api/prodctl?from=2026-09-23&to=2026-09-23', { token: qc });
+const withFail = r.j.filter((x) => x.derived.some((d) => d.cp_id === 'CCP-02' && d.result === 'FAIL'));
+check('before retiring, a CCP-02 failure shows on the form list', r.status === 200 && withFail.length >= 1 && withFail.every((x) => x.result === 'FAIL'), r.j.map((x) => [x.pc_id, x.result]));
+r = await call('PATCH', '/api/control-points/CCP-02', { token: qa, body: { status: 'RETIRED' } });
+check('the QA Manager retires CCP-02', r.status === 200, r);
+r = await call('GET', '/api/prodctl?from=2026-09-23&to=2026-09-23', { token: qc });
+const same = r.j.filter((x) => withFail.some((w) => w.pc_id === x.pc_id));
+check('after retiring, the CCP-02 records are not shown and a batch with no NCR reads PASS', same.length === withFail.length && same.every((x) => !x.derived.some((d) => d.cp_id === 'CCP-02') && (x.ncr_id ? x.result === 'FAIL' : x.result === 'PASS')), same.map((x) => [x.pc_id, x.result, x.ncr_id]));
+
 await call('POST', '/api/logout', { token: qa });
 r = await call('GET', '/api/me', { token: qa });
 check('logout ends the session', r.status === 401, r);

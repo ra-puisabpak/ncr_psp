@@ -1548,11 +1548,11 @@ export default {
       if (path === '/api/qc/summary' && method === 'GET') {
         const day = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('date') || '') ? url.searchParams.get('date') : today();
         const { results: byCp } = await DB.prepare(
-          `SELECT cp_id, COUNT(*) AS total, SUM(result='FAIL') AS fail FROM qc_records WHERE record_date=? GROUP BY cp_id`).bind(day).all();
+          `SELECT cp_id, COUNT(*) AS total, SUM(result='FAIL') AS fail FROM qc_records WHERE record_date=? AND cp_id IN (SELECT cp_id FROM control_points WHERE status<>'RETIRED') GROUP BY cp_id`).bind(day).all();
         const ncr = await DB.prepare(
           "SELECT COUNT(*) AS open, SUM(source_type IN ('CCP','IN_PROCESS')) AS process FROM ncr_records WHERE status NOT IN ('Closed','Cancelled')").first();
         const { results: recent } = await DB.prepare(
-          'SELECT rec_id, cp_id, record_date, record_time, product_name, batch_no, result, ncr_id, inspector FROM qc_records ORDER BY created_at DESC LIMIT 10').all();
+          "SELECT rec_id, cp_id, record_date, record_time, product_name, batch_no, result, ncr_id, inspector FROM qc_records WHERE cp_id IN (SELECT cp_id FROM control_points WHERE status<>'RETIRED') ORDER BY created_at DESC LIMIT 10").all();
         const total = byCp.reduce((s, r) => s + r.total, 0), failCount = byCp.reduce((s, r) => s + (r.fail || 0), 0);
         const hyg = await DB.prepare("SELECT COUNT(*) AS total, SUM(result='FAIL') AS fail FROM hyg_records WHERE inspect_date=?").bind(day).first();
         return json({ date: day, total, fail: failCount, pass: total - failCount, byCp, hygTotal: hyg?.total || 0, hygFail: hyg?.fail || 0,
@@ -2009,7 +2009,13 @@ export default {
         if (isDate(sp.get('to'))) { where.push('prod_date<=?'); p.push(sp.get('to')); }
         for (const k of ['product_code', 'batch_no', 'pc_id']) if (sp.get(k)) { where.push(`${k}=?`); p.push(sp.get(k)); }
         const { results } = await DB.prepare(`SELECT * FROM prod_controls WHERE ${where.join(' AND ')} ORDER BY prod_date DESC, pc_id DESC LIMIT 500`).bind(...p).all();
-        return json(results.map((r) => ({ ...r, data: JSON.parse(r.data), derived: r.derived ? JSON.parse(r.derived) : [] })));
+        // A control point that has been retired no longer judges a batch: its records stay on file but are not shown or counted.
+        const retired = new Set((await DB.prepare("SELECT cp_id FROM control_points WHERE status='RETIRED'").all()).results.map((c) => c.cp_id));
+        return json(results.map((r) => {
+          const derived = (r.derived ? JSON.parse(r.derived) : []).filter((x) => !retired.has(x.cp_id));
+          const result = r.result === 'PENDING' ? r.result : derived.some((x) => x.result === 'FAIL') || r.ncr_id ? 'FAIL' : 'PASS';
+          return { ...r, data: JSON.parse(r.data), derived, result };
+        }));
       }
       if (path === '/api/prodctl' && method === 'POST') {
         need(user, WRITERS);
