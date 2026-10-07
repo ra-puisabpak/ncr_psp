@@ -92,6 +92,7 @@ async function _syncRun(){
   return {ok:!err,err};
 }
 async function pullAll(){
+  await loadMaterials().catch(()=>{});
   if(isDemo())return;
   const d=await api('GET','/api/recv');
   const mem=new Map(records.filter(r=>r.synced).map(r=>[r.docNo,r]));
@@ -718,7 +719,7 @@ const LOGO_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDA
 const SUPPLIERS = [];   // Supplier กรอกเองในฟอร์ม — ชื่อที่เคยกรอกจะขึ้นเป็นตัวเลือกให้
 // รายการตามไฟล์ Stock: RM = วัตถุดิบ, PM = บรรจุภัณฑ์ (PKG), CM = วัสดุสิ้นเปลือง (SUP)
 // minTemp/maxTemp = เกณฑ์อุณหภูมิของ "ของสด" (แช่เย็น/แช่แข็ง) เท่านั้น — รายการที่เป็น null จะไม่มีช่องวัดอุณหภูมิในฟอร์ม
-const MATERIALS = [
+const MATERIALS_BUILTIN = [
   {code:'RM-001',name:'หอมแขกจีนปอกเปลือก',type:'RM',unit:'กิโลกรัม',minTemp:1,maxTemp:4,cat:'OPL',store:'แช่เย็น 1-4°C ปิดฝาสนิท'},
   {code:'RM-002',name:'หอมแขกปอก',type:'RM',unit:'กิโลกรัม',minTemp:1,maxTemp:4,cat:'OPL',store:'แช่เย็น 1-4°C ปิดฝาสนิท'},
   {code:'RM-003',name:'หอมแขกพม่าปอกเปลือก',type:'RM',unit:'กิโลกรัม',minTemp:1,maxTemp:4,cat:'OPL',store:'แช่เย็น 1-4°C ปิดฝาสนิท'},
@@ -842,6 +843,18 @@ const MATERIALS = [
   {code:'SUP-025',name:'ลาเบล 100x150x350',type:'CM',unit:'ม้วน',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
   {code:'SUP-026',name:'บับเบิ้ล ไซส์ XL',type:'CM',unit:'ม้วน',minTemp:null,maxTemp:null,cat:'Consumable',store:''},
 ];
+// รายการวัตถุดิบมาจากทะเบียนวัตถุดิบกลาง (PSP QUALITY APP) — รายการด้านบนใช้เมื่อยังโหลดไม่ได้ (เช่น ออฟไลน์ครั้งแรก)
+const MAT_KEY='psp_recv_materials';
+let MATERIALS=(()=>{try{const v=JSON.parse(localStorage.getItem(MAT_KEY)||'null');return Array.isArray(v)&&v.length?v:MATERIALS_BUILTIN;}catch(e){return MATERIALS_BUILTIN;}})();
+async function loadMaterials(){
+  const rows=await api('GET','/api/materials');
+  if(!Array.isArray(rows)||!rows.length)return;
+  MATERIALS=rows.map(x=>({code:x.code,name:x.name,type:x.type,unit:x.unit||'',minTemp:x.min_temp,maxTemp:x.max_temp,tLabel:x.temp_label||undefined,
+    cat:x.cat||'',store:x.store||'',crop:x.aql_crop||'',phMin:x.ph_min,phMax:x.ph_max,active:!!x.active,reg:true}));
+  try{localStorage.setItem(MAT_KEY,JSON.stringify(MATERIALS));}catch(e){}
+}
+function matInfo(code){return MATERIALS.find(x=>x.code===code)||null;}
+
 
 // ═══════════════════════════════════════════════════════════════
 //  OPL — แผนการสุ่มตัวอย่างวัตถุดิบแปรรูปเบื้องต้น (หอม, พริก, กระเทียม)
@@ -856,8 +869,12 @@ const AQL_BAG_KG=10;                            // น้ำหนักมา�
 const AQL_CROPS={shallot:'หอม',chili:'พริก',garlic:'กระเทียม'};
 const AQL_PH_SPEC={shallot:[5.3,5.8],garlic:[5.3,6.3]};   // pH ตัวอย่างรวม: หอมแขก 5.3–5.8, กระเทียม 5.3–6.3 — นอกช่วง = HOLD ให้ QC Supervisor ตัดสิน
 const AQL_PH_CROPS=Object.keys(AQL_PH_SPEC);
-const aqlNeedsPh=m=>!!m&&AQL_PH_CROPS.includes(m.crop);
-const aqlPhSpecTxt=m=>{const x=AQL_PH_SPEC[m.crop];return x?x[0].toFixed(1)+'–'+x[1].toFixed(1):'';};
+// เกณฑ์ pH ตอนรับ: ตามทะเบียนวัตถุดิบกลาง (ว่าง = ไม่ตรวจ pH) หรือค่าตั้งต้นตามชนิดเมื่อยังใช้รายการในแอป
+function aqlPhSpec(m){if(!m)return null;const mi=matInfo(m.code);
+  if(mi&&mi.reg)return mi.phMin!=null&&mi.phMax!=null?[mi.phMin,mi.phMax]:null;
+  return AQL_PH_SPEC[m.crop]||null;}
+const aqlNeedsPh=m=>!!aqlPhSpec(m);
+const aqlPhSpecTxt=m=>{const x=aqlPhSpec(m);return x?x[0].toFixed(1)+'–'+x[1].toFixed(1):'';};
 const aqlPhVal=v=>{const n=parseFloat(v);return v===''||v===null||v===undefined||isNaN(n)?null:n;};
 const AQL_CODES={'RM-001':'shallot','RM-002':'shallot','RM-003':'shallot','RM-004':'shallot','RM-005':'garlic',
   'RM-006':'chili','RM-007':'chili','RM-008':'chili'};   // รหัสวัตถุดิบที่เปิดแผน OPL อัตโนมัติ (ปิดเองได้ในฟอร์ม)
@@ -870,6 +887,8 @@ const RES_RANK={PASS:0,COND:1,HOLD:1,REJECT:2};   // COND = รับแบบ�
 const RES_TXT={PASS:'PASS',COND:'รับแบบมีเงื่อนไข',HOLD:'HOLD',REJECT:'REJECT'};
 function worstRes(mats){return mats.some(m=>m.result==='REJECT')?'REJECT':mats.some(m=>m.result==='HOLD')?'HOLD':mats.some(m=>m.result==='COND')?'COND':'PASS';}
 
+// ชนิดแผนสุ่ม OPL ของรหัสวัตถุดิบ: ตามทะเบียนกลาง หรือรายการในแอปเมื่อยังโหลดทะเบียนไม่ได้
+function aqlCropOf(code){const mi=matInfo(code);return mi&&mi.reg?(mi.crop||''):(AQL_CODES[code]||'');}
 function aqlN(v){const n=parseFloat(v);return isNaN(n)||n<0?0:n;}
 function aqlPlan(bags){const b=Math.floor(aqlN(bags));return AQL_PLAN.find(p=>b>=p.min&&b<=p.max)||null;}
 function aqlCalc(m){
@@ -891,7 +910,7 @@ function aqlCalc(m){
     if(miPct>AQL_LIMIT.minor)why.push('Minor '+miPct.toFixed(2)+'% เกิน '+AQL_LIMIT.minor+'%');
     verdict=why.length?'HOLD':'PASS';
   }
-  if(aqlNeedsPh(m)){const v=aqlPhVal(m.ph),x=AQL_PH_SPEC[m.crop];
+  if(aqlNeedsPh(m)){const v=aqlPhVal(m.ph),x=aqlPhSpec(m);
     if(v!==null&&v>=0&&v<=14&&(v<x[0]||v>x[1])){why.push('pH '+v+' นอกเกณฑ์ '+aqlPhSpecTxt(m));if(verdict!=='REJECT')verdict='HOLD';}}
   return{bags,plan,reqG,sBags,totG,cr,maG,miG,maPct,miPct,warn,verdict,why};
 }
@@ -922,7 +941,7 @@ function aqlFromCloud(d){        // อ่านกลับจาก Sheets (�
   return o;
 }
 function aqlInit(m,code){
-  const crop=AQL_CODES[code]||'';
+  const crop=aqlCropOf(code);
   m.aql=!!crop;m.crop=crop;
   if(m.aql)aqlDefaults(m);
 }
@@ -1021,7 +1040,7 @@ function cAql(){
 const PORK={codes:['RM-009'],bagKg:10,tMin:0,tMax:4,phMin:5.5,phMax:6.2};
 const PORK_CHK=[['pkSeal','ถุงซีลปิดสนิท / ไม่ฉีกขาด / ไม่มีน้ำเลือดซึม'],['pkLabel','ป้ายฉลากชัดเจน (วันผลิต / วันหมดอายุ / น้ำหนัก)'],
   ['pkColor','สี: แดงหรือชมพูธรรมชาติ (ไม่คล้ำเขียว)'],['pkOdor','กลิ่น: ไม่มีกลิ่นเหม็นเปรี้ยวหรือกลิ่นเน่า'],['pkFm','สิ่งเจือปน: ไม่มีเศษกระดูก พลาสติก หรือโลหะ']];
-function isPork(m){return !!m&&PORK.codes.includes(m.code);}
+function isPork(m){if(!m)return false;const mi=matInfo(m.code);return PORK.codes.includes(m.code)||(!!mi&&mi.cat==='Pork');}
 function pkNum(v){if(v===''||v===null||v===undefined)return null;const n=parseFloat(v);return isNaN(n)?null:n;}
 function phClass(v){
   if(v<5.4)return{r:'REJECT',t:'ต่ำกว่า 5.4 — เนื้อซีด นิ่ม แฉะ (PSE)'};
@@ -1413,7 +1432,7 @@ function renderMats(){
     const mi=MATERIALS.find(x=>x.code===m.code)||{};
     const showT=(mi.minTemp??null)!==null;
     const pork=isPork(m);const samp=(m.aql||pork||wtOn(m))?null:getSamp(m.code,parseFloat(m.qty));
-    const aqTog=AQL_CODES[m.code]?`<label class="aq-tg" style="margin-top:12px"><input type="checkbox" ${m.aql?'checked':''} onchange="togAql(${m.idx},this.checked)">ใช้แผนสุ่ม OPL หอม / พริก / กระเทียม (AQL)</label>`:'';
+    const aqTog=aqlCropOf(m.code)?`<label class="aq-tg" style="margin-top:12px"><input type="checkbox" ${m.aql?'checked':''} onchange="togAql(${m.idx},this.checked)">ใช้แผนสุ่ม OPL หอม / พริก / กระเทียม (AQL)</label>`:'';
     const aqHtml=pork?porkHtml(m):m.aql?aqlHtml(m):'';
     const mn=mi.minTemp??mi.minT;const mx=mi.maxTemp??mi.maxT;
     const tHtml=`<div style="margin-bottom:12px">
@@ -1441,7 +1460,7 @@ function renderMats(){
     <div class="mb open" id="mb-${m.idx}">
       <div class="fg"><label>วัตถุดิบ <span class="req">*</span></label>
         <select onchange="onMC(${m.idx},this.value)"><option value="">-- เลือก --</option>
-        ${MATERIALS.map(x=>`<option value="${x.code}" ${x.code===m.code?'selected':''}>${x.code} — ${x.name}</option>`).join('')}</select></div>
+        ${MATERIALS.filter(x=>x.active!==false||x.code===m.code).map(x=>`<option value="${x.code}" ${x.code===m.code?'selected':''}>${x.code} — ${x.name}</option>`).join('')}</select></div>
       <div class="ig">
         <div class="fg"><label>Lot No <span class="req">*</span></label><input type="text" value="${m.lot}" placeholder="Lot/Batch" oninput="setMat(${m.idx},'lot',this.value)"></div>
         <div class="fg"><label>จำนวน <span class="req">*</span></label><input type="number" step="0.01" inputmode="decimal" value="${m.qty}" placeholder="0.0" oninput="setMat(${m.idx},'qty',this.value)"></div>

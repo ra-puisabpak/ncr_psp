@@ -1235,6 +1235,69 @@ export default {
         return json({ success: true, status: next.status, closedDate: next.closed_date || '', ncrId: next.ncr_id || '', closeNote: JSON.parse(data || '{}').closeNote || '' });
       }
 
+      // ===== Central raw-material register =====
+      if (path === '/api/materials' && method === 'GET') {
+        const { results } = await DB.prepare("SELECT * FROM materials ORDER BY CASE type WHEN 'RM' THEN 0 WHEN 'PM' THEN 1 ELSE 2 END, code").all();
+        return json(results);
+      }
+      const mm = path.match(/^\/api\/materials(?:\/([A-Z]{2,4}-\d{3,4}))?$/);
+      if (mm && (method === 'POST' || method === 'PATCH')) {
+        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่แก้ไขทะเบียนวัตถุดิบได้');
+        const b = await body();
+        const row = mm[1] ? await DB.prepare('SELECT * FROM materials WHERE code=?').bind(mm[1]).first() : null;
+        if (method === 'PATCH' && !row) fail(404, 'ไม่พบวัตถุดิบนี้');
+        if (method === 'POST' && mm[1]) fail(405, 'ใช้ PATCH เพื่อแก้ไข');
+        const num = (v, label, lo, hi) => {
+          if (blank(v)) return null;
+          const n = Number(v);
+          if (!Number.isFinite(n) || n < lo || n > hi) fail(400, `${label} ต้องเป็นตัวเลข ${lo} ถึง ${hi}`);
+          return n;
+        };
+        const cur = row || {};
+        const has = (k) => k in b;
+        const next = {
+          name: has('name') ? txt(b.name, 200) : cur.name,
+          type: has('type') ? String(b.type || '') : cur.type,
+          unit: has('unit') ? txt(b.unit, 40) : cur.unit ?? null,
+          cat: has('cat') ? txt(b.cat, 60) : cur.cat ?? null,
+          min_temp: has('min_temp') ? num(b.min_temp, 'อุณหภูมิต่ำสุด', -80, 100) : cur.min_temp ?? null,
+          max_temp: has('max_temp') ? num(b.max_temp, 'อุณหภูมิสูงสุด', -80, 100) : cur.max_temp ?? null,
+          temp_label: has('temp_label') ? txt(b.temp_label, 40) : cur.temp_label ?? null,
+          store: has('store') ? txt(b.store, 300) : cur.store ?? null,
+          aql_crop: has('aql_crop') ? (blank(b.aql_crop) ? null : String(b.aql_crop)) : cur.aql_crop ?? null,
+          ph_min: has('ph_min') ? num(b.ph_min, 'pH ต่ำสุด', 0, 14) : cur.ph_min ?? null,
+          ph_max: has('ph_max') ? num(b.ph_max, 'pH สูงสุด', 0, 14) : cur.ph_max ?? null,
+          active: has('active') ? (b.active ? 1 : 0) : cur.active ?? 1,
+        };
+        if (!next.name) fail(400, 'กรุณาระบุชื่อวัตถุดิบ');
+        if (!['RM', 'PM', 'CM'].includes(next.type)) fail(400, 'ประเภทต้องเป็น วัตถุดิบ (RM) บรรจุภัณฑ์ (PM) หรือวัสดุสิ้นเปลือง (CM)');
+        if ((next.min_temp === null) !== (next.max_temp === null)) fail(400, 'ระบุอุณหภูมิต่ำสุดและสูงสุดให้ครบทั้งสองค่า หรือเว้นว่างทั้งคู่');
+        if (next.min_temp !== null && next.max_temp !== null && next.min_temp > next.max_temp) fail(400, 'อุณหภูมิต่ำสุดต้องไม่มากกว่าสูงสุด');
+        if ((next.ph_min === null) !== (next.ph_max === null)) fail(400, 'ระบุเกณฑ์ pH ต่ำสุดและสูงสุดให้ครบทั้งสองค่า หรือเว้นว่างทั้งคู่');
+        if (next.ph_min !== null && next.ph_min > next.ph_max) fail(400, 'pH ต่ำสุดต้องไม่มากกว่าสูงสุด');
+        if (next.aql_crop !== null && !['shallot', 'garlic', 'chili'].includes(next.aql_crop)) fail(400, 'แผนสุ่ม OPL ต้องเป็น หอม กระเทียม หรือพริก');
+        if (next.aql_crop !== null && next.type !== 'RM') fail(400, 'แผนสุ่ม OPL ใช้กับวัตถุดิบ (RM) เท่านั้น');
+        // The receiving app measures pH in the OPL sample (หอม กระเทียม พริก); ground pork has its own IQC plan.
+        if (next.ph_min !== null && next.aql_crop === null) fail(400, 'เกณฑ์ pH ตอนรับใช้กับวัตถุดิบที่ใช้แผนสุ่ม OPL (หอม กระเทียม พริก)');
+        const keys = Object.keys(next);
+        if (method === 'POST') {
+          const code = String(b.code || '').trim().toUpperCase();
+          if (!/^[A-Z]{2,4}-\d{3,4}$/.test(code)) fail(400, 'รหัสต้องเป็นรูปแบบ เช่น RM-053 PKG-045 SUP-027');
+          if (await DB.prepare('SELECT 1 FROM materials WHERE code=?').bind(code).first()) fail(409, 'มีรหัสนี้ในทะเบียนแล้ว');
+          const ts = nowIso();
+          await DB.prepare(`INSERT INTO materials (code,${keys.join(',')},version,created_by,created_at,updated_by,updated_at) VALUES (?,${keys.map(() => '?').join(',')},1,?,?,?,?)`)
+            .bind(code, ...keys.map((k) => next[k]), user.username, ts, user.username, ts).run();
+          await audit(DB, user.username, 'user', 'create', 'material', code, next);
+          return json({ success: true, code }, 201);
+        }
+        const changes = diff(row, next, keys);
+        if (!Object.keys(changes).length) return json({ success: true, code: row.code, version: row.version });
+        await DB.prepare(`UPDATE materials SET ${keys.map((k) => `${k}=?`).join(',')}, version=version+1, updated_by=?, updated_at=? WHERE code=?`)
+          .bind(...keys.map((k) => next[k]), user.username, nowIso(), row.code).run();
+        await audit(DB, user.username, 'user', 'update', 'material', row.code, changes);
+        return json({ success: true, code: row.code, version: row.version + 1 });
+      }
+
       // ===== PSP QUALITY APP: control point register =====
       if (path === '/api/control-points' && method === 'GET') {
         const { results } = await DB.prepare(

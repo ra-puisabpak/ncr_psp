@@ -6,11 +6,11 @@ import {
 import Layout from '../components/Layout'
 import { qaApi, weighApi } from '../api/d1Api'
 import { useAuth, isQA } from '../auth'
-import { PRODUCTS, MATERIALS, byCode } from '../data/masterData'
+import { PRODUCTS, byCode } from '../data/masterData'
+import { useMaterials } from '../data/materials'
 import { Badge, CP_TYPE_CLS, CP_TYPE_TH, bkkToday, addDays } from '../qa/shared'
 import { FORMS } from '../config'
 
-const MAT_LABEL = byCode(MATERIALS)
 const PRODUCT_LABEL = byCode(PRODUCTS)
 const input = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500'
 const newUid = () => (crypto.randomUUID ? crypto.randomUUID() : `rel-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`)
@@ -84,6 +84,7 @@ function Gate({ gate }) {
 }
 
 function LotPicker({ lots, setLots }) {
+  const { matLabel: MAT_LABEL } = useMaterials()
   const [options, setOptions] = useState([])
   const [q, setQ] = useState('')
   useEffect(() => { qaApi.recvLots(180).then(setOptions).catch(() => setOptions([])) }, [])

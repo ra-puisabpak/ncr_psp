@@ -298,6 +298,31 @@ check('the closed NC keeps the note and who closed it', /10.02/.test(r.j.ncLogs.
 r = await call('GET', '/api/me', { token: qc });
 check('the app is told receiving NCRs are off', r.j.auto_ncr_recv === false, r.j);
 env.AUTO_NCR_RECEIVING = 'on';
+// Central raw-material register
+r = await call('GET', '/api/materials', { token: qc });
+check('the register starts with the 122 items of the receiving app', r.status === 200 && r.j.length === 122 && r.j.find((m) => m.code === 'RM-005').aql_crop === 'garlic' && r.j.find((m) => m.code === 'RM-005').ph_max === 6.3 && r.j.find((m) => m.code === 'RM-010').min_temp === -60, r.j.length);
+r = await call('POST', '/api/materials', { token: qc, body: { code: 'RM-053', name: 'ใบมะกรูด', type: 'RM' } });
+check('QC cannot add to the register', r.status === 403, r);
+r = await call('POST', '/api/materials', { token: qa, body: { code: 'RM-001', name: 'x', type: 'RM' } });
+check('a code already in the register is refused', r.status === 409, r);
+r = await call('POST', '/api/materials', { token: qa, body: { code: 'rm-53', name: 'x', type: 'RM' } });
+check('a malformed code is refused', r.status === 400, r);
+r = await call('POST', '/api/materials', { token: qa, body: { code: 'RM-053', name: 'ใบมะกรูด', type: 'RM', min_temp: 1 } });
+check('temperature needs both limits', r.status === 400, r);
+r = await call('POST', '/api/materials', { token: qa, body: { code: 'RM-053', name: 'ใบมะกรูด', type: 'RM', ph_min: 6, ph_max: 5 } });
+check('pH limits must be in order', r.status === 400, r);
+r = await call('POST', '/api/materials', { token: qa, body: { code: 'RM-053', name: 'ใบมะกรูด', type: 'RM', ph_min: 5, ph_max: 6 } });
+check('receiving pH limits go with the OPL sampling plan', r.status === 400, r);
+r = await call('POST', '/api/materials', { token: qa, body: { code: 'pkg-045', name: 'ฝา', type: 'PM', aql_crop: 'garlic' } });
+check('OPL sampling is for raw materials only', r.status === 400, r);
+r = await call('POST', '/api/materials', { token: qa, body: { code: 'rm-053', name: 'ใบมะกรูด', type: 'RM', unit: 'กิโลกรัม', cat: 'Herb', min_temp: 1, max_temp: 4, store: 'แช่เย็น 1-4°C' } });
+check('QA adds a raw material', r.status === 201 && r.j.code === 'RM-053', r);
+r = await call('PATCH', '/api/materials/RM-053', { token: qa, body: { name: 'ใบมะกรูดสด', active: false } });
+check('QA edits and retires a material; the version moves on', r.status === 200 && r.j.version === 2, r);
+r = await call('GET', '/api/materials', { token: qc });
+check('a retired material stays in the register', r.j.find((m) => m.code === 'RM-053').active === 0 && r.j.find((m) => m.code === 'RM-053').name === 'ใบมะกรูดสด', r.j.find((m) => m.code === 'RM-053'));
+r = await call('GET', '/api/audit?entity_id=RM-053', { token: qa });
+check('register changes are in the audit log', r.j.some((x) => x.action === 'update' && JSON.parse(x.changes).name), r.j);
 
 // conditional acceptance
 const condBody = (uid, note) => { const x = recvBody(uid, ''); x.record.mats = [{ idx: 1, code: 'PKG-001', result: 'COND', note, condBy: 'someone else', photo1: null, photo2: null }]; return x; };

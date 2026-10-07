@@ -156,6 +156,13 @@ export const oilApi = {
 }
 
 // FM-QC-006 refrigerator / freezer temperature.
+// Central raw-material register (receiving, weighing, traceability, NCR).
+export const materialApi = {
+  list: () => request('/api/materials'),
+  create: (body) => post('/api/materials', body),
+  update: (code, body) => patch(`/api/materials/${enc(code)}`, body),
+}
+
 export const coldApi = {
   units: () => request('/api/cold/units'),
   createUnit: (body) => post('/api/cold/units', body),

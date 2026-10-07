@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, Boxes, Route, HandHeart, Droplets, Thermometer, Scale, Flame,
+  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, Boxes, Route, HandHeart, Droplets, Thermometer, Scale, Flame, BookOpen,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { qaApi } from '../api/d1Api'
@@ -93,6 +93,10 @@ export default function QADashboardPage() {
         <Link to="/qa/trace" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
           <Route className="w-6 h-6 shrink-0 text-teal-700" />
           <div className="min-w-0"><div className="font-semibold text-sm text-gray-800">สอบย้อนกลับ</div><div className="text-[11px] text-gray-500">ค้นด้วยล็อตหรือ Batch</div></div>
+        </Link>
+        <Link to="/qa/materials" className="col-span-2 bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <BookOpen className="w-6 h-6 shrink-0 text-teal-700" />
+          <div className="min-w-0"><div className="font-semibold text-sm text-gray-800">ทะเบียนวัตถุดิบกลาง</div><div className="text-[11px] text-gray-500">วัตถุดิบ บรรจุภัณฑ์ วัสดุสิ้นเปลือง · ใช้ร่วมกันทั้งตรวจรับ ชั่ง สอบย้อนกลับ</div></div>
         </Link>
       </div>
 

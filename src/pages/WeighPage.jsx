@@ -4,12 +4,11 @@ import { ArrowLeft, Save, Printer, Scale, BookOpen, Plus, Trash2, CheckCircle2, 
 import Layout from '../components/Layout'
 import { formulaApi, weighApi, qaApi } from '../api/d1Api'
 import { useAuth, canWrite } from '../auth'
-import { MATERIALS, byCode } from '../data/masterData'
+import { useMaterials } from '../data/materials'
 import { Badge, bkkToday, addDays, newUid } from '../qa/shared'
 import { FORMULA_STATUS } from './FormulasPage'
 import { FORMS } from '../config'
 
-const MAT_LABEL = byCode(MATERIALS)
 const input = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500'
 const ASSESS = ['QA_MANAGER', 'FSTL', 'SUPERVISOR']
 const kg = (n) => Number(n).toLocaleString('th-TH', { maximumFractionDigits: 3 })
@@ -18,6 +17,7 @@ const nextBatch = (base, k) => { const m = /^(.*?)(\d+)$/.exec(base.trim()); ret
 
 export default function WeighPage() {
   const { user } = useAuth()
+  const { matLabel: MAT_LABEL } = useMaterials()
   const [formulas, setFormulas] = useState([])
   const [lots, setLots] = useState([])
   const [code, setCode] = useState('')

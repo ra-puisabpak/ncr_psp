@@ -5,6 +5,7 @@ import {
   PROCESSES, PARAMETERS, SUPPLIERS, MATERIALS, ALLERGENS, SOURCE_OPTIONS, DISPOSITION_OPTIONS, codeOf,
 } from '../data/masterData'
 import { FORM_CODE_NCR } from '../config'
+import { useMaterials } from '../data/materials'
 import { useAuth, isQA, canWrite } from '../auth'
 import SupplierLinkBox from '../components/SupplierLinkBox'
 import AuditTrail from '../components/AuditTrail'
@@ -96,6 +97,7 @@ export default function NCRDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { materials: MATS, choices: MAT_CHOICES } = useMaterials({ withProducts: true })
   const isNew = !id || id === 'new'
   const qa = isQA(user)
   const writer = canWrite(user)
@@ -158,10 +160,10 @@ export default function NCRDetailPage() {
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
 
   // Picking a known item fills its stock unit, and shows its code and storage condition.
-  const material = MATERIALS.find((m) => m.label === form.material_name)
+  const material = MATS.find((m) => m.label === form.material_name)
   const pickMaterial = (e) => {
     const label = e.target.value
-    const m = MATERIALS.find((x) => x.label === label)
+    const m = MATS.find((x) => x.label === label)
     setForm((f) => ({ ...f, material_name: label, defect_unit: m?.unit && !f.defect_unit ? m.unit : f.defect_unit }))
   }
 
@@ -179,7 +181,7 @@ export default function NCRDetailPage() {
       if (isNew) {
         const payload = { ...form }
         for (const k of QA_FIELDS) if (k !== 'severity') delete payload[k]
-        payload.material_code = codeOf(MATERIALS, form.material_name)
+        payload.material_code = codeOf(MATS, form.material_name)
         payload.supplier_id = codeOf(SUPPLIERS, form.supplier_name)
         payload.parameter_id = codeOf(PARAMETERS, form.parameter_name)
         const res = await ncrApi.create(payload)
@@ -201,7 +203,7 @@ export default function NCRDetailPage() {
       const before = toForm(record)
       const payload = {}
       for (const k of Object.keys(form)) if (form[k] !== before[k]) payload[k] = form[k]
-      if ('material_name' in payload) payload.material_code = codeOf(MATERIALS, form.material_name)
+      if ('material_name' in payload) payload.material_code = codeOf(MATS, form.material_name)
       if ('supplier_name' in payload) payload.supplier_id = codeOf(SUPPLIERS, form.supplier_name)
       if ('parameter_name' in payload) payload.parameter_id = codeOf(PARAMETERS, form.parameter_name)
       if ('recall_required' in payload) payload.recall_required = form.recall_required === '' ? null : form.recall_required === '1'
@@ -411,7 +413,7 @@ export default function NCRDetailPage() {
                 </FieldRow>
                 <FieldRow label="วัตถุดิบ / บรรจุภัณฑ์ / ผลิตภัณฑ์ (พิมพ์เพื่อค้นหา)">
                   <input type="text" list="dl-materials" className={inputCls} value={form.material_name} onChange={pickMaterial} disabled={readOnly} />
-                  <datalist id="dl-materials">{MATERIALS.map((o) => <option key={o.code} value={o.label} label={`${o.code} · ${o.group}`} />)}</datalist>
+                  <datalist id="dl-materials">{MAT_CHOICES.map((o) => <option key={o.code} value={o.label} label={`${o.code} · ${o.group}`} />)}</datalist>
                   {material && (
                     <span className="text-[11px] text-gray-500">
                       {material.code} · {material.group}{material.unit ? ` · หน่วย ${material.unit}` : ''}

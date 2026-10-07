@@ -3,12 +3,11 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Search, PackageOpen, Boxes, ClipboardCheck, FileText, Scale } from 'lucide-react'
 import Layout from '../components/Layout'
 import { qaApi } from '../api/d1Api'
-import { MATERIALS, byCode } from '../data/masterData'
+import { useMaterials } from '../data/materials'
 import { ResultBadge } from '../qa/shared'
 import { ReleaseRow } from './FGReleasePage'
 import { FORMS } from '../config'
 
-const MAT_LABEL = byCode(MATERIALS)
 
 function Section({ icon: Icon, title, count, children }) {
   return (
@@ -22,6 +21,7 @@ function Section({ icon: Icon, title, count, children }) {
 }
 
 export default function TracePage() {
+  const { matLabel: MAT_LABEL } = useMaterials()
   const [params, setParams] = useSearchParams()
   const [q, setQ] = useState(params.get('q') || '')
   const [res, setRes] = useState(null)
