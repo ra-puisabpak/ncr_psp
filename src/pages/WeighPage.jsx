@@ -16,6 +16,8 @@ const kg = (n) => Number(n).toLocaleString('th-TH', { maximumFractionDigits: 3 }
 // The batch number k sets after `base`: B261007-01 → B261007-02; without a trailing number, base-2.
 const nextBatch = (base, k) => { const m = /^(.*?)(\d+)$/.exec(base.trim()); return m ? m[1] + String(Number(m[2]) + k).padStart(m[2].length, '0') : `${base.trim()}-${k + 1}` }
 
+const PRODUCT_NAME = (formulas, code) => formulas.find((x) => x.product_code === code)?.product_name || code
+
 export default function WeighPage() {
   const { user } = useAuth()
   const { matLabel: MAT_LABEL } = useMaterials()
@@ -34,8 +36,10 @@ export default function WeighPage() {
   // Who weighed (an employee from the list) signs; the logged-in account records.
   const [employees, setEmployees] = useState([])
   const [weigherId, setWeigherId] = useState('') // default for every line; a line may name its own
-  const [signature, setSignature] = useState(null) // the recorder's (logged-in QC) signature
-  const [sigKey, setSigKey] = useState(0)
+  // Pressing save opens a sign-and-confirm step; the pad is empty each time, so the recorder signs every save.
+  const [signing, setSigning] = useState(false)
+  const [signature, setSignature] = useState(null)
+  const [verified, setVerified] = useState(false)
   const empName = (id) => employees.find((e) => String(e.emp_id) === String(id))?.name || ''
   const lineWeigher = (l) => empName(l.weigherId || weigherId)
 
@@ -91,15 +95,16 @@ export default function WeighPage() {
   const complete = f && lines.every((l) => l.name && Array.from({ length: sets }, (_, s) => l.weights[s]).every((v) => v !== '' && v != null))
   const canAssess = ASSESS.includes(user?.role)
 
+  const openSign = () => { setError(null); setSignature(null); setVerified(false); setSigning(true) }
   const save = async () => {
     setSaving(true); setError(null)
     try {
       const res = await weighApi.save({ uid, product_code: code, ...head, sets, note, ...(sets > 1 ? { batches: batches.map((x) => x.trim()) } : {}),
         recorder_signature: signature,
         lines: lines.map((l) => ({ name: l.name, lot: l.lot, doc_no: l.doc_no, code: l.code, weigher: lineWeigher(l), weights: Array.from({ length: sets }, (_, s) => l.weights[s]) })) })
-      setSaved(res); setUid(newUid()); setCode(''); setLines([]); setNote(''); setSignature(null); setSigKey((k) => k + 1)
+      setSaved(res); setUid(newUid()); setCode(''); setLines([]); setNote(''); setSignature(null); setVerified(false); setSigning(false)
       loadRecent(); window.scrollTo({ top: 0, behavior: 'smooth' })
-    } catch (e) { setError(e.message) }
+    } catch (e) { setError(e.message); setSigning(false) }
     finally { setSaving(false) }
   }
 
@@ -200,16 +205,12 @@ export default function WeighPage() {
               </div>
             )}
             <label className="text-xs text-gray-600 block">หมายเหตุ{devs.length ? ' / ผลการประเมิน *' : ''}<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} className={input} /></label>
-            <div className="border border-gray-200 rounded-lg p-2.5 space-y-2 sm:max-w-sm">
-              <div className="text-xs text-gray-600">ลายเซ็นผู้บันทึก (QC) * — <b>{user?.display_name}</b></div>
-              <SignaturePad onChange={setSignature} resetKey={sigKey} />
-              {weighers.length > 0 && <div className="text-[11px] text-gray-500">ผู้ชั่ง: {weighers.join(', ')} (ระบุชื่อ ไม่ต้องเซ็น)</div>}
-            </div>
+            <div className="text-xs text-gray-500">ผู้บันทึก (QC): <b>{user?.display_name}</b> · ผู้ชั่ง: {weighers.length ? weighers.join(', ') : '-'} · ต้องเซ็นยืนยันทุกครั้งที่กดบันทึก</div>
             {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{error}</div>}
             {canWrite(user) ? (
-              <button onClick={save} disabled={saving || !complete || lines.some((l) => !lineWeigher(l)) || !signature || batches.some((x) => !x.trim()) || new Set(batches.map((x) => x.trim())).size !== batches.length || (devs.length > 0 && (!canAssess || !note.trim()))}
+              <button onClick={openSign} disabled={saving || !complete || lines.some((l) => !lineWeigher(l)) || batches.some((x) => !x.trim()) || new Set(batches.map((x) => x.trim())).size !== batches.length || (devs.length > 0 && (!canAssess || !note.trim()))}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold disabled:opacity-40">
-                <Save className="w-5 h-5" />{saving ? 'กำลังบันทึก…' : devs.length && !canAssess ? 'ต้องให้หัวหน้างาน / QA บันทึก' : 'บันทึก'}
+                <Save className="w-5 h-5" />{saving ? 'กำลังบันทึก…' : devs.length && !canAssess ? 'ต้องให้หัวหน้างาน / QA บันทึก' : 'เซ็นและบันทึก'}
               </button>
             ) : <div className="text-sm text-gray-500">บัญชีนี้ดูได้อย่างเดียว บันทึกไม่ได้</div>}
 
@@ -232,6 +233,32 @@ export default function WeighPage() {
           </Link>
         ))}
       </div>
+      {signing && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-3" onClick={(e) => { if (e.target === e.currentTarget && !saving) setSigning(false) }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-4 space-y-3 max-h-[92vh] overflow-y-auto">
+            <h3 className="font-bold text-gray-800">เซ็นยืนยันก่อนบันทึก</h3>
+            <div className="text-sm text-gray-700">
+              {PRODUCT_NAME(formulas, code)} · Batch {batches.map((x) => x.trim()).join(', ')}<br />
+              ผู้ชั่ง: <b>{weighers.join(', ')}</b>
+            </div>
+            <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={verified} onChange={(e) => setVerified(e.target.checked)} className="mt-1" />
+              <span>ข้าพเจ้าทวนสอบแล้วว่าผู้ชั่งและน้ำหนักถูกต้องตามที่ชั่งจริง</span>
+            </label>
+            <div>
+              <div className="text-xs text-gray-600 mb-1">ลายเซ็นผู้บันทึก (QC) — <b>{user?.display_name}</b> *</div>
+              <SignaturePad onChange={setSignature} resetKey={0} />
+            </div>
+            {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{error}</div>}
+            <div className="flex gap-2">
+              <button onClick={() => setSigning(false)} disabled={saving} className="flex-1 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-semibold bg-white">ยกเลิก</button>
+              <button onClick={save} disabled={saving || !signature || !verified} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold disabled:opacity-40">
+                <Save className="w-4 h-4" />{saving ? 'กำลังบันทึก…' : 'ยืนยันและบันทึก'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   )
 }

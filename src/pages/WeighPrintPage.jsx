@@ -114,7 +114,6 @@ export default function WeighPrintPage() {
             </div>
           )}
           <div className="mt-10 flex justify-around text-center avoid-break">
-            <div><div className="h-14" /><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้ชั่ง<br /><span className="text-[10px]">{allWeighers.join(', ')}</span></div>
             <div><div className="h-14 flex items-end justify-center">{sigs[recorder] && <img src={sigs[recorder]} alt="" className="max-h-14 max-w-56" />}</div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้บันทึก ({recorder})<br />(QC)</div>
             <div><div className="h-14" /><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้รับทราบ<br />(หัวหน้าฝ่ายผลิต)</div>
           </div>
