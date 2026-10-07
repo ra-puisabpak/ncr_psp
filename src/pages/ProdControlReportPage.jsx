@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { prodctlApi, oilApi, qaApi } from '../api/d1Api'
-import { COMPANY_NAME, FORMS } from '../config'
+import { LOGO_URL, COMPANY_NAME, FORMS } from '../config'
 import { bkkToday } from '../qa/shared'
 
 const td = 'border border-black px-0.5 py-0.5'
@@ -52,7 +52,7 @@ export default function ProdControlReportPage() {
           <table className="w-full border-collapse mb-1.5 text-[10.5px]">
             <tbody>
               <tr>
-                <td className={`${td} w-[70%]`} rowSpan={2}><b className="text-[12px]">{COMPANY_NAME}</b> · ประเภทเอกสาร: เอกสารในหน่วยควบคุมคุณภาพ<br /><b>ชื่อเอกสาร: แบบฟอร์มควบคุมการผลิต</b></td>
+                <td className={`${td} w-[70%]`} rowSpan={2}><img src={LOGO_URL} alt="" className="float-left mr-2 h-10 w-10 object-contain" /><b className="text-[12px]">{COMPANY_NAME}</b> · ประเภทเอกสาร: เอกสารในหน่วยควบคุมคุณภาพ<br /><b>ชื่อเอกสาร: แบบฟอร์มควบคุมการผลิต</b></td>
                 <td className={td}>รหัสเอกสาร: {FORMS.PRODCTL.code}</td>
               </tr>
               <tr><td className={td}>แก้ไขครั้งที่: {FORMS.PRODCTL.rev}</td></tr>

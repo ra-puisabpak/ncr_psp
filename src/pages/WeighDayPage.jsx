@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { weighApi } from '../api/d1Api'
-import { COMPANY_NAME, FORMS } from '../config'
+import { LOGO_URL, COMPANY_NAME, FORMS } from '../config'
 import { bkkToday } from '../qa/shared'
 import { thaiDate, kg } from './WeighPrintPage'
 
@@ -33,7 +33,7 @@ export default function WeighDayPage() {
       {rows && rows.length > 0 && (
         <div className="print-area bg-white mx-auto my-4 shadow p-[8mm] text-black w-[297mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none text-[11px]" style={{ fontFamily: "'Sarabun', sans-serif" }}>
           <div className="flex justify-between items-start border-b-2 border-black pb-1 mb-2">
-            <div><b className="text-[13px]">{COMPANY_NAME}</b><div className="text-[14px] font-bold">สรุปการชั่งวัตถุดิบประจำวัน</div></div>
+            <div><img src={LOGO_URL} alt="" className="float-left mr-2 h-10 w-10 object-contain" /><b className="text-[13px]">{COMPANY_NAME}</b><div className="text-[14px] font-bold">สรุปการชั่งวัตถุดิบประจำวัน</div></div>
             <div className="text-right">อ้างอิง {FORMS.WEIGH.code} Rev.{FORMS.WEIGH.rev}<br />วันที่ผลิต {thaiDate(date)}</div>
           </div>
           <div className="flex flex-wrap gap-x-8 mb-2">

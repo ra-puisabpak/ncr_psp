@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { fgCheckApi } from '../api/d1Api'
-import { COMPANY_NAME, FORMS } from '../config'
+import { LOGO_URL, COMPANY_NAME, FORMS } from '../config'
 import { bkkToday } from '../qa/shared'
 import { FG_SENSORY, FG_PACK } from './FGCheckPage'
 
@@ -38,7 +38,7 @@ export default function FGCheckReportPage() {
           <table className="w-full border-collapse mb-2">
             <tbody>
               <tr>
-                <td className={`${td} w-[65%]`} rowSpan={2}><b className="text-[13px]">{COMPANY_NAME}</b><br />ประเภทเอกสาร: เอกสารในหน่วยควบคุมคุณภาพ<br /><b>ชื่อเอกสาร: {FORMS.FG_CHECK.name}</b></td>
+                <td className={`${td} w-[65%]`} rowSpan={2}><img src={LOGO_URL} alt="" className="float-left mr-2 h-10 w-10 object-contain" /><b className="text-[13px]">{COMPANY_NAME}</b><br />ประเภทเอกสาร: เอกสารในหน่วยควบคุมคุณภาพ<br /><b>ชื่อเอกสาร: {FORMS.FG_CHECK.name}</b></td>
                 <td className={td}>รหัสเอกสาร: {FORMS.FG_CHECK.code}</td>
               </tr>
               <tr><td className={td}>แก้ไขครั้งที่: {FORMS.FG_CHECK.rev}</td></tr>

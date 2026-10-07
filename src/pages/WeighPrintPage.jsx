@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { weighApi } from '../api/d1Api'
-import { COMPANY_NAME, FORMS } from '../config'
+import { LOGO_URL, COMPANY_NAME, FORMS } from '../config'
 
 const td = 'border border-black px-1 py-0.5'
 const TH_M = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
@@ -64,7 +64,7 @@ export default function WeighPrintPage() {
           <table className="w-full border-collapse mb-2">
             <tbody>
               <tr>
-                <td className={`${td} w-[55%]`} rowSpan={3}><b className="text-[13px]">{COMPANY_NAME}</b><br />ประเภทเอกสาร: เอกสารในหน่วยผลิต<br /><b>ชื่อเอกสาร: บันทึกการชั่งวัตถุดิบ</b></td>
+                <td className={`${td} w-[55%]`} rowSpan={3}><img src={LOGO_URL} alt="" className="float-left mr-2 h-10 w-10 object-contain" /><b className="text-[13px]">{COMPANY_NAME}</b><br />ประเภทเอกสาร: เอกสารในหน่วยผลิต<br /><b>ชื่อเอกสาร: บันทึกการชั่งวัตถุดิบ</b></td>
                 <td className={td}>รหัสเอกสาร: {FORMS.WEIGH.code}</td>
               </tr>
               <tr><td className={td}>แก้ไขครั้งที่: {FORMS.WEIGH.rev}</td></tr>
@@ -76,13 +76,12 @@ export default function WeighPrintPage() {
             <div><b>วันที่ผลิต:</b> {thaiDate(first.prod_date)}</div>
             <div><b>Batch:</b> {recs.map((r) => r.batch_no).join(', ')}</div>
             <div><b>เครื่องชั่ง:</b> {uniq(recs.map((r) => r.scale_id)).join(', ') || '-'}</div>
-            <div><b>สูตร:</b> v{first.formula_version} {first.formula_status === 'APPROVED' ? '(อนุมัติ)' : '(รอยืนยัน)'} · Tolerance {first.tolerance_pct == null ? 'ยังไม่กำหนด' : `±${first.tolerance_pct}%`}</div>
           </div>
           <table className="w-full border-collapse text-center">
             <thead className="bg-violet-50">
               <tr>
                 <th className={td} rowSpan={2}>ลำดับ</th><th className={td} rowSpan={2}>รายการวัตถุดิบ</th><th className={td} rowSpan={2}>น้ำหนักที่กำหนด (กก./ชุด)</th>
-                <th className={td} rowSpan={2}>วันที่รับเข้า / รหัส LOT</th><th className={td} rowSpan={2}>ผู้ชั่ง</th><th className={td} colSpan={width}>น้ำหนักวัตถุดิบ (กก.)</th>
+                <th className={td} rowSpan={2}>ผู้ชั่ง</th><th className={td} colSpan={width}>น้ำหนักวัตถุดิบ (กก.)</th>
               </tr>
               <tr>{Array.from({ length: width }, (_, i) => <th key={i} className={`${td} w-[9%]`}>{cols[i] ? cols[i].head : 'Batch No.'}</th>)}</tr>
             </thead>
@@ -94,7 +93,6 @@ export default function WeighPrintPage() {
                     <td className={td}>{i + 1}</td>
                     <td className={`${td} text-left`}>{name}{ls.some((l) => l.extra) ? ' (นอกสูตร)' : ''}</td>
                     <td className={td}>{kg(ls.find((l) => l.target != null)?.target)}</td>
-                    <td className={`${td} text-left`}>{uniq(ls.map((l) => l.lot)).join(', ')}</td>
                     <td className={td}>{uniq(recs.filter((r) => lineOf(r, name)).map((r) => lineWeigher(r, lineOf(r, name)))).join(', ')}</td>
                     {Array.from({ length: width }, (_, c) => {
                       const col = cols[c]
