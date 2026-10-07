@@ -188,6 +188,7 @@ export const weighApi = {
   list: (params = {}) => request(`/api/weigh?${new URLSearchParams(params)}`),
   save: (body) => post('/api/weigh', body),
   signature: (id) => request(`/api/weigh/${enc(id)}/signature`),
+  signatures: (id) => request(`/api/weigh/${enc(id)}/signatures`),
 }
 
 // FM-QC-002 production control (derives CCP-01 / CCP-02 / OPRP-05 records).

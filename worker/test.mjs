@@ -684,6 +684,18 @@ r = await call('GET', '/api/weigh?wr_id=PD-260922-001', { token: qc });
 check('the record names the weigher and the recorder, and has the signature', r.j[0].weigher_name === 'สมศรี ชั่งดี' && r.j[0].weigher === 'QC One' && r.j[0].has_sig === 1, r.j[0]);
 r = await call('GET', '/api/weigh/PD-260922-001/signature', { token: qc });
 check('the signature image can be fetched', r.status === 200 && r.j.data.startsWith('data:image/png;base64,'), r);
+// A weigher on each line, each signing once
+const perLine = (sigs) => wBody({ prod_date: '2026-09-25', batch_no: 'B260925-21', weigher_name: undefined, signature: undefined, signatures: sigs,
+  lines: linesFor().map((l, i) => ({ ...l, lot: '', weigher: i % 2 ? 'สมชาย ชั่งเก่ง' : 'สมศรี ชั่งดี' })) });
+r = await call('POST', '/api/weigh', { token: qc, body: perLine([{ name: 'สมศรี ชั่งดี', data: SIG }]) });
+check('every weigher named on a line must sign', r.status === 400 && /สมชาย/.test(r.j.error), r);
+r = await call('POST', '/api/weigh', { token: qc, body: perLine([{ name: 'สมศรี ชั่งดี', data: SIG }, { name: 'สมชาย ชั่งเก่ง', data: SIG }]) });
+check('lines keep their own weigher', r.status === 201, r);
+const plId = r.j.wr_id;
+r = await call('GET', `/api/weigh?wr_id=${plId}`, { token: qc });
+check('each line names its weigher and the record lists both', r.j[0].lines[1].weigher === 'สมชาย ชั่งเก่ง' && r.j[0].lines[0].weigher === 'สมศรี ชั่งดี' && r.j[0].weigher_name === 'สมศรี ชั่งดี, สมชาย ชั่งเก่ง' && r.j[0].has_sig === 1, r.j[0]);
+r = await call('GET', `/api/weigh/${plId}/signatures`, { token: qc });
+check('both signatures are kept', r.status === 200 && r.j.length === 2 && r.j.every((x) => x.data.startsWith('data:image/png')), r);
 r = await call('POST', '/api/weigh', { token: qc, body: wBody() });
 check('a batch is weighed once', r.status === 409, r);
 const devBody = wBody({ batch_no: 'B260922-02', lines: linesFor({ หมูบด: 46.51 }) });

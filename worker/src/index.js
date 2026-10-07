@@ -1799,15 +1799,18 @@ export default {
         if (isDate(sp.get('from'))) { where.push('w.prod_date>=?'); p.push(sp.get('from')); }
         if (isDate(sp.get('to'))) { where.push('w.prod_date<=?'); p.push(sp.get('to')); }
         for (const k of ['product_code', 'batch_no', 'wr_id']) if (sp.get(k)) { where.push(`w.${k}=?`); p.push(sp.get(k)); }
-        const { results } = await DB.prepare(`SELECT w.*, s.weigher_name, s.signed_at, s.sig_data IS NOT NULL AS has_sig FROM weigh_records w LEFT JOIN weigh_signs s ON s.wr_id = w.wr_id
+        const { results } = await DB.prepare(`SELECT w.*, s.weigher_name, s.signed_at, (s.sig_data IS NOT NULL OR EXISTS (SELECT 1 FROM weigh_signatures g WHERE g.wr_id = w.wr_id)) AS has_sig FROM weigh_records w LEFT JOIN weigh_signs s ON s.wr_id = w.wr_id
           WHERE ${where.join(' AND ')} ORDER BY w.prod_date DESC, w.wr_id DESC LIMIT 500`).bind(...p).all();
         return json(results.map((r) => ({ ...r, lines: JSON.parse(r.lines), deviations: r.deviations ? JSON.parse(r.deviations) : [] })));
       }
-      const wsg = path.match(/^\/api\/weigh\/(PD-\d{6}-\d{3})\/signature$/);
+      const wsg = path.match(/^\/api\/weigh\/(PD-\d{6}-\d{3})\/signatures?$/);
       if (wsg && method === 'GET') {
-        const row = await DB.prepare('SELECT sig_type, sig_data FROM weigh_signs WHERE wr_id=?').bind(wsg[1]).first();
-        if (!row || !row.sig_data) fail(404, 'ไม่มีลายเซ็น');
-        return json({ data: `data:${row.sig_type};base64,${row.sig_data}` });
+        // Every weigher's signature on this record (records saved before per-line weighers keep one, in weigh_signs).
+        const { results } = await DB.prepare('SELECT weigher_name, sig_type, sig_data FROM weigh_signatures WHERE wr_id=? ORDER BY signed_at, weigher_name').bind(wsg[1]).all();
+        const old = results.length ? null : await DB.prepare('SELECT weigher_name, sig_type, sig_data FROM weigh_signs WHERE wr_id=? AND sig_data IS NOT NULL').bind(wsg[1]).first();
+        const list = (old ? [old] : results).map((x) => ({ name: x.weigher_name, data: `data:${x.sig_type};base64,${x.sig_data}` }));
+        if (!list.length) fail(404, 'ไม่มีลายเซ็น');
+        return json(path.endsWith('/signatures') ? list : { data: list[0].data });
       }
       if (path === '/api/weigh' && method === 'POST') {
         need(user, WRITERS);
@@ -1823,12 +1826,17 @@ export default {
         if (!isDate(b.prod_date) || b.prod_date > today()) fail(400, 'กรุณาระบุวันที่ผลิต (ไม่เป็นวันในอนาคต)');
         const sets = parseInt(b.sets, 10);
         if (!(sets >= 1 && sets <= 12)) fail(400, 'จำนวนชุดต้องเป็น 1–12');
-        // The person who weighed (picked from the employee list) signs; the account that saves is the recorder.
-        const weigherName = txt(b.weigher_name, 80);
-        if (!weigherName) fail(400, 'กรุณาเลือกชื่อผู้ชั่ง');
-        if (typeof b.signature !== 'string' || !b.signature.startsWith('data:')) fail(400, 'กรุณาให้ผู้ชั่งลงลายเซ็น');
-        const sig = decodePhoto({ content_type: (/^data:([^;,]+)/.exec(b.signature) || [])[1], data: b.signature });
-        const empId = Number.isInteger(b.emp_id) ? b.emp_id : null;
+        // Who weighed each line (picked from the employee list) signs once; the account that saves is the recorder.
+        // An older app sends one weigher_name + signature for the whole form.
+        const defaultWeigher = txt(b.weigher_name, 80);
+        const sigsIn = Array.isArray(b.signatures) ? b.signatures.slice(0, 20)
+          : defaultWeigher && typeof b.signature === 'string' ? [{ name: defaultWeigher, emp_id: b.emp_id, data: b.signature }] : [];
+        const signatures = new Map();
+        for (const x of sigsIn) {
+          const name = txt(x?.name, 80);
+          if (!name || typeof x.data !== 'string' || !x.data.startsWith('data:')) continue;
+          signatures.set(name, { name, emp_id: Number.isInteger(x.emp_id) ? x.emp_id : null, ...decodePhoto({ content_type: (/^data:([^;,]+)/.exec(x.data) || [])[1], data: x.data }) });
+        }
         // Each set gets its own batch number. A form without `batches` (an older app) keeps all sets under batch_no.
         const split = sets > 1 && Array.isArray(b.batches);
         const batches = split ? b.batches.slice(0, sets).map(cleanBatch) : [cleanBatch(b.batch_no)];
@@ -1845,7 +1853,10 @@ export default {
           const w = (Array.isArray(l?.weights) ? l.weights : []).slice(0, sets).map((v) => (blank(v) ? NaN : Number(v)));
           if (w.length !== sets || w.some((n) => !Number.isFinite(n) || n < 0 || n > 1000)) fail(400, `กรอกน้ำหนักของ ${name} ให้ครบ ${sets} ชุด (กก.)`);
           const lot = String(l?.lot || '').trim().slice(0, 60);
-          const line = { name, target, lot, doc_no: String(l?.doc_no || '').slice(0, 40), code: String(l?.code || '').slice(0, 40), weights: w };
+          const weigher = txt(l?.weigher, 80) || defaultWeigher;
+          if (!weigher) fail(400, `กรุณาเลือกชื่อผู้ชั่งของ ${name}`);
+          if (!signatures.has(weigher)) fail(400, `กรุณาให้ ${weigher} (ผู้ชั่ง) ลงลายเซ็น`);
+          const line = { name, target, lot, weigher, doc_no: String(l?.doc_no || '').slice(0, 40), code: String(l?.code || '').slice(0, 40), weights: w };
           if (extra) line.extra = true;
           return line;
         };
@@ -1855,6 +1866,7 @@ export default {
           return readLine(l, it.target, false);
         });
         for (const l of given.filter((x) => !items.some((it) => it.name === String(x?.name || '').trim()))) lines.push(readLine(l, null, true));
+        const used = [...new Set(lines.map((l) => l.weigher))];
         // Deviations of the sets a record holds (`from`..`to`); set numbers restart at 1 within the record.
         const devsOf = (from, to) => {
           const out = [];
@@ -1888,7 +1900,9 @@ export default {
               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(pt.wr_id, pt.uid, f.product_code, f.product_name, b.prod_date, pt.batch, pt.to - pt.from, f.version, f.status, tol,
               txt(b.scale_id, 40), JSON.stringify(lines.map((l) => ({ ...l, weights: l.weights.slice(pt.from, pt.to) }))), pt.deviations.length ? JSON.stringify(pt.deviations) : null,
               pt.result, note, pt.result === 'DEVIATION' ? user.display_name : null, user.display_name, user.username, nowIso())),
-              ...parts.map((pt) => DB.prepare('INSERT INTO weigh_signs (wr_id,weigher_name,emp_id,sig_type,sig_data,signed_at) VALUES (?,?,?,?,?,?)').bind(pt.wr_id, weigherName, empId, sig.type, sig.b64, nowIso()))]);
+              ...parts.map((pt) => DB.prepare('INSERT INTO weigh_signs (wr_id,weigher_name,emp_id,sig_type,sig_data,signed_at) VALUES (?,?,?,?,?,?)')
+                .bind(pt.wr_id, used.join(', '), signatures.get(used[0]).emp_id, null, null, nowIso())),
+              ...parts.flatMap((pt) => used.map((n) => { const x = signatures.get(n); return DB.prepare('INSERT INTO weigh_signatures (wr_id,weigher_name,emp_id,sig_type,sig_data,signed_at) VALUES (?,?,?,?,?,?)').bind(pt.wr_id, n, x.emp_id, x.type, x.b64, nowIso()); }))]);
           } catch (e) {
             if (/weigh_records\.product_code/.test(e.message)) fail(409, 'Batch นี้มีบันทึกการชั่งแล้ว');
             if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
@@ -1899,7 +1913,7 @@ export default {
             throw e;
           }
           for (const pt of parts) {
-            await audit(DB, user.username, 'user', 'create', 'weigh_record', pt.wr_id, { weigher: weigherName, product_code: f.product_code, batch_no: pt.batch, sets: pt.to - pt.from, result: pt.result, lots: lines.map((l) => l.lot), ...(split ? { split_from: uid, set_no: pt.from + 1, of_sets: sets } : {}) });
+            await audit(DB, user.username, 'user', 'create', 'weigh_record', pt.wr_id, { weighers: used, product_code: f.product_code, batch_no: pt.batch, sets: pt.to - pt.from, result: pt.result, lots: lines.map((l) => l.lot), ...(split ? { split_from: uid, set_no: pt.from + 1, of_sets: sets } : {}) });
           }
           return reply(parts.map((pt) => ({ wr_id: pt.wr_id, batch_no: pt.batch, result: pt.result })), parts.flatMap((pt) => pt.deviations), 201);
         }

@@ -787,3 +787,13 @@ CREATE TABLE IF NOT EXISTS weigh_signs (
   sig_data      TEXT,
   signed_at     TEXT NOT NULL
 );
+-- One signature per weigher per record (weighers are named on each line).
+CREATE TABLE IF NOT EXISTS weigh_signatures (
+  wr_id         TEXT NOT NULL,
+  weigher_name  TEXT NOT NULL,
+  emp_id        INTEGER,
+  sig_type      TEXT NOT NULL,
+  sig_data      TEXT NOT NULL,
+  signed_at     TEXT NOT NULL,
+  PRIMARY KEY (wr_id, weigher_name)
+);
