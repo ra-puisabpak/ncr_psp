@@ -325,7 +325,7 @@ r = await call('GET', '/api/audit?entity_id=RM-053', { token: qa });
 check('register changes are in the audit log', r.j.some((x) => x.action === 'update' && JSON.parse(x.changes).name), r.j);
 // Finished-product inspection (QC_10)
 r = await call('GET', '/api/pack-sizes', { token: qc });
-check('pack sizes carry the jar weight to deduct', r.status === 200 && r.j.find((x) => x.pack_key === 'J210').tare_g === 40 && r.j.find((x) => x.pack_key === 'J60').tare_g === 15, r.j);
+check('pack sizes carry the jar weight to deduct', r.status === 200 && r.j.find((x) => x.pack_key === 'J210').tare_g === 40 && r.j.find((x) => x.pack_key === 'J60').tare_g === 15 && r.j.find((x) => x.pack_key === 'J160')?.tare_g === 40, r.j);
 const fgBody = (o = {}) => ({ uid: 'fgc-' + Math.random().toString(36).slice(2, 10), check_date: '2026-10-05', product_code: 'FG0007', product_name: 'พริกผัดน้ำมันมะกอก สูตรออริจินัล', batch_no: 'B261005-01',
   pack_key: 'J210', gross: [251, 252], sensory: { appearance: true, color: true, odor: true, taste: true }, aw: 0.48, aw_temp: 31.1, ph: 5.54,
   pack: { pack_ok: true, seal_ok: true, label_ok: true }, store_temp: 30.6, ...o });
