@@ -62,7 +62,7 @@ export default function ProdControlReportPage() {
               <tr>
                 <th className={td} rowSpan={3}>Product name</th><th className={td} rowSpan={3}>Lot No.</th>
                 <th className={td} colSpan={12}>กระทะคั่ว / ทอด / เจียว</th>
-                <th className={td} colSpan={2} rowSpan={2}>บด</th><th className={td} colSpan={2} rowSpan={2}>ผัด / กวนผสม</th><th className={td} colSpan={3} rowSpan={2}>พักให้เย็น</th>
+                <th className={td} colSpan={2} rowSpan={2}>บด</th><th className={td} colSpan={2} rowSpan={2}>ผัด / กวนผสม</th><th className={td} colSpan={4} rowSpan={2}>พักให้เย็น / บรรจุ / ปิดฝา</th>
                 <th className={td} rowSpan={3}>ผล CCP / NCR</th>
               </tr>
               <tr>{['กระเทียม', 'หอม', 'พริก / เห็ด / หมูบด'].map((x) => <th key={x} className={td} colSpan={4}>{x}</th>)}</tr>
@@ -70,7 +70,7 @@ export default function ProdControlReportPage() {
                 {[0, 1, 2].flatMap((i) => ['ก่อน (กก.)', 'หลัง (กก.)', 'อุณหภูมิ', 'เวลา (นาที)'].map((h) => <th key={`${i}${h}`} className={`${td} font-normal`}>{h}</th>))}
                 <th className={`${td} font-normal`}>ครั้ง</th><th className={`${td} font-normal`}>น้ำหนักหลัง</th>
                 <th className={`${td} font-normal`}>อุณหภูมิ</th><th className={`${td} font-normal`}>เวลา</th>
-                <th className={`${td} font-normal`}>อุณหภูมิ</th><th className={`${td} font-normal`}>เวลา</th><th className={`${td} font-normal`}>ไม่มีสิ่งปลอมปน</th>
+                <th className={`${td} font-normal`}>เวลาพัก (นาที)</th><th className={`${td} font-normal`}>บรรจุ (°C)</th><th className={`${td} font-normal`}>ปิดฝา (°C)</th><th className={`${td} font-normal`}>ไม่มีสิ่งปลอมปน</th>
               </tr>
             </thead>
             <tbody>
@@ -85,8 +85,9 @@ export default function ProdControlReportPage() {
                     {[...fry(d.fry.garlic), ...fry(d.fry.shallot), ...fry(d.fry.chili)].map((x, i) => <td key={i} className={`${td} ${i % 4 === 3 && shortFry(r, ['garlic', 'shallot', 'chili'][Math.floor(i / 4)]) ? 'text-red-700 font-bold' : ''}`}>{x}</td>)}
                     <td className={td}>{v(d.grind.count)}</td><td className={td}>{v(d.grind.w_after)}</td>
                     <td className={`${td} ${bad(r, 'CCP-01') ? 'text-red-700 font-bold' : ''}`}>{heatT}</td><td className={`${td} ${bad(r, 'CCP-01') ? 'text-red-700 font-bold' : ''}`}>{heatM}</td>
-                    <td className={`${td} ${bad(r, 'OPRP-05') ? 'text-red-700 font-bold' : ''}`}>{v(d.cool.temp)}{d.cool.fill_temp !== null && d.cool.fill_temp !== undefined ? ` (บรรจุ ${d.cool.fill_temp})` : ''}</td>
                     <td className={td}>{v(d.cool.min)}</td>
+                    <td className={`${td} ${bad(r, 'OPRP-05') ? 'text-red-700 font-bold' : ''}`}>{v(d.cool.fill_temp)}</td>
+                    <td className={`${td} ${bad(r, 'OPRP-05') ? 'text-red-700 font-bold' : ''}`}>{v(d.cool.cap_temp)}</td>
                     <td className={`${td} ${d.cool.foreign_ok === false ? 'text-red-700 font-bold' : ''}`}>{d.cool.foreign_ok === true ? '✓' : d.cool.foreign_ok === false ? '✗' : ''}</td>
                     <td className={`${td} text-left whitespace-nowrap`}>{[...r.derived.map((x) => `${x.cp_id} ${x.result === 'PASS' ? '✓' : '✗'}${x.ncr_id ? ' ' + x.ncr_id : ''}`), r.ncr_id].filter(Boolean).join(' · ')}</td>
                   </tr>

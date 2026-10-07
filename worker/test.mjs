@@ -472,7 +472,7 @@ check('the gate lists the per-batch points for the product and what blocks relea
   && st(r.j, 'CCP-01') === 'FAIL' && st(r.j, 'OPRP-05') === 'MISSING' && !st(r.j, 'CCP-02') && !st(r.j, 'OPRP-04')
   && r.j.reasons.some((x) => x.includes(failRec.ncr_id)), r.j);
 r = await gateOf('FG0004', 'B1');
-check('a product outside the HACCP plan cannot be released', r.status === 200 && !r.j.releasable && r.j.requirements.length === 0, r.j);
+check('a product with no record of the cooling check cannot be released', r.status === 200 && !r.j.releasable && r.j.requirements.length === 1 && r.j.requirements[0].cp_id === 'OPRP-05' && r.j.requirements[0].state === 'MISSING', r.j);
 const relBody = (o = {}) => ({ uid: 'rel-uid-' + Math.random().toString(36).slice(2, 10), product_code: 'FG0002', product_name: 'น้ำพริกตาแดงมันกุ้ง', batch_no: 'B260915-01',
   decision: 'RELEASE', qty: 120, unit: 'กระปุก', mfg_date: '2026-09-15', exp_date: '2027-03-15',
   rm_lots: [{ code: 'RM-010', name: 'กุ้งแห้ง', lot: 'LOT-SHRIMP-77', doc_no: 'FM-QC-001-20260910-001' }],
@@ -792,7 +792,7 @@ const pcA = (o = {}) => ({ uid: 'pc-uid-' + Math.random().toString(36).slice(2, 
   heat: { temp: 88, min: 125 }, cool: { temp: 58, min: 40, foreign_ok: true, fill_temp: 55, to_cap_min: 60, cap_temp: 45, chilled: true }, ...o });
 r = await call('POST', '/api/prodctl', { token: qc, body: pcA({ ccp1: null }) });
 check('a group A batch must record the CCP-01 heating', r.status === 400 && /CCP-01/.test(r.j.error), r);
-r = await call('POST', '/api/prodctl', { token: qc, body: pcA({ cool: { temp: 58, min: 40, fill_temp: 55, to_cap_min: 60, chilled: true } }) });
+r = await call('POST', '/api/prodctl', { token: qc, body: pcA({ cool: { temp: 58, min: 40, fill_temp: 55, cap_temp: 50, chilled: true } }) });
 check('the foreign-matter check must be answered', r.status === 400, r);
 r = await call('POST', '/api/prodctl', { token: qc, body: pcA({ ccp1: { reach_time: '09:10', end_time: '11:15', readings: [86.5, 88, 89] } }) });
 check('nothing is saved while a derived check is unanswered', r.status === 400 && /เทอร์โมมิเตอร์/.test(r.j.error)
@@ -816,16 +816,16 @@ r = await call('GET', `/api/ncr/${r.j.derived.find((x) => x.cp_id === 'CCP-01').
 check('that NCR names the dip and the short hold', r.j.severity === 'Critical' && /84.2/.test(r.j.actual_result) && /100/.test(r.j.actual_result), r.j.actual_result);
 const pcB = (o = {}) => pcA({ product_code: 'FG0007', product_name: 'พริกผัดน้ำมันมะกอก สูตรออริจินอล', batch_no: 'B260923-11', ccp1: null,
   fry: { garlic: { done: true, w_after: 9.58, temp: 122.4, min: 8 }, shallot: { done: true, w_after: 15.92, temp: 132.2, min: 18 }, chili: { done: false } },
-  fry_thermo_ok: true, heat: { temp: 46.6, min: 21 }, cool: { temp: 39.5, min: 9, foreign_ok: true }, ...o });
+  fry_thermo_ok: true, heat: { temp: 46.6, min: 21 }, cool: { temp: 39.5, min: 9, fill_temp: 50, cap_temp: 48, foreign_ok: true }, ...o });
 r = await call('POST', '/api/prodctl', { token: qc, body: pcB() });
-check('a group B batch derives only CCP-02, with chili frying not applicable', r.status === 201 && r.j.result === 'PASS' && r.j.derived.length === 1 && r.j.derived[0].cp_id === 'CCP-02', r.j);
+check('a group B batch derives CCP-02 and the cooling check, with chili frying not applicable', r.status === 201 && r.j.result === 'PASS' && r.j.derived.length === 2 && r.j.derived[0].cp_id === 'CCP-02' && r.j.derived[1].cp_id === 'OPRP-05', r.j);
 r = await call('GET', `/api/qc?cp_id=CCP-02&q=B260923-11`, { token: qc });
 check('the CCP-02 record marks chili as N/A and takes the lowest oil temperature', r.j[0].values.chili_min === 'NA' && r.j[0].values.oil_temp === 122.4, r.j[0].values);
 r = await call('POST', '/api/prodctl', { token: qc, body: pcB({ batch_no: 'B260923-12', fry: { garlic: { done: true, temp: 121.1, min: 6 }, shallot: { done: true, temp: 132.5, min: 20 }, chili: { done: false } } }) });
 check('garlic fried 6 min (as on the paper form of 02/10) fails CCP-02', r.status === 201 && r.j.result === 'FAIL' && r.j.derived[0].result === 'FAIL', r.j);
-r = await call('POST', '/api/prodctl', { token: qc, body: pcB({ batch_no: 'B260923-13', cool: { temp: 40, min: 9, foreign_ok: false } }) });
+r = await call('POST', '/api/prodctl', { token: qc, body: pcB({ batch_no: 'B260923-13', cool: { temp: 40, min: 9, fill_temp: 50, cap_temp: 48, foreign_ok: false } }) });
 check('foreign matter needs details', r.status === 400, r);
-r = await call('POST', '/api/prodctl', { token: qc, body: pcB({ batch_no: 'B260923-13', cool: { temp: 40, min: 9, foreign_ok: false }, note: 'พบเศษพลาสติกสีฟ้า' }) });
+r = await call('POST', '/api/prodctl', { token: qc, body: pcB({ batch_no: 'B260923-13', cool: { temp: 40, min: 9, fill_temp: 50, cap_temp: 48, foreign_ok: false }, note: 'พบเศษพลาสติกสีฟ้า' }) });
 check('foreign matter opens an NCR and fails the batch', r.status === 201 && r.j.result === 'FAIL' && /^NCR-/.test(r.j.ncr_id), r.j);
 r = await call('GET', '/api/prodctl?from=2026-09-23&to=2026-09-23', { token: qc });
 check('QC_08 records are listed with their derived checks', r.status === 200 && r.j.length === 5 && r.j.every((x) => x.inspector === 'QC One' && x.result !== 'PENDING'), r.j.map((x) => [x.pc_id, x.result]));

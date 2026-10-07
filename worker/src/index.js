@@ -368,7 +368,7 @@ async function batchGate(DB, productCode, batchNo) {
   const { results: cps } = await DB.prepare(
     `SELECT c.cp_id, c.name, c.cp_type, c.status, c.products FROM control_points c JOIN cp_release r ON r.cp_id = c.cp_id
       WHERE r.release_required = 1 AND c.status <> 'RETIRED' ORDER BY c.process_ref, c.cp_id`).all();
-  const applies = cps.filter((c) => !c.products || JSON.parse(c.products).includes(productCode));
+  const applies = cps.filter((c) => { const list = c.products ? JSON.parse(c.products) : []; return !list.length || list.includes(productCode); }); // no product list = every product
   const { results: ncrs } = await DB.prepare(
     `SELECT ncr_id, status, severity, disposition, source_type, source_ref FROM ncr_records
       WHERE product_lot_no = ? AND (material_code = ? OR material_code IS NULL OR material_code = '') ORDER BY ncr_id`).bind(batchNo, productCode).all();
@@ -482,7 +482,8 @@ function deriveValues(cpId, d) {
   }
   if (cpId === 'OPRP-05') {
     const c = d.cool;
-    return { values: { to_cap_min: c.to_cap_min, fill_temp: c.fill_temp, cap_temp: c.cap_temp, chilled: c.chilled }, na: c.cap_temp === null ? ['cap_temp'] : [] };
+    // The form asks for the cooling time, the temperature at filling and at capping; the older "chilled" tick is optional.
+    return { values: { to_cap_min: c.min, fill_temp: c.fill_temp, cap_temp: c.cap_temp, chilled: c.chilled }, na: c.chilled === null ? ['chilled'] : [] };
   }
   return null;
 }
@@ -2038,6 +2039,9 @@ export default {
         if (!/^[A-Za-z0-9_-]{2,30}$/.test(product)) fail(400, 'กรุณาเลือกผลิตภัณฑ์');
         if (await DB.prepare('SELECT 1 FROM prod_controls WHERE product_code=? AND batch_no=?').bind(product, batch).first()) fail(409, 'Batch นี้มีแบบฟอร์มควบคุมการผลิตแล้ว');
         const d = cleanProdData(b);
+        if (d.cool.min === null) fail(400, 'กรุณากรอกเวลาพักให้เย็น (นาที)');
+        if (d.cool.fill_temp === null) fail(400, 'กรุณากรอกอุณหภูมิขณะบรรจุ');
+        if (d.cool.cap_temp === null) fail(400, 'กรุณากรอกอุณหภูมิขณะปิดฝา');
         if (d.cool.foreign_ok === null) fail(400, 'กรุณาตรวจ "ไม่มีสิ่งปลอมปน" หลังพักเย็น');
         const note = txt(b.note, 1000);
         if (d.cool.foreign_ok === false && !note) fail(400, 'พบสิ่งปลอมปน กรุณาระบุรายละเอียดและสิ่งที่ทำ');

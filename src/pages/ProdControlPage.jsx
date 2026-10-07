@@ -12,7 +12,7 @@ const input = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focu
 const STEPS = [['garlic', 'กระเทียม'], ['shallot', 'หอม'], ['chili', 'พริก / เห็ด / หมูบด']]
 const blankFry = () => Object.fromEntries(STEPS.map(([k]) => [k, { done: false, kind: 'พริก', w_before: '', w_after: '', temp: '', min: '' }]))
 const blankForm = () => ({ fry: blankFry(), fry_thermo_ok: null, grind: { count: '', w_after: '' }, heat: { temp: '', min: '' },
-  ccp1: { reach_time: '', end_time: '', readings: ['', '', '', '', ''], thermo_ok: null }, cool: { temp: '', min: '', foreign_ok: null, fill_temp: '', to_cap_min: '', cap_temp: '', chilled: null } })
+  ccp1: { reach_time: '', end_time: '', readings: ['', '', '', '', ''], thermo_ok: null }, cool: { min: '', fill_temp: '', cap_temp: '', foreign_ok: null } })
 const mins = (a, b) => { if (!a || !b) return null; const [h1, m1] = a.split(':').map(Number), [h2, m2] = b.split(':').map(Number); let d = h2 * 60 + m2 - h1 * 60 - m1; if (d < 0) d += 1440; return d }
 
 function YesNo({ value, onChange, yes = 'ใช่', no = 'ไม่ใช่' }) {
@@ -78,7 +78,8 @@ export default function ProdControlPage() {
       if (readings.some((v) => v < (lim('CCP-01', 'temp_min').min ?? 85))) out.push(`CCP-01: อุณหภูมิต่ำกว่า ${lim('CCP-01', 'temp_min').min ?? 85}°C`)
       if (hold !== null && hold < (lim('CCP-01', 'hold_min').min ?? 120)) out.push(`CCP-01: คงอุณหภูมิ ${hold} นาที (เกณฑ์ ≥ ${lim('CCP-01', 'hold_min').min ?? 120})`)
     }
-    if (packCp && above(f.cool.fill_temp, 'OPRP-05', 'fill_temp')) out.push(`OPRP-05: บรรจุที่ ${f.cool.fill_temp}°C (ต้องต่ำกว่า 60°C)`)
+    if (f.cool.fill_temp !== '' && Number(f.cool.fill_temp) >= 60) out.push(`OPRP-05: บรรจุที่ ${f.cool.fill_temp}°C (ต้องต่ำกว่า 60°C)`)
+    if (f.cool.cap_temp !== '' && Number(f.cool.cap_temp) >= 60) out.push(`OPRP-05: ปิดฝาที่ ${f.cool.cap_temp}°C (ต้องต่ำกว่า 60°C)`)
     if (groupB) {
       if (f.fry.garlic.done && below(f.fry.garlic.min, 'CCP-02', 'garlic_min')) out.push(`CCP-02: เจียวกระเทียม ${f.fry.garlic.min} นาที (เกณฑ์ ≥ ${lim('CCP-02', 'garlic_min').min})`)
       if (f.fry.shallot.done && below(f.fry.shallot.min, 'CCP-02', 'shallot_min')) out.push(`CCP-02: เจียวหอม ${f.fry.shallot.min} นาที (เกณฑ์ ≥ ${lim('CCP-02', 'shallot_min').min})`)
@@ -93,8 +94,7 @@ export default function ProdControlPage() {
     try {
       const res = await prodctlApi.save({ uid, product_code: product, product_name: PRODUCTS.find((p) => p.code === product)?.label || '', prod_date: date, batch_no: batch, oil_type: oil,
         ...f, ccp1: groupA ? f.ccp1 : null, fry_thermo_ok: groupB ? f.fry_thermo_ok : null,
-        // Fields of a section hidden for this product are never sent, even if typed before switching product.
-        cool: packCp ? f.cool : { temp: f.cool.temp, min: f.cool.min, foreign_ok: f.cool.foreign_ok }, note })
+        note })
       setSaved(res); setUid(newUid()); setF(blankForm()); setNote(''); setProduct(''); setBatch('')
       loadDay(); window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e) { setError(e.message) }
@@ -217,21 +217,13 @@ export default function ProdControlPage() {
           )}
 
           <div className={`bg-white rounded-xl shadow p-4 space-y-2 ${packCp ? 'border-2 border-amber-200' : ''}`}>
-            <h2 className="text-sm font-bold text-gray-700">พักให้เย็น{packCp ? ' — OPRP-05' : ''}</h2>
-            <div className="grid grid-cols-2 gap-2">
-              <label className="text-[11px] text-gray-600">อุณหภูมิเมื่อพักเสร็จ (°C)<Num value={f.cool.temp} onChange={(v) => setSec('cool', 'temp', v)} /></label>
-              <label className="text-[11px] text-gray-600">เวลาพัก (นาที)<Num value={f.cool.min} onChange={(v) => setSec('cool', 'min', v)} /></label>
+            <h2 className="text-sm font-bold text-gray-700">พักให้เย็น / บรรจุ / ปิดฝา{packCp ? ' — OPRP-05' : ''}</h2>
+            <div className="grid grid-cols-3 gap-2">
+              <label className="text-[11px] text-gray-600">เวลาพักให้เย็น (นาที) *<Num value={f.cool.min} onChange={(v) => setSec('cool', 'min', v)} /></label>
+              <label className="text-[11px] text-gray-600">อุณหภูมิขณะบรรจุ (°C) *<Num value={f.cool.fill_temp} onChange={(v) => setSec('cool', 'fill_temp', v)} bad={Number(f.cool.fill_temp) >= 60 && f.cool.fill_temp !== ''} /></label>
+              <label className="text-[11px] text-gray-600">อุณหภูมิขณะปิดฝา (°C) *<Num value={f.cool.cap_temp} onChange={(v) => setSec('cool', 'cap_temp', v)} bad={Number(f.cool.cap_temp) >= 60 && f.cool.cap_temp !== ''} /></label>
             </div>
-            {packCp && (
-              <>
-                <div className="grid grid-cols-3 gap-2">
-                  <label className="text-[11px] text-gray-600">อุณหภูมิขณะบรรจุ (°C) *<Num value={f.cool.fill_temp} onChange={(v) => setSec('cool', 'fill_temp', v)} bad={above(f.cool.fill_temp, 'OPRP-05', 'fill_temp')} /></label>
-                  <label className="text-[11px] text-gray-600">ผัดเสร็จ → ปิดฝาเสร็จ (นาที) *<Num value={f.cool.to_cap_min} onChange={(v) => setSec('cool', 'to_cap_min', v)} /></label>
-                  <label className="text-[11px] text-gray-600">อุณหภูมิขณะปิดฝา (°C)<Num value={f.cool.cap_temp} onChange={(v) => setSec('cool', 'cap_temp', v)} /></label>
-                </div>
-                <div className="flex items-center justify-between gap-2 text-sm"><span>นำเข้าจัดเก็บแช่เย็น *</span><YesNo value={f.cool.chilled} onChange={(v) => setSec('cool', 'chilled', v)} /></div>
-              </>
-            )}
+            <div className="text-[11px] text-gray-500">อุณหภูมิขณะบรรจุและขณะปิดฝาต้องต่ำกว่า 60 °C</div>
             <div className="flex items-center justify-between gap-2 text-sm"><span>ไม่มีสิ่งปลอมปน *</span><YesNo value={f.cool.foreign_ok} onChange={(v) => setSec('cool', 'foreign_ok', v)} yes="ไม่พบ" no="พบ" /></div>
           </div>
 
