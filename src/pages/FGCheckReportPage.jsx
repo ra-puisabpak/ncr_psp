@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { fgCheckApi } from '../api/d1Api'
-import { LOGO_URL, COMPANY_NAME, FORMS } from '../config'
+import { FORMS } from '../config'
+import { FormHeader, FormInfo, FormStats } from '../components/FormHeader'
 import { bkkToday } from '../qa/shared'
 import { FG_SENSORY, FG_PACK } from './FGCheckPage'
 
@@ -35,21 +36,13 @@ export default function FGCheckReportPage() {
       {rows && rows.length === 0 && <div className="no-print text-center text-gray-500 py-16">ไม่มีบันทึกวันที่ {thai(date)}</div>}
       {rows && rows.length > 0 && (
         <div className="print-area bg-white mx-auto my-4 shadow p-[8mm] text-black w-[297mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none text-[10px]" style={{ fontFamily: "'Sarabun', sans-serif" }}>
-          <table className="w-full border-collapse mb-2">
-            <tbody>
-              <tr>
-                <td className={`${td} w-[65%]`} rowSpan={2}><img src={LOGO_URL} alt="" className="float-left mr-2 h-10 w-10 object-contain" /><b className="text-[13px]">{COMPANY_NAME}</b><br />ประเภทเอกสาร: เอกสารในหน่วยควบคุมคุณภาพ<br /><b>ชื่อเอกสาร: {FORMS.FG_CHECK.name}</b></td>
-                <td className={td}>รหัสเอกสาร: {FORMS.FG_CHECK.code}</td>
-              </tr>
-              <tr><td className={td}>แก้ไขครั้งที่: {FORMS.FG_CHECK.rev}</td></tr>
-            </tbody>
-          </table>
+          <FormHeader form={FORMS.FG_CHECK} title={FORMS.FG_CHECK.name} en="Finished Product Inspection Report" type="รายวัน" />
           <div className="flex flex-wrap gap-x-8 mb-1.5">
             <div><b>วันที่ตรวจสอบ:</b> {thai(date)}</div>
             <div><b>น้ำหนักกระปุกที่หัก:</b> {sizes.map((s) => `${s.label_net_g} g = ${s.tare_g} g`).join(' · ')} (กระปุก + ฝาอลู + ฝาพลาสติก + สติ๊กเกอร์)</div>
           </div>
           <table className="w-full border-collapse text-center">
-            <thead className="bg-emerald-50">
+            <thead className="bg-[#0f2744] text-white">
               <tr>
                 <th className={td} rowSpan={3}>ชื่อผลิตภัณฑ์</th><th className={td} rowSpan={3}>เลขล็อต</th><th className={td} rowSpan={3}>น้ำหนักสุทธิ<br />บนบรรจุภัณฑ์ (g)</th>
                 <th className={td} colSpan={7}>การตรวจสอบคุณภาพผลิตภัณฑ์</th>

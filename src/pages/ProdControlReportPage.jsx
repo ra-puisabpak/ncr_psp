@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { prodctlApi, oilApi, qaApi } from '../api/d1Api'
-import { LOGO_URL, COMPANY_NAME, FORMS } from '../config'
+import { FORMS } from '../config'
+import { FormHeader, FormInfo, FormStats } from '../components/FormHeader'
 import { bkkToday } from '../qa/shared'
 
 const td = 'border border-black px-0.5 py-0.5'
@@ -49,15 +50,7 @@ export default function ProdControlReportPage() {
       {rows && rows.length === 0 && <div className="no-print text-center text-gray-500 py-16">ไม่มีบันทึกของวันที่ {thai(date)}</div>}
       {rows && rows.length > 0 && (
         <div className="print-area bg-white mx-auto my-4 shadow p-[7mm] text-black w-[297mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none text-[9.5px]" style={{ fontFamily: "'Sarabun', sans-serif" }}>
-          <table className="w-full border-collapse mb-1.5 text-[10.5px]">
-            <tbody>
-              <tr>
-                <td className={`${td} w-[70%]`} rowSpan={2}><img src={LOGO_URL} alt="" className="float-left mr-2 h-10 w-10 object-contain" /><b className="text-[12px]">{COMPANY_NAME}</b> · ประเภทเอกสาร: เอกสารในหน่วยควบคุมคุณภาพ<br /><b>ชื่อเอกสาร: แบบฟอร์มควบคุมการผลิต</b></td>
-                <td className={td}>รหัสเอกสาร: {FORMS.PRODCTL.code}</td>
-              </tr>
-              <tr><td className={td}>แก้ไขครั้งที่: {FORMS.PRODCTL.rev}</td></tr>
-            </tbody>
-          </table>
+          <FormHeader form={FORMS.PRODCTL} title="แบบฟอร์มควบคุมการผลิต" en="Production Control Record" type="รายวัน" />
           <div className="flex flex-wrap gap-x-6 mb-1 text-[10.5px]">
             <div><b>วันที่ผลิต:</b> {thai(date)}</div>
             <div><b>ชนิดน้ำมัน:</b> {oils.join(', ') || '-'}</div>
@@ -65,7 +58,7 @@ export default function ProdControlReportPage() {
             <div className="text-[9px]">Good Polar &lt; 20% · Risk 20–24% · Reject ≥ 25%</div>
           </div>
           <table className="w-full border-collapse text-center">
-            <thead className="bg-orange-50">
+            <thead className="bg-[#0f2744] text-white">
               <tr>
                 <th className={td} rowSpan={3}>Product name</th><th className={td} rowSpan={3}>Lot No.</th>
                 <th className={td} colSpan={12}>กระทะคั่ว / ทอด / เจียว</th>

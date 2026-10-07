@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { oilApi } from '../api/d1Api'
-import { LOGO_URL, COMPANY_NAME, FORMS } from '../config'
+import { FORMS } from '../config'
+import { FormHeader, FormInfo, FormStats } from '../components/FormHeader'
 import { bkkToday, monthOf, monthRange, thaiMonth } from '../qa/shared'
 import { STAGE_TH, OIL_RESULT } from './OilPage'
 
@@ -35,18 +36,10 @@ export default function OilReportPage() {
       {rows && rows.length === 0 && <div className="no-print text-center text-gray-500 py-16">ไม่มีบันทึกของเดือน{thaiMonth(month)}</div>}
       {rows && rows.length > 0 && (
         <div className="print-area bg-white mx-auto my-4 shadow p-[8mm] text-black w-[297mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none text-[10.5px]" style={{ fontFamily: "'Sarabun', sans-serif" }}>
-          <div className="flex justify-between items-start border-b-2 border-black pb-1">
-            <div><img src={LOGO_URL} alt="" className="float-left mr-2 h-10 w-10 object-contain" /><b className="text-[13px]">{COMPANY_NAME}</b><div className="text-[14px] font-bold">บันทึกการตรวจสอบคุณภาพน้ำมันทอดและอุณหภูมิ</div></div>
-            <div className="text-right">รหัสเอกสาร {FORMS.OIL.code}<br />Rev.{FORMS.OIL.rev}</div>
-          </div>
-          <div className="grid grid-cols-4 gap-2 my-1.5">
-            <div><b>เดือน / ปี:</b> {thaiMonth(month)}</div>
-            <div><b>ผลิตภัณฑ์ / ไลน์:</b> {lines.join(', ') || '-'}</div>
-            <div><b>เครื่องวัด TPM:</b> {meters.join(', ') || '-'}</div>
-            <div><b>เครื่องวัดอุณหภูมิ:</b> {thermos.join(', ') || '-'}</div>
-          </div>
+          <FormHeader form={FORMS.OIL} title="บันทึกการตรวจสอบคุณภาพน้ำมันทอดและอุณหภูมิ" en="Frying Oil Quality & Temperature Record" type="รายเดือน" />
+          <FormInfo items={[['เดือน / ปี', thaiMonth(month)], ['ผลิตภัณฑ์ / ไลน์', lines.join(', ') || '-'], ['เครื่องวัด TPM', meters.join(', ') || '-'], ['เครื่องวัดอุณหภูมิ', thermos.join(', ') || '-']]} />
           <table className="w-full border-collapse">
-            <thead className="bg-amber-50 text-center">
+            <thead className="bg-[#0f2744] text-white text-center">
               <tr>
                 <th className={td} rowSpan={2}>วันที่ / เวลา</th><th className={td} rowSpan={2}>ช่วง</th>
                 <th className={td} colSpan={3}>TPM (%)</th><th className={td} colSpan={3}>อุณหภูมิ (°C)</th>
