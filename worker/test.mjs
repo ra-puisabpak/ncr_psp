@@ -644,13 +644,13 @@ r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ slot:
 check('the same slot cannot be recorded twice', r.status === 409, r);
 r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ temp: 6.5 }) });
 check('out of spec needs an action and a cause', r.status === 400, r);
-r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ temp: 6.5, actions: ['RECHECK'], note: 'เพิ่งโหลดสินค้า เปิดประตูนาน' }) });
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ temp: 6.5, cause: 'DOOR_LOAD', actions: ['RECHECK'], note: 'เพิ่งโหลดสินค้า เปิดประตูนาน' }) });
 check('out of spec below the escalation limit is a FAIL without NCR', r.status === 201 && r.j.status === 'FAIL' && !r.j.ncr_id, r);
-r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ slot: 'RECHECK', temp: 9.2, actions: ['RECHECK'], note: 'คอมเพรสเซอร์ไม่ทำงาน' }) });
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ slot: 'RECHECK', temp: 9.2, cause: 'OTHER', actions: ['RECHECK'], note: 'คอมเพรสเซอร์ไม่ทำงาน' }) });
 check('past the escalation limit the supervisor must be notified', r.status === 400, r);
-r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ slot: 'RECHECK', temp: 9.2, actions: ['NOTIFY', 'HOLD'], note: 'คอมเพรสเซอร์ไม่ทำงาน' }) });
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ slot: 'RECHECK', temp: 9.2, cause: 'FAULT', actions: ['NOTIFY', 'HOLD'], note: 'คอมเพรสเซอร์ไม่ทำงาน' }) });
 check('holding product needs the affected lot', r.status === 400, r);
-r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ slot: 'RECHECK', temp: 9.2, actions: ['NOTIFY', 'HOLD', 'ENGINEERING'], affected: 'หอมแขก LOT-SH-77', note: 'คอมเพรสเซอร์ไม่ทำงาน' }) });
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ slot: 'RECHECK', temp: 9.2, cause: 'FAULT', actions: ['NOTIFY', 'HOLD', 'ENGINEERING'], affected: 'หอมแขก LOT-SH-77', note: 'คอมเพรสเซอร์ไม่ทำงาน' }) });
 check('past the escalation limit opens an NCR', r.status === 201 && r.j.status === 'ESCALATE' && /^NCR-/.test(r.j.ncr_id), r);
 r = await call('GET', `/api/ncr/${r.j.ncr_id}`, { token: qa });
 check('the temperature NCR carries unit, limit, value and lot', r.j.source_type === 'WAREHOUSE' && r.j.hold_location === 'CH-01' && r.j.actual_result === '9.2 °C' && /LOT-SH-77/.test(r.j.nc_description), r.j);
@@ -658,10 +658,42 @@ r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ unit_
 check('a failed condition item needs a remark', r.status === 400, r);
 r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ unit_id: 'FZ-01', slot: '08:00', temp: -19, condition: { ...COND_OK, ice: 'F' }, note: 'น้ำแข็งเกาะหนา แจ้ง defrost' }) });
 check('a freezer reading flags an expired thermometer', r.status === 201 && r.j.status === 'PASS' && r.j.calib_expired === 1, r);
-r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ unit_id: 'FZ-01', slot: '11:00', temp: -16, actions: ['RECHECK'], note: 'defrost' }) });
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ unit_id: 'FZ-01', slot: '11:00', temp: -16, cause: 'DOOR_OPEN', actions: ['RECHECK'], note: 'defrost' }) });
 check('a freezer at -16 °C is out of spec but not escalated', r.status === 201 && r.j.status === 'FAIL', r);
 r = await call('GET', '/api/cold/readings?unit_id=CH-01&from=2026-09-01&to=2026-09-30', { token: qc });
 check('readings are listed per unit with the limits in force', r.status === 200 && r.j.length === 3 && r.j.every((x) => x.limits.spec_max === 5 && x.inspector === 'QC One'), r.j);
+
+// ----- cold storage: causes, 30-minute recheck, alerts, out-of-service -----
+r = await call('GET', '/api/cold/readings?unit_id=CH-01&from=2026-09-21&to=2026-09-21', { token: qc });
+check('an out-of-range reading keeps its cause', r.j.some((x) => x.cause === 'DOOR_LOAD') && r.j.some((x) => x.cause === 'FAULT'), r.j.map((x) => [x.slot, x.cause]));
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ unit_id: 'FZ-01', slot: 'RECHECK', temp: -10, cause: 'OTHER', note: '' }) });
+check('"other" and "fault" need a written detail', r.status === 400, r);
+r = await call('GET', '/api/cold/alerts?date=2026-09-21', { token: qc });
+const ty = (j, unit) => j.alerts.filter((a) => a.unit_id === unit).map((a) => a.type);
+check('a door-open reading waits for the recheck, a fault shows red at once', r.status === 200 && ty(r.j, 'CH-01').includes('PENDING_RECHECK') && ty(r.j, 'CH-01').includes('FAULT'), r.j.alerts);
+// 40 minutes pass: an in-range reading settles the door reading, the fault stays.
+db.prepare("UPDATE cold_readings SET created_at = datetime('now','-3 hours') WHERE unit_id='CH-01' AND read_date='2026-09-21'").run();
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ slot: 'RECHECK', temp: 3.1 }) });
+check('the recheck in range is saved', r.status === 201 && r.j.status === 'PASS', r);
+r = await call('GET', '/api/cold/alerts?date=2026-09-21', { token: qc });
+check('an in-range recheck 30 min later settles the door reading', !ty(r.j, 'CH-01').includes('PENDING_RECHECK') && !ty(r.j, 'CH-01').includes('OVERDUE_RECHECK'), r.j.alerts);
+// Out of service: only QA sets it, only the QA Manager clears it.
+r = await call('POST', '/api/cold/units/FZ-01/service', { token: qc, body: { out_of_service: true, reason: 'คอมเพรสเซอร์เสีย' } });
+check('QC cannot change the status of a unit', r.status === 403, r);
+r = await call('POST', '/api/cold/units/FZ-01/service', { token: qa, body: { out_of_service: true } });
+check('out of service needs a reason', r.status === 400, r);
+r = await call('POST', '/api/cold/units/FZ-01/service', { token: qa, body: { out_of_service: true, reason: 'คอมเพรสเซอร์เสีย' } });
+check('QA puts a unit out of service', r.status === 200 && r.j.out_of_service === true, r);
+r = await call('GET', '/api/cold/alerts?date=2026-09-21', { token: qc });
+check('an out-of-service unit shows one red alert', ty(r.j, 'FZ-01').join() === 'OUT_OF_SERVICE', r.j.alerts);
+r = await call('POST', '/api/cold/readings', { token: qc, body: coldBody({ unit_id: 'FZ-01', slot: 'RECHECK', temp: -9 }) });
+check('readings of an out-of-service unit are still taken, with no cause to give', r.status === 201 && r.j.cause === 'FAULT', r);
+r = await call('GET', '/api/cold/units', { token: qc });
+check('the unit list says which unit is out of service', r.j.find((u) => u.unit_id === 'FZ-01').out_of_service === true && r.j.find((u) => u.unit_id === 'CH-01').out_of_service === false, r.j.map((u) => [u.unit_id, u.out_of_service]));
+r = await call('POST', '/api/cold/units/FZ-01/service', { token: qa, body: { out_of_service: false } });
+check('the QA Manager puts it back in service', r.status === 200 && r.j.out_of_service === false, r);
+r = await call('GET', '/api/cold/alerts?date=2026-09-21', { token: qc });
+check('back in service, the unit is judged by its readings again', !ty(r.j, 'FZ-01').includes('OUT_OF_SERVICE'), r.j.alerts);
 
 // ----- formulas and PD_03 weighing -----
 r = await call('GET', '/api/formulas', { token: qc });

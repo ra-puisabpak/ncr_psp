@@ -498,6 +498,21 @@ CREATE TABLE IF NOT EXISTS cold_readings (
   created_at   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_cold_unit_date ON cold_readings(unit_id, read_date);
+-- Why a reading was out of range (DOOR_LOAD, HOT_PRODUCT, DOOR_OPEN, FAULT, OTHER); one row per out-of-range reading.
+CREATE TABLE IF NOT EXISTS cold_reading_causes (
+  rd_id TEXT PRIMARY KEY,
+  cause TEXT NOT NULL
+);
+-- A unit taken out of service ("do not store product") until the QA Manager puts it back.
+CREATE TABLE IF NOT EXISTS cold_unit_service (
+  unit_id        TEXT PRIMARY KEY,
+  out_of_service INTEGER NOT NULL DEFAULT 0,
+  reason         TEXT,
+  set_by         TEXT,
+  set_at         TEXT,
+  cleared_by     TEXT,
+  cleared_at     TEXT
+);
 
 
 -- ===== PSP QUALITY APP: production formulas and raw-material weighing (PD_03 Rev.01) =====

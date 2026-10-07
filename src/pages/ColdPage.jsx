@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft, Save, Printer, Settings, Thermometer, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
 import Layout from '../components/Layout'
 import { coldApi } from '../api/d1Api'
-import { useAuth, canWrite } from '../auth'
+import { useAuth, canWrite, isQA } from '../auth'
 import { Badge, bkkToday, bkkTime, monthOf, newUid } from '../qa/shared'
 import { FORMS } from '../config'
 
@@ -16,6 +16,8 @@ export const COLD_STATUS = {
 }
 export const CONDITION = [['clean', 'ความสะอาดภายในตู้'], ['door', 'ประตู / การปิดสนิท'], ['gasket', 'ขอบยาง / ซีล'], ['water', 'น้ำหยด / น้ำขัง'], ['ice', 'น้ำแข็งเกาะผิดปกติ'], ['general', 'สภาพทั่วไป']]
 export const ACTIONS = [['RECHECK', 'ตรวจซ้ำ'], ['NOTIFY', 'แจ้งหัวหน้างาน / QA'], ['ENGINEERING', 'แจ้งวิศวกรรม'], ['HOLD', 'กักสินค้า (HOLD)'], ['TRANSFER', 'ย้ายไปที่จัดเก็บที่เหมาะสม']]
+export const COLD_CAUSES = { DOOR_LOAD: 'เปิดตู้นำสินค้าเข้า/ออก', HOT_PRODUCT: 'นำสินค้าที่ยังร้อนเข้าแช่', DOOR_OPEN: 'เปิดประตูค้าง', FAULT: 'ตู้ขัดข้อง / อุณหภูมิไม่คงที่', OTHER: 'อื่นๆ' }
+const NEEDS_NOTE = ['FAULT', 'OTHER']
 export const AREA_TH = { RM: 'วัตถุดิบ (RM)', WIP: 'ระหว่างผลิต (WIP)', FG: 'สินค้าสำเร็จรูป (FG)' }
 export const specText = (u) => (u.spec_min !== null && u.spec_min !== undefined ? `${u.spec_min} ถึง ${u.spec_max} °C` : `≤ ${u.spec_max} °C`)
 const judge = (u, t) => {
@@ -42,15 +44,28 @@ export default function ColdPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [saved, setSaved] = useState(null)
+  const [cause, setCause] = useState('')
+  const [alerts, setAlerts] = useState(null)
 
   const loadDay = () => coldApi.readings({ from: date, to: date }).then(setToday).catch(() => {})
   useEffect(() => { coldApi.units().then((l) => setUnits(l.filter((u) => u.active))).catch((e) => setError(e.message)) }, [])
   useEffect(() => { loadDay() }, [date]) // eslint-disable-line react-hooks/exhaustive-deps
+  const loadAlerts = () => coldApi.alerts(date).then(setAlerts).catch(() => {})
+  useEffect(() => { loadAlerts(); const t = setInterval(loadAlerts, 30000); return () => clearInterval(t) }, [date]) // eslint-disable-line react-hooks/exhaustive-deps
+  const oosOf = (id) => alerts?.units?.find((x) => x.unit_id === id)
+  const setService = async (u, on) => {
+    const reason = on ? window.prompt(`ตั้ง ${u.unit_id} เป็นรอซ่อม / ห้ามเก็บสินค้า\nระบุเหตุผล:`) : null
+    if (on && (!reason || !reason.trim())) return
+    if (!on && !window.confirm(`เปิดใช้ ${u.unit_id} อีกครั้ง? (ซ่อมเสร็จและวัดอุณหภูมิได้ตามเกณฑ์แล้ว)`)) return
+    try { await coldApi.setService(u.unit_id, { out_of_service: on, reason: reason?.trim() }); await loadAlerts() } catch (e) { setError(e.message) }
+  }
 
   const unit = units.find((u) => u.unit_id === unitId)
   const doneFor = (id) => new Set(today.filter((r) => r.unit_id === id).map((r) => r.slot))
-  const pick = (id) => { setUnitId(id); setSlot(nextSlot(doneFor(id))); setSaved(null); setError(null) }
+  const pick = (id) => { setCause(''); setUnitId(id); setSlot(nextSlot(doneFor(id))); setSaved(null); setError(null) }
   const status = judge(unit, temp)
+  const unitOos = !!oosOf(unitId)?.out_of_service
+  const needCause = status && status !== 'PASS' && !unitOos
   const condFail = Object.values(cond).includes('F')
   const needCond = slot === '08:00'
   const calibExpired = unit?.calib_due && unit.calib_due < date
@@ -64,9 +79,10 @@ export default function ColdPage() {
   const save = async () => {
     setSaving(true); setError(null)
     try {
-      const res = await coldApi.save({ uid, unit_id: unitId, read_date: date, slot, read_time: bkkTime(), temp, condition: Object.keys(cond).length ? cond : null, actions, affected, note })
+      const res = await coldApi.save({ uid, unit_id: unitId, read_date: date, slot, read_time: bkkTime(), temp, condition: Object.keys(cond).length ? cond : null, cause: needCause ? cause : undefined, actions, affected, note })
       setSaved({ ...res, unit: unit.name, temp }); setUid(newUid())
-      setTemp(''); setCond({}); setActions([]); setAffected(''); setNote('')
+      setTemp(''); setCond({}); setActions([]); setAffected(''); setNote(''); setCause('')
+      loadAlerts()
       await loadDay(); setSlot('RECHECK'); setUnitId('')
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e) { setError(e.message) }
@@ -92,10 +108,22 @@ export default function ColdPage() {
           {saved.status === 'PASS' ? <CheckCircle2 className="w-5 h-5" /> : saved.status === 'FAIL' ? <AlertTriangle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
           <span className="flex-1">{saved.rd_id} · {saved.unit} {saved.temp} °C — {COLD_STATUS[saved.status].label}
           {saved.ncr_id && <> · เปิด <Link to={`/ncr/${saved.ncr_id}`} className="underline whitespace-nowrap">{saved.ncr_id}</Link></>}
-          {saved.calib_expired ? <span className="text-red-700"> · เทอร์โมมิเตอร์หมดอายุสอบเทียบ</span> : null}</span>
+          {saved.calib_expired ? <span className="text-red-700"> · เทอร์โมมิเตอร์หมดอายุสอบเทียบ</span> : null}
+          {saved.recheck_after ? <span> · วัดซ้ำหลัง {new Date(saved.recheck_after).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' })} น.</span> : null}</span>
         </div>
       )}
 
+      {alerts?.alerts?.length > 0 && (
+        <div className="mb-4 space-y-1.5">
+          {alerts.alerts.map((a, i) => (
+            <div key={i} className={`rounded-lg border px-3 py-2 text-sm flex items-start gap-2 ${a.level === 'red' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <div><b>{a.unit_id}</b> · {a.text}</div>
+            </div>
+          ))}
+          <div className="text-[11px] text-gray-500">เปิดตู้หรือเปิดค้าง ให้วัดซ้ำ (รอบ "ตรวจซ้ำ") หลังเหตุหมดไป {alerts.recheck_min} นาที ถ้าอยู่ในเกณฑ์ ระบบถือว่าปิดเรื่อง</div>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-bold text-gray-700">สถานะวันที่</h2>
         <input type="date" max={bkkToday()} value={date} onChange={(e) => { setDate(e.target.value || bkkToday()); setUnitId('') }} className="border border-gray-300 rounded-lg px-2 py-1 text-sm" />
@@ -108,12 +136,16 @@ export default function ColdPage() {
             <tbody>
               {units.map((u) => (
                 <tr key={u.unit_id} className={`border-t border-gray-100 ${unitId === u.unit_id ? 'bg-teal-50' : ''}`}>
-                  <td className="p-2"><div className="font-semibold text-gray-800">{u.unit_id}</div><div className="text-[11px] text-gray-500">{u.name} · {specText(u)}</div></td>
+                  <td className="p-2"><div className="font-semibold text-gray-800">{u.unit_id}{oosOf(u.unit_id)?.out_of_service && <span className="ml-1.5 text-[10px] font-semibold bg-red-100 text-red-700 rounded px-1.5 py-0.5">รอซ่อม · ห้ามเก็บสินค้า</span>}</div><div className="text-[11px] text-gray-500">{u.name} · {specText(u)}</div></td>
                   {SLOTS.map((s) => {
                     const r = grid[u.unit_id]?.[s]
                     return <td key={s} className="p-1 text-center"><span className={`inline-block min-w-[44px] rounded-md px-1 py-1 text-xs font-semibold ${r ? COLD_STATUS[r.status].cell : 'bg-gray-50 text-gray-300'}`}>{r ? r.temp : '–'}</span></td>
                   })}
-                  <td className="p-2 text-right">{canWrite(user) && <button onClick={() => pick(u.unit_id)} className="text-xs font-semibold bg-teal-600 text-white rounded-lg px-2.5 py-1">บันทึก</button>}</td>
+                  <td className="p-2 text-right whitespace-nowrap">
+                    {canWrite(user) && <button onClick={() => pick(u.unit_id)} className="text-xs font-semibold bg-teal-600 text-white rounded-lg px-2.5 py-1">บันทึก</button>}
+                    {isQA(user) && !oosOf(u.unit_id)?.out_of_service && <button onClick={() => setService(u, true)} className="ml-1 text-[11px] border border-gray-300 text-gray-600 rounded-lg px-2 py-1">รอซ่อม</button>}
+                    {user?.role === 'QA_MANAGER' && oosOf(u.unit_id)?.out_of_service && <button onClick={() => setService(u, false)} className="ml-1 text-[11px] border border-green-300 bg-green-50 text-green-700 rounded-lg px-2 py-1">เปิดใช้อีกครั้ง</button>}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -164,7 +196,21 @@ export default function ColdPage() {
           )}
           {!needCond && !Object.keys(cond).length && <button type="button" onClick={() => setCond(Object.fromEntries(CONDITION.map(([k]) => [k, 'P'])))} className="text-xs text-teal-700 underline">+ ตรวจสภาพตู้ด้วย</button>}
 
-          {status && status !== 'PASS' && (
+          {needCause && (
+            <div className="bg-sky-50 border border-sky-200 rounded-lg p-3 space-y-2">
+              <div className="text-xs font-semibold text-sky-900">สาเหตุที่อุณหภูมิเกิน *</div>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(COLD_CAUSES).map(([k, label]) => (
+                  <button type="button" key={k} onClick={() => setCause(k)}
+                    className={`text-xs px-2.5 py-1.5 rounded-full border ${cause === k ? 'bg-sky-700 text-white border-sky-700' : 'bg-white text-gray-700 border-gray-300'}`}>{label}</button>
+                ))}
+              </div>
+              {cause && cause !== 'FAULT' && <div className="text-[11px] text-sky-800">วัดซ้ำหลัง {alerts?.recheck_min || 30} นาที (เลือกรอบ "ตรวจซ้ำ") ถ้ากลับมาในเกณฑ์ ถือว่าปิดเรื่อง</div>}
+              {cause === 'HOT_PRODUCT' && <div className="text-[11px] text-red-700 font-semibold">แจ้งฝ่ายผลิต: สินค้าต้องพักให้เย็นก่อนเข้าแช่</div>}
+              {cause === 'FAULT' && <div className="text-[11px] text-red-700 font-semibold">ระบบแจ้งหัวหน้างาน/QA และวิศวกรรมให้อัตโนมัติ — ระบุอาการในหมายเหตุ</div>}
+            </div>
+          )}
+          {status && status !== 'PASS' && !unitOos && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
               <div className="text-xs font-semibold text-amber-900">การดำเนินการเบื้องต้น *</div>
               <div className="flex flex-wrap gap-1.5">
@@ -176,11 +222,11 @@ export default function ColdPage() {
               {actions.includes('HOLD') && <input value={affected} onChange={(e) => setAffected(e.target.value)} placeholder="สินค้า / วัตถุดิบ และ Lot ที่ได้รับผลกระทบ *" className={input} />}
             </div>
           )}
-          <label className="text-xs text-gray-600 block">หมายเหตุ / สาเหตุเบื้องต้น{(status && status !== 'PASS') || condFail ? ' *' : ''}
-            <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="เช่น เปิดประตูโหลดสินค้า, Defrost, อุปกรณ์ขัดข้อง" className={input} />
+          <label className="text-xs text-gray-600 block">หมายเหตุ{(needCause && NEEDS_NOTE.includes(cause)) || condFail ? ' *' : ''}
+            <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="เช่น Defrost, อาการของตู้ (ต้องระบุเมื่อเลือก ตู้ขัดข้อง / อื่นๆ)" className={input} />
           </label>
           {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{error}</div>}
-          <button onClick={save} disabled={saving || temp === ''} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold disabled:opacity-40">
+          <button onClick={save} disabled={saving || temp === '' || (needCause && !cause) || (needCause && NEEDS_NOTE.includes(cause) && !note.trim())} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold disabled:opacity-40">
             <Save className="w-5 h-5" />{saving ? 'กำลังบันทึก…' : 'บันทึก'}
           </button>
           <div className="text-xs text-gray-500">ผู้ตรวจ: <b>{user?.display_name}</b> (บันทึกจากบัญชีที่เข้าสู่ระบบ)</div>

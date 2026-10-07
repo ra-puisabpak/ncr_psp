@@ -5,7 +5,7 @@ import { coldApi } from '../api/d1Api'
 import { FORMS } from '../config'
 import { FormHeader, FormInfo, FormStats } from '../components/FormHeader'
 import { bkkToday, monthOf, monthRange, thaiMonth } from '../qa/shared'
-import { SLOTS, CONDITION, ACTIONS, AREA_TH, specText } from './ColdPage'
+import { SLOTS, CONDITION, ACTIONS, AREA_TH, specText, COLD_CAUSES } from './ColdPage'
 
 const td = 'border border-black px-1 py-[1px]'
 const ACT_TH = Object.fromEntries(ACTIONS)
@@ -41,7 +41,7 @@ function UnitSheet({ unit, rows, month, first }) {
             const rechecks = list.filter((r) => r.slot === 'RECHECK')
             const any = list.length > 0
             const bad = list.some((r) => r.status !== 'PASS')
-            const remarks = list.filter((r) => r.note || r.ncr_id || r.calib_expired).map((r) => `${r.slot === 'RECHECK' ? 'ตรวจซ้ำ ' + (r.read_time || '') + ' ' + r.temp + '°C' : r.slot}: ${[r.note, r.ncr_id, r.calib_expired ? 'เทอร์โมมิเตอร์หมดอายุ' : ''].filter(Boolean).join(' ')}`)
+            const remarks = list.filter((r) => r.note || r.cause || r.ncr_id || r.calib_expired).map((r) => `${r.slot === 'RECHECK' ? 'ตรวจซ้ำ ' + (r.read_time || '') + ' ' + r.temp + '°C' : r.slot}: ${[r.cause ? `[${COLD_CAUSES[r.cause] || r.cause}]` : '', r.note, r.ncr_id, r.calib_expired ? 'เทอร์โมมิเตอร์หมดอายุ' : ''].filter(Boolean).join(' ')}`)
             return (
               <tr key={d}>
                 <td className={td}>{i + 1}</td>

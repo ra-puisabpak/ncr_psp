@@ -489,6 +489,41 @@ function deriveValues(cpId, d) {
 }
 const DERIVED_CPS = ['CCP-01', 'CCP-02', 'OPRP-05'];
 
+// ---------- cold storage: causes of an out-of-range reading and the alerts built from them ----------
+const COLD_CAUSES = { DOOR_LOAD: 'เปิดตู้นำสินค้าเข้า/ออก', HOT_PRODUCT: 'นำสินค้าที่ยังร้อนเข้าแช่', DOOR_OPEN: 'เปิดประตูค้าง', FAULT: 'ตู้ขัดข้อง / อุณหภูมิไม่คงที่', OTHER: 'อื่นๆ' };
+const COLD_RECHECK_MIN = 30; // measure again this long after the cause has gone (door closed, product in)
+// Actions each cause brings with it, so the person recording does not have to tick the obvious ones.
+const COLD_AUTO_ACTIONS = { DOOR_LOAD: ['RECHECK'], DOOR_OPEN: ['RECHECK'], HOT_PRODUCT: ['RECHECK', 'NOTIFY'], FAULT: ['NOTIFY', 'ENGINEERING'], OTHER: ['RECHECK'] };
+const addMin = (iso, m) => new Date(Date.parse(iso) + m * 60e3).toISOString();
+async function coldAlerts(DB, day, nowMs) {
+  const dayBefore = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') - n * 86400e3).toISOString().slice(0, 10);
+  const units = (await DB.prepare('SELECT u.unit_id, u.name, COALESCE(s.out_of_service,0) AS oos, s.reason AS oos_reason, s.set_at AS oos_since FROM cold_units u LEFT JOIN cold_unit_service s ON s.unit_id=u.unit_id WHERE u.active=1 ORDER BY u.unit_id').all()).results;
+  const rows = (await DB.prepare('SELECT r.rd_id, r.unit_id, r.read_date, r.slot, r.read_time, r.temp, r.status, r.created_at, c.cause FROM cold_readings r LEFT JOIN cold_reading_causes c ON c.rd_id=r.rd_id WHERE r.read_date>=? AND r.read_date<=? ORDER BY r.created_at').bind(dayBefore(day, 2), day).all()).results;
+  // A bad reading is settled once a later reading, at least 30 min on, is in range. Door / product / other causes are waiting for that recheck.
+  const unsettled = (list) => list.filter((b) => b.status !== 'PASS' && !list.some((x) => x.created_at >= addMin(b.created_at, COLD_RECHECK_MIN) && x.status === 'PASS'));
+  const out = [];
+  for (const u of units) {
+    if (u.oos) { out.push({ unit_id: u.unit_id, name: u.name, level: 'red', type: 'OUT_OF_SERVICE', text: `ห้ามเก็บสินค้า รอซ่อม${u.oos_reason ? ' — ' + u.oos_reason : ''}`, since: u.oos_since }); continue; }
+    const mine = rows.filter((x) => x.unit_id === u.unit_id);
+    const today = mine.filter((x) => x.read_date === day);
+    const live = unsettled(today);
+    for (const b of live) {
+      const label = COLD_CAUSES[b.cause] || 'ไม่ระบุสาเหตุ';
+      const due = addMin(b.created_at, COLD_RECHECK_MIN);
+      const later = today.filter((x) => x.created_at >= due);
+      if (b.cause === 'FAULT') out.push({ unit_id: u.unit_id, name: u.name, level: 'red', type: 'FAULT', text: `${b.slot} ${b.temp} °C — ${label}`, rd_id: b.rd_id });
+      else if (later.length) out.push({ unit_id: u.unit_id, name: u.name, level: 'red', type: 'FAILED_RECHECK', text: `วัดซ้ำแล้วยังเกิน (${later[later.length - 1].temp} °C) · ครั้งแรก ${b.slot} ${b.temp} °C — ${label}`, rd_id: b.rd_id });
+      else if (nowMs >= Date.parse(due)) out.push({ unit_id: u.unit_id, name: u.name, level: 'red', type: 'OVERDUE_RECHECK', text: `เลยเวลาวัดซ้ำ · ${b.slot} ${b.temp} °C — ${label}`, rd_id: b.rd_id, due });
+      else out.push({ unit_id: u.unit_id, name: u.name, level: 'amber', type: b.cause === 'HOT_PRODUCT' ? 'HOT_PRODUCT' : 'PENDING_RECHECK', text: `${b.slot} ${b.temp} °C — ${label} · วัดซ้ำหลัง ${new Date(Date.parse(due) + 7 * 3600e3).toISOString().slice(11, 16)} น.`, rd_id: b.rd_id, due });
+      if (b.slot === '08:00') out.push({ unit_id: u.unit_id, name: u.name, level: 'red', type: 'BASELINE', text: `รอบเช้า (ก่อนมีการใช้งาน) เกินเกณฑ์ ${b.temp} °C`, rd_id: b.rd_id });
+    }
+    // Out of range on two or more of the last three days and still unsettled: the unit, not the door.
+    const days = new Set([...[0, 1, 2].map((n) => dayBefore(day, n))].filter((d) => unsettled(mine.filter((x) => x.read_date === d)).length));
+    if (days.size >= 2) out.push({ unit_id: u.unit_id, name: u.name, level: 'red', type: 'REPEAT', text: `เกินเกณฑ์ ${days.size} วันใน 3 วันล่าสุด` });
+  }
+  return { date: day, recheck_min: COLD_RECHECK_MIN, alerts: out, units: units.map((u) => ({ unit_id: u.unit_id, out_of_service: !!u.oos, reason: u.oos_reason, since: u.oos_since })) };
+}
+
 // ---------- router ----------
 export default {
   async fetch(req, env) {
@@ -2173,7 +2208,29 @@ export default {
 
       // ===== PSP QUALITY APP: refrigerator / freezer temperature (FM-QC-006) =====
       if (path === '/api/cold/units' && method === 'GET') {
-        return json((await DB.prepare('SELECT * FROM cold_units ORDER BY active DESC, area, unit_id').all()).results);
+        return json((await DB.prepare('SELECT u.*, COALESCE(s.out_of_service,0) AS out_of_service, s.reason AS oos_reason, s.set_at AS oos_since FROM cold_units u LEFT JOIN cold_unit_service s ON s.unit_id=u.unit_id ORDER BY u.active DESC, u.area, u.unit_id').all()).results.map((u) => ({ ...u, out_of_service: !!u.out_of_service })));
+      }
+      if (path === '/api/cold/alerts' && method === 'GET') {
+        return json(await coldAlerts(DB, isDate(url.searchParams.get('date')) ? url.searchParams.get('date') : today(), Date.now()));
+      }
+      const svc = path.match(/^\/api\/cold\/units\/([A-Za-z0-9_-]{1,30})\/service$/);
+      if (svc && method === 'POST') {
+        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่เปลี่ยนสถานะตู้ได้');
+        const b = await body();
+        const id = svc[1];
+        if (!(await DB.prepare('SELECT 1 FROM cold_units WHERE unit_id=?').bind(id).first())) fail(404, 'ไม่พบตู้');
+        const cur = await DB.prepare('SELECT out_of_service FROM cold_unit_service WHERE unit_id=?').bind(id).first();
+        if (b.out_of_service) {
+          if (blank(b.reason)) fail(400, 'กรุณาระบุเหตุผลที่ตั้งสถานะรอซ่อม');
+          await DB.prepare('INSERT INTO cold_unit_service (unit_id,out_of_service,reason,set_by,set_at) VALUES (?,1,?,?,?) ON CONFLICT(unit_id) DO UPDATE SET out_of_service=1, reason=excluded.reason, set_by=excluded.set_by, set_at=excluded.set_at, cleared_by=NULL, cleared_at=NULL')
+            .bind(id, txt(b.reason, 300), user.display_name, nowIso()).run();
+        } else {
+          need(user, QAM, 'เฉพาะ QA Manager เท่านั้นที่เปิดใช้ตู้อีกครั้งได้');
+          if (!cur?.out_of_service) fail(409, 'ตู้นี้ไม่ได้อยู่ในสถานะรอซ่อม');
+          await DB.prepare('UPDATE cold_unit_service SET out_of_service=0, cleared_by=?, cleared_at=? WHERE unit_id=?').bind(user.display_name, nowIso(), id).run();
+        }
+        await audit(DB, user.username, 'user', b.out_of_service ? 'out_of_service' : 'back_in_service', 'cold_unit', id, { reason: txt(b.reason, 300) });
+        return json({ unit_id: id, out_of_service: !!b.out_of_service });
       }
       const cu = path.match(/^\/api\/cold\/units(?:\/([A-Za-z0-9_-]{1,30}))?$/);
       if (cu && (method === 'POST' || (method === 'PATCH' && cu[1]))) {
@@ -2225,7 +2282,8 @@ export default {
         if (isDate(sp.get('from'))) { where.push('read_date>=?'); p.push(sp.get('from')); }
         if (isDate(sp.get('to'))) { where.push('read_date<=?'); p.push(sp.get('to')); }
         const { results } = await DB.prepare(`SELECT * FROM cold_readings WHERE ${where.join(' AND ')} ORDER BY read_date DESC, rd_id DESC LIMIT 2000`).bind(...p).all();
-        return json(results.map((r) => ({ ...r, limits: JSON.parse(r.limits), condition: r.condition ? JSON.parse(r.condition) : null, actions: r.actions ? JSON.parse(r.actions) : [] })));
+        const causes = results.length ? (await DB.prepare(`SELECT rd_id, cause FROM cold_reading_causes WHERE rd_id IN (${results.map(() => '?').join(',')})`).bind(...results.map((r) => r.rd_id)).all()).results : [];
+        return json(results.map((r) => ({ ...r, cause: causes.find((c) => c.rd_id === r.rd_id)?.cause || null, limits: JSON.parse(r.limits), condition: r.condition ? JSON.parse(r.condition) : null, actions: r.actions ? JSON.parse(r.actions) : [] })));
       }
       if (path === '/api/cold/readings' && method === 'POST') {
         need(user, WRITERS);
@@ -2256,11 +2314,15 @@ export default {
         if (b.slot === '08:00' && !condition) fail(400, 'รอบ 08:00 ต้องตรวจสภาพตู้ 6 ข้อด้วย');
         const condFail = condition && Object.values(condition).includes('F');
         const ACTIONS = ['RECHECK', 'NOTIFY', 'ENGINEERING', 'HOLD', 'TRANSFER'];
-        const actions = (Array.isArray(b.actions) ? b.actions : []).filter((a) => ACTIONS.includes(a));
+        const oos = !!(await DB.prepare('SELECT 1 FROM cold_unit_service WHERE unit_id=? AND out_of_service=1').bind(unit.unit_id).first());
+        // An out-of-range reading names its cause; a unit already out of service is known to be faulty, so it does not ask again.
+        const cause = status === 'PASS' ? null : (Object.keys(COLD_CAUSES).includes(b.cause) ? b.cause : oos ? 'FAULT' : null);
+        if (status !== 'PASS' && !cause) fail(400, 'อุณหภูมินอกเกณฑ์ กรุณาเลือกสาเหตุ');
+        const actions = [...new Set([...(Array.isArray(b.actions) ? b.actions : []).filter((a) => ACTIONS.includes(a)), ...(cause && !oos ? COLD_AUTO_ACTIONS[cause] : [])])];
         const note = txt(b.note, 500), affected = txt(b.affected, 300);
-        if (status !== 'PASS' && !actions.length) fail(400, 'อุณหภูมินอกเกณฑ์ กรุณาเลือกการดำเนินการเบื้องต้น');
-        if (status === 'ESCALATE' && !actions.includes('NOTIFY')) fail(400, 'เกิน Escalation Limit ต้องแจ้งหัวหน้างาน / QA');
-        if ((status !== 'PASS' || condFail) && !note) fail(400, 'กรุณาระบุสาเหตุเบื้องต้นหรือความผิดปกติในหมายเหตุ');
+        const doorCause = cause === 'DOOR_LOAD' || cause === 'DOOR_OPEN';
+        if (status === 'ESCALATE' && !oos && !doorCause && !actions.includes('NOTIFY')) fail(400, 'เกิน Escalation Limit ต้องแจ้งหัวหน้างาน / QA');
+        if ((condFail || cause === 'OTHER' || cause === 'FAULT') && !oos && !note) fail(400, 'กรุณาระบุรายละเอียดในหมายเหตุ (สาเหตุอื่นๆ / ตู้ขัดข้อง / สภาพตู้ไม่ผ่าน)');
         if (actions.includes('HOLD') && !affected) fail(400, 'กักสินค้า (HOLD) ต้องระบุสินค้า / Lot ที่ได้รับผลกระทบ');
         const calibExpired = unit.calib_due && unit.calib_due < b.read_date ? 1 : 0;
         const limits = { spec_min: unit.spec_min, spec_max: unit.spec_max, escalate_at: unit.escalate_at, unit_type: unit.unit_type };
@@ -2288,6 +2350,7 @@ export default {
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(rdId, uid, unit.unit_id, b.read_date, b.slot, nz(b.read_time), temp, JSON.stringify(limits), status,
             condition ? JSON.stringify(condition) : null, unit.thermometer, calibExpired, actions.length ? JSON.stringify(actions) : null, affected, note, ncrId,
             user.display_name, user.username, nowIso()));
+          if (cause) stmts.push(DB.prepare('INSERT INTO cold_reading_causes (rd_id,cause) VALUES (?,?)').bind(rdId, cause));
           try { await DB.batch(stmts); } catch (e) {
             if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
               const again = await DB.prepare('SELECT rd_id, status, ncr_id FROM cold_readings WHERE uid=?').bind(uid).first();
@@ -2298,7 +2361,7 @@ export default {
           }
           await audit(DB, user.username, 'user', 'create', 'cold_reading', rdId, { unit_id: unit.unit_id, temp, status, ncr_id: ncrId });
           if (ncrId) await audit(DB, user.username, 'user', 'create', 'ncr', ncrId, { source: 'FM-QC-006', cold_reading: rdId });
-          return json({ rd_id: rdId, status, ncr_id: ncrId, calib_expired: calibExpired }, 201);
+          return json({ rd_id: rdId, status, ncr_id: ncrId, calib_expired: calibExpired, cause, recheck_after: cause && !oos && cause !== 'FAULT' ? addMin(nowIso(), COLD_RECHECK_MIN) : null }, 201);
         }
       }
 

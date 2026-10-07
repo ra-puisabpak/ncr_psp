@@ -6,7 +6,7 @@ import {
 import Layout from '../components/Layout'
 import { qaApi } from '../api/d1Api'
 import { RECEIVING_URL, FORMS } from '../config'
-import { useAuth } from '../auth'
+import { useAuth, isQA } from '../auth'
 import { CP_TYPE_TH, CP_TYPE_CLS, CP_STATUS_TH, CP_STATUS_CLS, Badge, ResultBadge, bkkToday } from '../qa/shared'
 
 function Tile({ icon: Icon, label, value, sub, tone, to }) {
@@ -68,6 +68,7 @@ export default function QADashboardPage() {
   const [showCp, setShowCp] = useState(false)
   const [prog, setProg] = useState(null) // how much each form has recorded today (QA Manager only)
   const [error, setError] = useState(null)
+  const [coldAlerts, setColdAlerts] = useState(null) // cold-storage alerts (QA Manager / FSTL)
 
   const load = async () => {
     setLoading(true); setError(null)
@@ -89,6 +90,15 @@ export default function QADashboardPage() {
     document.addEventListener('visibilitychange', vis)
     return () => { stop = true; clearInterval(t); document.removeEventListener('visibilitychange', vis) }
   }, [date, user?.role])
+
+  useEffect(() => {
+    if (!isQA(user)) return undefined
+    let stop = false
+    const pull = () => qaApi.coldAlerts(date).then((a) => { if (!stop) setColdAlerts(a) }).catch(() => {})
+    pull()
+    const t = setInterval(pull, 30000)
+    return () => { stop = true; clearInterval(t) }
+  }, [date, user?.role]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const active = points.filter((c) => c.status !== 'RETIRED')
   const approved = active.filter((c) => c.status === 'APPROVED').length
@@ -119,6 +129,16 @@ export default function QADashboardPage() {
       </div>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3 mb-4">{error}</div>}
+
+      {coldAlerts?.alerts?.length > 0 && (
+        <Link to="/qa/cold" className="block bg-white rounded-xl shadow border-l-4 border-red-500 p-3 mb-4 hover:shadow-md transition">
+          <div className="text-sm font-bold text-gray-800 flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-red-600" />แจ้งเตือนตู้เย็น / ตู้แช่แข็ง ({coldAlerts.alerts.length})</div>
+          <ul className="mt-1.5 space-y-0.5 text-xs">
+            {coldAlerts.alerts.slice(0, 6).map((a, i) => <li key={i} className={a.level === 'red' ? 'text-red-700' : 'text-amber-800'}><b>{a.unit_id}</b> · {a.text}</li>)}
+            {coldAlerts.alerts.length > 6 && <li className="text-gray-500">และอีก {coldAlerts.alerts.length - 6} รายการ</li>}
+          </ul>
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <Tile icon={ClipboardCheck} label="บันทึกตรวจ" sub={date === bkkToday() ? 'วันนี้' : date} value={summary?.total ?? '–'} tone="teal" to="/qa/records" />
