@@ -323,6 +323,28 @@ r = await call('GET', '/api/materials', { token: qc });
 check('a retired material stays in the register', r.j.find((m) => m.code === 'RM-053').active === 0 && r.j.find((m) => m.code === 'RM-053').name === 'ใบมะกรูดสด', r.j.find((m) => m.code === 'RM-053'));
 r = await call('GET', '/api/audit?entity_id=RM-053', { token: qa });
 check('register changes are in the audit log', r.j.some((x) => x.action === 'update' && JSON.parse(x.changes).name), r.j);
+// Finished-product inspection (QC_10)
+r = await call('GET', '/api/pack-sizes', { token: qc });
+check('pack sizes carry the jar weight to deduct', r.status === 200 && r.j.find((x) => x.pack_key === 'J210').tare_g === 40 && r.j.find((x) => x.pack_key === 'J60').tare_g === 15, r.j);
+const fgBody = (o = {}) => ({ uid: 'fgc-' + Math.random().toString(36).slice(2, 10), check_date: '2026-10-05', product_code: 'FG0007', product_name: 'พริกผัดน้ำมันมะกอก สูตรออริจินัล', batch_no: 'B261005-01',
+  pack_key: 'J210', gross: [251, 252], sensory: { appearance: true, color: true, odor: true, taste: true }, aw: 0.48, aw_temp: 31.1, ph: 5.54,
+  pack: { pack_ok: true, seal_ok: true, label_ok: true }, store_temp: 30.6, ...o });
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ pack_key: '' }) });
+check('the pack size must be chosen before weighing', r.status === 400, r);
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ gross: [251] }) });
+check('two jars are weighed', r.status === 400, r);
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody() });
+check('net weight deducts the 40 g jar of the 210 g size and passes', r.status === 201 && r.j.result === 'PASS' && r.j.net.join() === '211,212' && r.j.fc_id === 'FGC-261005-001', r.j);
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ product_code: 'FG0001', batch_no: 'B261005-02', pack_key: 'J60', gross: [77, 75], aw: '', aw_temp: '' }) });
+check('a 60 g jar deducts 15 g; aw may be left blank', r.status === 201 && r.j.result === 'PASS' && r.j.net.join() === '62,60', r.j);
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ batch_no: 'B261005-03', gross: [251, 248] }) });
+check('a short net weight fails and needs what was done', r.status === 400, r);
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ batch_no: 'B261005-03', gross: [251, 248], sensory: { appearance: true, color: true, odor: false, taste: true }, note: 'กักไว้ แจ้ง QA' }) });
+check('short weight and a sensory fail are listed; no NCR is opened', r.status === 201 && r.j.result === 'FAIL' && r.j.failed.length === 2 && /208/.test(r.j.failed[0]) && !r.j.ncr_id, r.j);
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ sensory: { appearance: true } }) });
+check('every sensory check needs a result', r.status === 400, r);
+r = await call('GET', '/api/fgcheck?from=2026-10-05&to=2026-10-05', { token: qc });
+check('the day lists every product checked with weights and results', r.status === 200 && r.j.length === 3 && r.j.some((x) => x.pack_key === 'J60' && x.aw === null), r.j.length);
 
 // conditional acceptance
 const condBody = (uid, note) => { const x = recvBody(uid, ''); x.record.mats = [{ idx: 1, code: 'PKG-001', result: 'COND', note, condBy: 'someone else', photo1: null, photo2: null }]; return x; };

@@ -163,6 +163,13 @@ export const materialApi = {
   update: (code, body) => patch(`/api/materials/${enc(code)}`, body),
 }
 
+// QC_10 finished-product inspection.
+export const fgCheckApi = {
+  packSizes: () => request('/api/pack-sizes'),
+  list: (params = {}) => request(`/api/fgcheck?${new URLSearchParams(params)}`),
+  save: (body) => post('/api/fgcheck', body),
+}
+
 export const coldApi = {
   units: () => request('/api/cold/units'),
   createUnit: (body) => post('/api/cold/units', body),

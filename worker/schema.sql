@@ -723,3 +723,47 @@ INSERT OR IGNORE INTO materials (code,name,type,unit,cat,min_temp,max_temp,temp_
 ('SUP-024','เทปใสใหญ่ (72ม้วน/ลัง)','CM','ม้วน','Consumable',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,1,'system',datetime('now'),'system',datetime('now')),
 ('SUP-025','ลาเบล 100x150x350','CM','ม้วน','Consumable',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,1,'system',datetime('now'),'system',datetime('now')),
 ('SUP-026','บับเบิ้ล ไซส์ XL','CM','ม้วน','Consumable',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,1,'system',datetime('now'),'system',datetime('now'));
+
+-- ===== Finished-product inspection (QC_10 บันทึกการตรวจสอบผลิตภัณฑ์สุดท้าย) =====
+-- Pack sizes: the jar weight (jar + aluminium lid + plastic lid + sticker) deducted from the gross weight.
+CREATE TABLE IF NOT EXISTS pack_sizes (
+  pack_key     TEXT PRIMARY KEY,
+  label        TEXT NOT NULL,
+  label_net_g  REAL NOT NULL,
+  tare_g       REAL NOT NULL,
+  active       INTEGER NOT NULL DEFAULT 1,
+  sort         INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO pack_sizes (pack_key,label,label_net_g,tare_g,sort) VALUES
+ ('J210','กระปุกใหญ่ 210 g (กระปุก + ฝาอลู + ฝาพลาสติก + สติ๊กเกอร์ 40 g)',210,40,1),
+ ('J60','กระปุกเล็ก 60 g (กระปุก + ฝา + สติ๊กเกอร์ 15 g)',60,15,2);
+-- One row per product batch checked. Net weight = gross - jar weight of the pack size chosen; the server judges.
+CREATE TABLE IF NOT EXISTS fg_checks (
+  fc_id        TEXT PRIMARY KEY,
+  uid          TEXT NOT NULL UNIQUE,
+  check_date   TEXT NOT NULL,
+  product_code TEXT NOT NULL,
+  product_name TEXT,
+  batch_no     TEXT NOT NULL,
+  pack_key     TEXT NOT NULL,
+  pack_label   TEXT NOT NULL,
+  label_net_g  REAL NOT NULL,
+  tare_g       REAL NOT NULL,
+  gross        TEXT NOT NULL,
+  net          TEXT NOT NULL,
+  sensory      TEXT NOT NULL,
+  aw           REAL,
+  aw_temp      REAL,
+  ph           REAL,
+  pack         TEXT NOT NULL,
+  store_temp   REAL,
+  store_area   TEXT,
+  result       TEXT NOT NULL CHECK(result IN ('PASS','FAIL')),
+  failed       TEXT,
+  note         TEXT,
+  inspector    TEXT NOT NULL,
+  created_by   TEXT NOT NULL,
+  created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_fg_checks_date ON fg_checks(check_date);
+CREATE INDEX IF NOT EXISTS idx_fg_checks_batch ON fg_checks(product_code, batch_no);

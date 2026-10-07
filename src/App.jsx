@@ -13,6 +13,8 @@ import LoginPage from './pages/LoginPage'
 import SetupPage from './pages/SetupPage'
 import UsersPage from './pages/UsersPage'
 import MaterialsPage from './pages/MaterialsPage'
+import FGCheckPage from './pages/FGCheckPage'
+import FGCheckReportPage from './pages/FGCheckReportPage'
 import AccountPage from './pages/AccountPage'
 import QADashboardPage from './pages/QADashboardPage'
 import QCRecordPage from './pages/QCRecordPage'
@@ -73,6 +75,8 @@ export default function App() {
           <Route path="/qa/cold/report" element={<Private><ColdReportPage /></Private>} />
           <Route path="/qa/weigh" element={<Private><WeighPage /></Private>} />
           <Route path="/qa/weigh/:id/print" element={<Private><WeighPrintPage /></Private>} />
+          <Route path="/qa/fgcheck" element={<Private><FGCheckPage /></Private>} />
+          <Route path="/qa/fgcheck/report" element={<Private><FGCheckReportPage /></Private>} />
           <Route path="/qa/materials" element={<Private><MaterialsPage /></Private>} />
           <Route path="/qa/formulas" element={<Private><FormulasPage /></Private>} />
           <Route path="/qa/prodctl" element={<Private><ProdControlPage /></Private>} />

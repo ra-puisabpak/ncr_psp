@@ -4,7 +4,7 @@ import {
   ArrowLeft, Search, CheckCircle2, XCircle, AlertTriangle, CircleDashed, ShieldCheck, Plus, Trash2, PackageCheck, PauseCircle, Ban,
 } from 'lucide-react'
 import Layout from '../components/Layout'
-import { qaApi, weighApi } from '../api/d1Api'
+import { qaApi, weighApi, fgCheckApi } from '../api/d1Api'
 import { useAuth, isQA } from '../auth'
 import { PRODUCTS, byCode } from '../data/masterData'
 import { useMaterials } from '../data/materials'
@@ -140,6 +140,9 @@ function DecisionForm({ gate, onSaved }) {
       }
     }).catch(() => setWeighed(false))
   }, [gate.product_code, gate.batch_no])
+  // QC_10 results of this batch, shown beside the spec check.
+  const [fgc, setFgc] = useState([])
+  useEffect(() => { fgCheckApi.list({ product_code: gate.product_code, batch_no: gate.batch_no }).then(setFgc).catch(() => setFgc([])) }, [gate.product_code, gate.batch_no])
   const [checks, setChecks] = useState({})
   const [uid, setUid] = useState(newUid)
   const [saving, setSaving] = useState(false)
@@ -170,6 +173,10 @@ function DecisionForm({ gate, onSaved }) {
       {weighed && <div className="text-[11px] text-green-700">ดึงล็อตวัตถุดิบ {weighed.lines.length} รายการจากบันทึกการชั่ง {weighed.wr_id} แล้ว</div>}
       {weighed === false && <div className="text-[11px] text-amber-700">ไม่พบบันทึกการชั่ง ({FORMS.WEIGH.code}) ของ Batch นี้ — ระบุล็อตเอง</div>}
       <LotPicker lots={lots} setLots={setLots} />
+      <div className={`text-[11px] rounded-lg p-2 ${!fgc.length ? 'bg-amber-50 text-amber-800' : fgc.some((r) => r.result === 'FAIL') ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'}`}>
+        {fgc.length ? fgc.map((r) => `${FORMS.FG_CHECK.code} ${r.fc_id} (${r.check_date}): ${r.result === 'PASS' ? 'ผ่าน' : 'ไม่ผ่าน — ' + r.failed.join(', ')} · สุทธิ ${r.net.join('/')} g${r.aw != null ? ` · aw ${r.aw}` : ''}${r.ph != null ? ` · pH ${r.ph}` : ''}`).join(' | ')
+          : `ยังไม่มีบันทึกตรวจสอบผลิตภัณฑ์สุดท้าย (${FORMS.FG_CHECK.code}) ของ Batch นี้`}
+      </div>
       <div className="space-y-2">
         {CHECKS.map(([k, label]) => (
           <label key={k} className="flex items-start gap-2 text-sm cursor-pointer">

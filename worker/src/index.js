@@ -1237,6 +1237,74 @@ export default {
         return json({ success: true, status: next.status, closedDate: next.closed_date || '', ncrId: next.ncr_id || '', closeNote: JSON.parse(data || '{}').closeNote || '' });
       }
 
+      // ===== Finished-product inspection (QC_10) =====
+      if (path === '/api/pack-sizes' && method === 'GET') {
+        const { results } = await DB.prepare('SELECT * FROM pack_sizes ORDER BY sort, pack_key').all();
+        return json(results);
+      }
+      const FG_SENSORY = [['appearance', 'ลักษณะภายนอก'], ['color', 'สี'], ['odor', 'กลิ่น'], ['taste', 'รสชาติ']];
+      const FG_PACK = [['pack_ok', 'สภาพบรรจุภัณฑ์ (สะอาด ไม่ชำรุด)'], ['seal_ok', 'การปิดผนึก'], ['label_ok', 'ฉลากถูกต้อง (ชื่อ อย. วันผลิต/หมดอายุ)']];
+      const fgRow = (r) => ({ ...r, gross: JSON.parse(r.gross), net: JSON.parse(r.net), sensory: JSON.parse(r.sensory), pack: JSON.parse(r.pack), failed: r.failed ? JSON.parse(r.failed) : [] });
+      if (path === '/api/fgcheck' && method === 'GET') {
+        const sp = url.searchParams, where = ['1=1'], p = [];
+        if (isDate(sp.get('from'))) { where.push('check_date>=?'); p.push(sp.get('from')); }
+        if (isDate(sp.get('to'))) { where.push('check_date<=?'); p.push(sp.get('to')); }
+        for (const k of ['product_code', 'batch_no']) if (sp.get(k)) { where.push(`${k}=?`); p.push(sp.get(k)); }
+        const { results } = await DB.prepare(`SELECT * FROM fg_checks WHERE ${where.join(' AND ')} ORDER BY check_date DESC, fc_id DESC LIMIT 500`).bind(...p).all();
+        return json(results.map(fgRow));
+      }
+      if (path === '/api/fgcheck' && method === 'POST') {
+        need(user, WRITERS);
+        const b = await body();
+        const uid = recvUid(b.uid);
+        const done = await DB.prepare('SELECT fc_id, result FROM fg_checks WHERE uid=?').bind(uid).first();
+        if (done) return json(done);
+        if (!isDate(b.check_date) || b.check_date > today()) fail(400, 'กรุณาระบุวันที่ตรวจ (ไม่เป็นวันในอนาคต)');
+        const product = String(b.product_code || '').trim();
+        if (!/^FG\d{3,5}$/.test(product)) fail(400, 'กรุณาเลือกผลิตภัณฑ์');
+        const batch = cleanBatch(b.batch_no);
+        const pk = await DB.prepare('SELECT * FROM pack_sizes WHERE pack_key=? AND active=1').bind(String(b.pack_key || '')).first();
+        if (!pk) fail(400, 'กรุณาเลือกขนาดบรรจุก่อน เพื่อหักน้ำหนักกระปุก');
+        const numOpt = (v, label, lo, hi) => {
+          if (blank(v)) return null;
+          const n = Number(v);
+          if (!Number.isFinite(n) || n < lo || n > hi) fail(400, `${label} ต้องเป็นตัวเลข ${lo} ถึง ${hi}`);
+          return n;
+        };
+        const gross = (Array.isArray(b.gross) ? b.gross : []).slice(0, 10).filter((v) => !blank(v)).map((v) => numOpt(v, 'น้ำหนักรวม', 0, 5000));
+        if (gross.length < 2) fail(400, 'กรุณาชั่งน้ำหนักอย่างน้อย 2 กระปุก');
+        const net = gross.map((g) => Math.round((g - pk.tare_g) * 100) / 100);
+        const bool = (o, k, label) => { const v = o?.[k]; if (v !== true && v !== false) fail(400, `กรุณาเลือกผล "${label}"`); return v; };
+        const sensory = Object.fromEntries(FG_SENSORY.map(([k, l]) => [k, bool(b.sensory, k, l)]));
+        const pack = Object.fromEntries(FG_PACK.map(([k, l]) => [k, bool(b.pack, k, l)]));
+        const failed = [];
+        net.forEach((n, i) => { if (n < pk.label_net_g) failed.push(`น้ำหนักสุทธิกระปุกที่ ${i + 1}: ${n} g (ต่ำกว่า ${pk.label_net_g} g บนฉลาก)`); });
+        FG_SENSORY.forEach(([k, l]) => { if (!sensory[k]) failed.push(`${l} ไม่ผ่าน`); });
+        FG_PACK.forEach(([k, l]) => { if (!pack[k]) failed.push(`${l} ไม่ผ่าน`); });
+        const result = failed.length ? 'FAIL' : 'PASS';
+        const note = txt(b.note, 1000);
+        if (result === 'FAIL' && !note) fail(400, 'ผลไม่ผ่าน กรุณาระบุสิ่งที่ทำ (เช่น กักสินค้า แจ้งหัวหน้างาน/QA)');
+        const rec = [b.check_date, product, txt(b.product_name, 200), batch, pk.pack_key, pk.label, pk.label_net_g, pk.tare_g, JSON.stringify(gross), JSON.stringify(net), JSON.stringify(sensory),
+          numOpt(b.aw, 'ค่า aw', 0, 1), numOpt(b.aw_temp, 'อุณหภูมิขณะวัด aw', 0, 60), numOpt(b.ph, 'ค่า pH', 0, 14), JSON.stringify(pack),
+          numOpt(b.store_temp, 'อุณหภูมิสถานที่จัดเก็บ', -40, 60), txt(b.store_area, 40), result, failed.length ? JSON.stringify(failed) : null, note, user.display_name, user.username, nowIso()];
+        for (let attempt = 0; ; attempt++) {
+          const fcId = await dayId(DB, 'fg_checks', 'fc_id', 'FGC', b.check_date);
+          try {
+            await DB.prepare(`INSERT INTO fg_checks (fc_id,uid,check_date,product_code,product_name,batch_no,pack_key,pack_label,label_net_g,tare_g,gross,net,sensory,aw,aw_temp,ph,pack,store_temp,store_area,result,failed,note,inspector,created_by,created_at)
+              VALUES (?,?,${rec.map(() => '?').join(',')})`).bind(fcId, uid, ...rec).run();
+          } catch (e) {
+            if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
+              const again = await DB.prepare('SELECT fc_id, result FROM fg_checks WHERE uid=?').bind(uid).first();
+              if (again) return json(again);
+              continue;
+            }
+            throw e;
+          }
+          await audit(DB, user.username, 'user', 'create', 'fg_check', fcId, { product_code: product, batch_no: batch, pack: pk.pack_key, net, result });
+          return json({ fc_id: fcId, result, net, failed }, 201);
+        }
+      }
+
       // ===== Central raw-material register =====
       if (path === '/api/materials' && method === 'GET') {
         const { results } = await DB.prepare("SELECT * FROM materials ORDER BY CASE type WHEN 'RM' THEN 0 WHEN 'PM' THEN 1 ELSE 2 END, code").all();

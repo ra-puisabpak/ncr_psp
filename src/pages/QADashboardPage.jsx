@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, Boxes, Route, HandHeart, Droplets, Thermometer, Scale, Flame, BookOpen,
+  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, Boxes, Route, HandHeart, Droplets, Thermometer, Scale, Flame, BookOpen, PackageSearch,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { qaApi } from '../api/d1Api'
@@ -133,6 +133,14 @@ export default function QADashboardPage() {
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">อุณหภูมิตู้เย็น / ตู้แช่แข็ง</div>
             <div className="text-[11px] text-gray-500">{FORMS.COLD.code} · 08:00 · 11:00 · 15:00 · 17:00</div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-300" />
+        </Link>
+        <Link to="/qa/fgcheck" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0"><PackageSearch className="w-5 h-5" /></div>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-sm text-gray-800">ตรวจสอบผลิตภัณฑ์สุดท้าย</div>
+            <div className="text-[11px] text-gray-500">{FORMS.FG_CHECK.code} · น้ำหนักสุทธิหลังหักกระปุก aw pH บรรจุภัณฑ์</div>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
