@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Save, Printer, PackageSearch, CheckCircle2, XCircle } from 'lucide-react'
+import { ArrowLeft, Save, Printer, PackageSearch, CheckCircle2, XCircle, Camera, X } from 'lucide-react'
 import Layout from '../components/Layout'
 import { fgCheckApi, weighApi } from '../api/d1Api'
+import { compressImage } from '../components/Photos'
 import { useAuth, canWrite } from '../auth'
 import { PRODUCTS } from '../data/masterData'
 import { ResultBadge, bkkToday, addDays, newUid } from '../qa/shared'
@@ -11,7 +12,38 @@ import { FORMS } from '../config'
 const input = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100'
 export const FG_SENSORY = [['appearance', 'ลักษณะภายนอก'], ['color', 'สี'], ['odor', 'กลิ่น'], ['taste', 'รสชาติ']]
 export const FG_PACK = [['pack_ok', 'สภาพบรรจุภัณฑ์ (สะอาด ไม่ชำรุด)'], ['seal_ok', 'การปิดผนึก'], ['label_ok', 'ฉลากถูกต้อง (ชื่อ อย. วันผลิต/หมดอายุ)']]
-const blankForm = () => ({ product_code: '', batch_no: '', pack_key: '', packs: [], gross: ['', ''], recheck: [], sensory: {}, pack: {}, aw: '', aw_temp: '', ph: '', store_temp: '', store_area: '', note: '' })
+// One photo slot: take or choose a picture; it is shrunk in the browser before saving.
+function PhotoSlot({ title, hint, value, onChange }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const pick = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = ''
+    if (!file) return
+    setBusy(true); setErr(null)
+    try { onChange((await compressImage(file)).preview) } catch (x) { setErr(x.message) } finally { setBusy(false) }
+  }
+  return (
+    <div>
+      <div className="text-xs font-semibold text-gray-700">{title}</div>
+      <div className="text-[11px] text-gray-500 mb-1">{hint}</div>
+      <div className="relative border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-gray-50 min-h-[110px]">
+        {value ? (
+          <>
+            <img src={value} alt="" className="w-full h-36 object-cover" />
+            <button type="button" onClick={() => onChange(null)} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center"><X className="w-3.5 h-3.5" /></button>
+          </>
+        ) : (
+          <label className="flex flex-col items-center justify-center gap-1 h-[110px] cursor-pointer text-gray-500 text-xs">
+            <Camera className="w-6 h-6" />{busy ? 'กำลังย่อรูป…' : 'เลือกรูปหรือถ่ายภาพ'}
+            <input type="file" accept="image/*" onChange={pick} className="hidden" />
+          </label>
+        )}
+      </div>
+      {err && <div className="text-[11px] text-red-700 mt-1">{err}</div>}
+    </div>
+  )
+}
+const blankForm = () => ({ product_code: '', batch_no: '', pack_key: '', packs: [], gross: ['', ''], recheck: [], photos: { cap: null, label: null }, sensory: {}, pack: {}, aw: '', aw_temp: '', ph: '', store_temp: '', store_area: '', note: '' })
 
 function PassFail({ value, onChange }) {
   return (
@@ -33,6 +65,7 @@ export default function FGCheckPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [saved, setSaved] = useState(null)
+  const [viewer, setViewer] = useState(null) // { fc_id, photos }
   const [rows, setRows] = useState([])
   const [plan, setPlan] = useState({ packs: [], checked: [] }) // sizes this batch is filled into / already checked
   const [pending, setPending] = useState(null) // batches made the day before that still need this check
@@ -68,6 +101,10 @@ export default function FGCheckPage() {
     && FG_SENSORY.every(([k]) => typeof f.sensory[k] === 'boolean') && FG_PACK.every(([k]) => typeof f.pack[k] === 'boolean')
     && (!failsNow.length || f.note.trim())
 
+  const openPhotos = async (r) => {
+    setViewer({ fc_id: r.fc_id, title: `${r.product_name || r.product_code} · ${r.batch_no}`, photos: null })
+    try { setViewer({ fc_id: r.fc_id, title: `${r.product_name || r.product_code} · ${r.batch_no}`, photos: await fgCheckApi.photos(r.fc_id) }) } catch (e) { setViewer(null); setError(e.message) }
+  }
   const voidRow = async (r) => {
     const reason = window.prompt(`ยกเลิกรายการ ${r.fc_id} (${r.product_name || r.product_code} ${r.batch_no} · ${r.label_net_g} g)\nระบุเหตุผล:`)
     if (!reason || !reason.trim()) return
@@ -209,6 +246,14 @@ export default function FGCheckPage() {
           </div>
         </div>
 
+        <div>
+          <div className="text-xs font-semibold text-gray-700 mb-1">5. รูปถ่ายตรวจสอบ (ไม่บังคับ แต่ควรถ่ายทุก Batch)</div>
+          <div className="grid grid-cols-2 gap-2">
+            <PhotoSlot title="รูปที่ 1 — ฝาสินค้า" hint="ถ่ายให้เห็น MFG / EXP ชัดเจน" value={f.photos.cap} onChange={(v) => set('photos', { ...f.photos, cap: v })} />
+            <PhotoSlot title="รูปที่ 2 — ด้านฉลาก" hint="ถ่ายให้เห็นปริมาณสุทธิ (น้ำหนักสุทธิ) ชัดเจน" value={f.photos.label} onChange={(v) => set('photos', { ...f.photos, label: v })} />
+          </div>
+        </div>
+
         {failsNow.length > 0 && <div className="text-xs bg-red-50 border border-red-200 text-red-800 rounded-lg p-2.5">จะไม่ผ่านเมื่อบันทึก: {failsNow.join(' · ')} — กักสินค้าและแจ้งหัวหน้างาน/QA แล้วระบุสิ่งที่ทำ</div>}
         <label className="text-xs text-gray-600 block">หมายเหตุ{failsNow.length ? ' / สิ่งที่ทำ *' : ''}<textarea rows={2} value={f.note} onChange={(e) => set('note', e.target.value)} className={input} /></label>
         {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{error}</div>}
@@ -230,11 +275,24 @@ export default function FGCheckPage() {
               <div className="text-[11px] text-gray-500">{r.fc_id} · {r.label_net_g} g (หัก {r.tare_g} g) · สุทธิ {r.net.map((n, i) => (r.recheck?.[i] ? `${n} (ชั่งซ้ำ ${r.recheck[i].net})` : n)).join(' / ')} g{r.aw != null ? ` · aw ${r.aw}` : ''}{r.ph != null ? ` · pH ${r.ph}` : ''} · {r.inspector}</div>
               {r.failed.length > 0 && <div className="text-[11px] text-red-700">{r.failed.join(' · ')}</div>}
             </div>
+            {r.photos?.length > 0 && <button onClick={() => openPhotos(r)} className="text-[11px] text-teal-700 border border-teal-300 bg-teal-50 rounded-lg px-2 py-1 flex items-center gap-1"><Camera className="w-3 h-3" />{r.photos.length} รูป</button>}
             <ResultBadge result={r.result} />
             {user?.role === 'QA_MANAGER' && <button onClick={() => voidRow(r)} className="text-[11px] text-gray-500 border border-gray-300 rounded-lg px-2 py-1 hover:text-red-700">ยกเลิก</button>}
           </div>
         ))}
       </div>
+      {viewer && (
+        <div className="fixed inset-0 z-[9999] bg-black/90 overflow-auto p-4 text-white" onClick={() => setViewer(null)}>
+          <div className="flex items-center justify-between mb-3"><b className="text-sm">{viewer.title}</b><button className="bg-white text-gray-900 rounded-lg px-3 py-1.5 text-sm font-bold">ปิด ✕</button></div>
+          {!viewer.photos && <div className="text-center py-10">กำลังโหลดรูป…</div>}
+          {viewer.photos?.map((p) => (
+            <div key={p.slot} className="mb-4" onClick={(e) => e.stopPropagation()}>
+              <div className="text-sm font-semibold mb-1">{p.slot === 1 ? 'ฝาสินค้า (MFG / EXP)' : 'ด้านฉลาก (ปริมาณสุทธิ)'}</div>
+              <img src={p.data} alt="" className="w-full max-h-[70vh] object-contain bg-black rounded-lg" />
+            </div>
+          ))}
+        </div>
+      )}
     </Layout>
   )
 }

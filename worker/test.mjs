@@ -725,6 +725,20 @@ check('the QA Manager puts it back in service', r.status === 200 && r.j.out_of_s
 r = await call('GET', '/api/cold/alerts?date=2026-09-21', { token: qc });
 check('back in service, the unit is judged by its readings again', !ty(r.j, 'FZ-01').includes('OUT_OF_SERVICE'), r.j.alerts);
 
+// ----- final check photos: lid (MFG/EXP) and label side (net content) -----
+const JPEG_URL = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/';
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ product_code: 'FG0001', batch_no: 'B261010-01', gross: [251, 252], photos: { cap: JPEG_URL, label: JPEG_URL } }) });
+check('a final check saves the lid and label photos', r.status === 201, r);
+const photoFc = r.j.fc_id;
+r = await call('GET', '/api/fgcheck?from=2026-10-05&to=2026-10-05&batch_no=B261010-01', { token: qc });
+check('the list says which photos a check has', r.status === 200 && r.j.length === 1 && r.j[0].photos.join() === '1,2', r.j.map((x) => x.photos));
+r = await call('GET', `/api/fgcheck/${photoFc}/photos`, { token: qc });
+check('the photos come back on request', r.status === 200 && r.j.length === 2 && r.j[0].slot === 1 && r.j[1].slot === 2 && r.j[0].data.startsWith('data:image/jpeg;base64,'), r.j.length);
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ product_code: 'FG0001', batch_no: 'B261010-02', gross: [251, 252], photos: { cap: 'data:image/jpeg;base64,AAAAAAAAAAAAAAAAAAAA' } }) });
+check('a file that is not a picture is refused', r.status === 400, r);
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ product_code: 'FG0001', batch_no: 'B261010-03', gross: [251, 252] }) });
+check('the photos are optional', r.status === 201, r);
+
 // ----- formulas and PD_03 weighing -----
 r = await call('GET', '/api/formulas', { token: qc });
 const fg4 = r.j.find((f) => f.product_code === 'FG0004');

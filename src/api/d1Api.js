@@ -179,6 +179,7 @@ export const fgCheckApi = {
   pending: (date) => request(`/api/fgcheck/pending?date=${date}`),
   plan: (product_code, batch_no) => request(`/api/fgcheck/plan?${new URLSearchParams({ product_code, batch_no })}`),
   void: (id, reason) => post(`/api/fgcheck/${id}/void`, { reason }),
+  photos: (id) => request(`/api/fgcheck/${id}/photos`),
 }
 
 export const coldApi = {

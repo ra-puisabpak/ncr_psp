@@ -769,6 +769,16 @@ CREATE TABLE IF NOT EXISTS suppliers (
 INSERT OR IGNORE INTO suppliers (name,kind,sort) VALUES ('Makro','RETAIL',1),('ตลาดสด','MARKET',2);
 -- Names already typed into receiving records join the list (QA can switch duplicates off).
 INSERT OR IGNORE INTO suppliers (name,kind,sort) SELECT DISTINCT trim(supplier),'COMPANY',100 FROM recv_records WHERE trim(supplier)<>'' AND lower(trim(supplier)) NOT IN (SELECT lower(name) FROM suppliers);
+-- Photos of a final check: slot 1 = the lid (MFG / EXP), slot 2 = the label side showing the net content.
+CREATE TABLE IF NOT EXISTS fg_check_photos (
+  fc_id        TEXT NOT NULL,
+  slot         INTEGER NOT NULL CHECK(slot IN (1,2)),
+  content_type TEXT NOT NULL,
+  size         INTEGER NOT NULL,
+  data         TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  PRIMARY KEY (fc_id, slot)
+);
 -- A receiving record entered wrongly is voided by the QA Manager (kept, never deleted); it then leaves every list and count.
 CREATE TABLE IF NOT EXISTS recv_voids (
   doc_no    TEXT PRIMARY KEY,

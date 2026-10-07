@@ -1351,12 +1351,19 @@ export default {
         for (const k of ['product_code', 'batch_no']) if (sp.get(k)) { where.push(`${k}=?`); p.push(sp.get(k)); }
         const { results } = await DB.prepare(`SELECT * FROM fg_checks WHERE ${FG_LIVE} AND ${where.join(' AND ')} ORDER BY check_date DESC, fc_id DESC LIMIT 500`).bind(...p).all();
         const ids = results.map((r) => r.fc_id);
+        const phs = ids.length ? (await DB.prepare(`SELECT fc_id, slot FROM fg_check_photos WHERE fc_id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results : [];
         const rc = ids.length ? (await DB.prepare(`SELECT * FROM fg_check_rechecks WHERE fc_id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results : [];
         return json(results.map((r) => {
           const row = fgRow(r);
+          row.photos = phs.filter((x) => x.fc_id === r.fc_id).map((x) => x.slot);
           row.recheck = row.gross.map((_, i) => { const x = rc.find((y) => y.fc_id === r.fc_id && y.jar === i + 1); return x ? { gross: x.gross, net: x.net } : null; });
           return row;
         }));
+      }
+      const fgp = path.match(/^\/api\/fgcheck\/(FGC-\d{6}-\d{3})\/photos$/);
+      if (fgp && method === 'GET') {
+        const { results } = await DB.prepare('SELECT slot, content_type, data FROM fg_check_photos WHERE fc_id=? ORDER BY slot').bind(fgp[1]).all();
+        return json(results.map((x) => ({ slot: x.slot, data: `data:${x.content_type};base64,${x.data}` })));
       }
       if (path === '/api/fgcheck/plan' && method === 'GET') {
         const product = String(url.searchParams.get('product_code') || ''), batch = cleanBatch(url.searchParams.get('batch_no') || '');
@@ -1391,6 +1398,11 @@ export default {
         // Every pack size this batch is filled into (the one being checked is always one of them); sizes only get added.
         const known = (await DB.prepare('SELECT pack_key FROM pack_sizes WHERE active=1').all()).results.map((x) => x.pack_key);
         const oldPlan = await DB.prepare('SELECT pack_keys FROM fg_batch_packs WHERE product_code=? AND batch_no=?').bind(product, batch).first();
+        const fgPhotos = [];
+        for (const [slot, key] of [[1, 'cap'], [2, 'label']]) {
+          const src = b.photos?.[key];
+          if (typeof src === 'string' && src.startsWith('data:')) fgPhotos.push({ slot, ph: decodePhoto({ content_type: (/^data:([^;,]+)/.exec(src) || [])[1], data: src }) });
+        }
         const packPlan = [...new Set([...(oldPlan ? JSON.parse(oldPlan.pack_keys) : []), ...(Array.isArray(b.packs) ? b.packs : []).map(String), pk.pack_key])].filter((k) => known.includes(k));
         const numOpt = (v, label, lo, hi) => {
           if (blank(v)) return null;
@@ -1430,7 +1442,8 @@ export default {
               VALUES (?,?,${rec.map(() => '?').join(',')})`).bind(fcId, uid, ...rec),
               DB.prepare('INSERT INTO fg_batch_packs (product_code,batch_no,pack_keys,updated_by,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(product_code,batch_no) DO UPDATE SET pack_keys=excluded.pack_keys, updated_by=excluded.updated_by, updated_at=excluded.updated_at')
                 .bind(product, batch, JSON.stringify(packPlan), user.display_name, nowIso()),
-              ...recheck.map((x, i) => (x ? DB.prepare('INSERT INTO fg_check_rechecks (fc_id,jar,gross,net) VALUES (?,?,?,?)').bind(fcId, i + 1, x.gross, x.net) : null)).filter(Boolean)]);
+              ...recheck.map((x, i) => (x ? DB.prepare('INSERT INTO fg_check_rechecks (fc_id,jar,gross,net) VALUES (?,?,?,?)').bind(fcId, i + 1, x.gross, x.net) : null)).filter(Boolean),
+              ...fgPhotos.map((p) => DB.prepare('INSERT INTO fg_check_photos (fc_id,slot,content_type,size,data,created_at) VALUES (?,?,?,?,?,?)').bind(fcId, p.slot, p.ph.type, p.ph.size, p.ph.b64, nowIso()))]);
           } catch (e) {
             if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
               const again = await DB.prepare('SELECT fc_id, result FROM fg_checks WHERE uid=?').bind(uid).first();
