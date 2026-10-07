@@ -100,7 +100,10 @@ export default function WeighPage() {
           <h1 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Scale className="w-5 h-5 text-violet-600" />บันทึกการชั่งวัตถุดิบ</h1>
           <div className="text-xs text-gray-500">{FORMS.WEIGH.code} Rev.{FORMS.WEIGH.rev} · ทุก Batch · เลือก LOT จากใบตรวจรับเพื่อการสอบย้อนกลับ</div>
         </div>
-        <Link to="/qa/formulas" className="flex items-center gap-1.5 text-sm bg-white border border-gray-300 rounded-lg px-3 py-1.5"><BookOpen className="w-4 h-4" />สูตรการผลิต</Link>
+        <div className="flex gap-2">
+          <Link to={`/qa/weigh/day?date=${bkkToday()}`} className="flex items-center gap-1.5 text-sm bg-white border border-gray-300 rounded-lg px-3 py-1.5"><Printer className="w-4 h-4" />สรุปรายวัน</Link>
+          <Link to="/qa/formulas" className="flex items-center gap-1.5 text-sm bg-white border border-gray-300 rounded-lg px-3 py-1.5"><BookOpen className="w-4 h-4" />สูตรการผลิต</Link>
+        </div>
       </div>
 
       {saved && (
