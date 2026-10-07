@@ -25,7 +25,7 @@ function PhotoSlot({ title, hint, value, onChange }) {
   return (
     <div>
       <div className="text-xs font-semibold text-gray-700">{title}</div>
-      <div className="text-[11px] text-gray-500 mb-1">{hint}</div>
+      <div className="text-[11px] text-gray-500 mb-1 min-h-[28px]">{hint}</div>
       <div className="relative border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-gray-50 min-h-[110px]">
         {value ? (
           <>
@@ -249,8 +249,8 @@ export default function FGCheckPage() {
         <div>
           <div className="text-xs font-semibold text-gray-700 mb-1">5. รูปถ่ายตรวจสอบ (ไม่บังคับ แต่ควรถ่ายทุก Batch)</div>
           <div className="grid grid-cols-2 gap-2">
-            <PhotoSlot title="รูปที่ 1 — ฝาสินค้า" hint="ถ่ายให้เห็น MFG / EXP ชัดเจน" value={f.photos.cap} onChange={(v) => set('photos', { ...f.photos, cap: v })} />
-            <PhotoSlot title="รูปที่ 2 — ด้านฉลาก" hint="ถ่ายให้เห็นปริมาณสุทธิ (น้ำหนักสุทธิ) ชัดเจน" value={f.photos.label} onChange={(v) => set('photos', { ...f.photos, label: v })} />
+            <PhotoSlot title="รูปที่ 1 — ฝาสินค้า" hint="ให้เห็น MFG / EXP ชัดเจน" value={f.photos.cap} onChange={(v) => set('photos', { ...f.photos, cap: v })} />
+            <PhotoSlot title="รูปที่ 2 — ด้านฉลาก" hint="ให้เห็นปริมาณสุทธิชัดเจน" value={f.photos.label} onChange={(v) => set('photos', { ...f.photos, label: v })} />
           </div>
         </div>
 

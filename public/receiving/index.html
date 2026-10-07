@@ -1458,8 +1458,9 @@ function renderMats(){
     const sampHtml=samp?`<div class="sbox"><div class="sn">${samp.n}</div><div><div class="sl">สุ่มตรวจ (${samp.unit})</div><div class="sd">${samp.method}</div></div></div>`:'';
     const photoHtml=`<div style="margin-top:14px">
       <div style="font-size:11px;font-weight:700;color:var(--gray4);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">&#x1F4F7; รูปถ่ายสินค้า</div>
+      <div style="font-size:12px;color:var(--gray3);margin:-2px 0 8px;line-height:1.5">ถ่ายให้เห็นสิ่งที่รับ หรือด้านหน้าที่เห็นฉลากและโลโก้ชัดเจน</div>
       <div class="photo-row">${[1,2].map(s=>`<div>
-        <div style="font-size:11px;font-weight:600;color:var(--gray3);margin-bottom:4px;min-height:30px">${s===1?'รูปที่ 1 — ถ่ายให้เห็นวัตถุดิบ':'รูปที่ 2 — ด้านหน้าผลิตภัณฑ์ ให้เห็นฉลากและโลโก้ชัดเจน'}</div>
+        <div style="font-size:11px;font-weight:600;color:var(--gray3);margin-bottom:4px">รูปที่ ${s}</div>
         <div class="photo-slot ${m['photo'+s]?'has-photo':''}" id="ps-${m.idx}-${s}">
           <img class="photo-preview" id="pp-${m.idx}-${s}" src="${m['photo'+s]||''}" style="display:${m['photo'+s]?'block':'none'}">
           <label class="psl" id="pl-${m.idx}-${s}" style="display:${m['photo'+s]?'none':'flex'}" for="pi-${m.idx}-${s}">
