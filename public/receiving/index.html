@@ -1575,9 +1575,10 @@ function saveRecord(){
   let ncCreated=false;
   rec.mats.forEach(m=>{
     if(m.result==='HOLD'||m.result==='REJECT'||m.result==='COND'){
+      const wtOnly=m.result==='COND'&&m.wtV==='COND'&&docEval(m)!=='FAIL'&&(!m.aql||aqlCalc(m).verdict==='PASS')&&(!isPork(m)||porkCalc(m).verdict==='PASS');
       const _nc={id:nextNcId(),uid:newUid(),recUid:rec.uid,synced:false,docNo,supplier:sup,
         failType:m.result==='REJECT'?'Rejected Material':m.result==='COND'?'Conditional Acceptance — รับแบบมีเงื่อนไข':'Hold — Pending Investigation',
-        corrective:'—',qa:insp,status:'Open',closedDate:'',ncrId:'',date,result:m.result,matIdx:m.idx,brief:m.note||'',mat:{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit},note:[m.note||m.code,inspSummary(m),m.doc==='FAIL'?'เอกสาร: '+docSummary(m):'',m.wtV==='HOLD'?wtSummary(m):''].filter(Boolean).join(' | ')};
+        corrective:wtOnly?'แจ้ง Supplier / สุ่มชั่งซ้ำ — รับแบบมีเงื่อนไข (ปิดอัตโนมัติ)':'—',qa:insp,status:wtOnly?'Closed':'Open',closedDate:wtOnly?date:'',ncrId:'',date,result:m.result,matIdx:m.idx,brief:m.note||'',mat:{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit},note:[m.note||m.code,inspSummary(m),m.doc==='FAIL'?'เอกสาร: '+docSummary(m):'',m.wtV==='COND'?wtSummary(m):''].filter(Boolean).join(' | ')};
       ncLogs.unshift(_nc);cloudSaveNC(_nc).catch(()=>{});ncCreated=true;
     }
   });
@@ -2038,21 +2039,23 @@ function wtCalc(m){
   else if(!n)miss.push('จำนวนถุงที่สุ่ม');
   else if(vals.some(v=>pkNum(v)===null))miss.push('น้ำหนักตัวอย่างให้ครบ '+n+' ตัวอย่าง');
   const low=[];if(lab!==null)vals.forEach((v,i)=>{const x=pkNum(v);if(x!==null&&x<lab)low.push('ตัวอย่างที่ '+(i+1)+': '+x+' kg ไม่ครบ '+lab+' kg');});
-  const verdict=low.length?'HOLD':(miss.length?null:'PASS');
+  const verdict=low.length?'COND':(miss.length?null:'PASS');   // น้ำหนักขาด = รับแบบมีเงื่อนไข (ไม่ HOLD)
   return{N,n,rule,auto,vals,lab,miss,low,verdict};
 }
 function enforceMin(m){          // ผลการตรวจรับต้องไม่ดีกว่าผลของทุกหัวข้อตรวจ
-  let r=0;const up=v=>{if(v&&RES_RANK[v]>r)r=RES_RANK[v];};
+  let r=0,hard=false;const up=v=>{if(v&&RES_RANK[v]>r)r=RES_RANK[v];if(v==='HOLD')hard=true;};
   if(m.coa!==undefined&&docEval(m)==='FAIL')up('HOLD');
   if(m.aql)up(aqlCalc(m).verdict);
   if(isPork(m))up(porkCalc(m).verdict);
   const w=wtCalc(m);if(w)up(w.verdict);
-  if(RES_RANK[m.result]<r)m.result=['PASS','HOLD','REJECT'][r];
+  if(RES_RANK[m.result]<r)m.result=['PASS',hard?'HOLD':'COND','REJECT'][r];
 }
 function wtApply(m){
   const w=wtCalc(m);if(!w)return null;const prev=m.wtV;m.wtV=w.verdict||'';
   if(w.verdict&&m.result===prev)m.result=w.verdict;
-  enforceMin(m);return w;
+  enforceMin(m);
+  if(w.verdict==='COND'&&m.result==='COND'&&!String(m.note||'').trim())m.note='น้ำหนักไม่ครบตามฉลาก ('+w.low.join('; ')+') — รับแบบมีเงื่อนไข แจ้ง Supplier ปรับปรุงการบรรจุ และสุ่มชั่งซ้ำแล้ว';
+  return w;
 }
 function wtSt(v,lab){const x=pkNum(v);return x===null?'':lab===null?'rec':x>=lab?'pass':'fail';}
 function wtStTxt(s){return s==='pass'?'✓ Pass':s==='fail'?'✗ ไม่ครบ':s==='rec'?'บันทึกแล้ว':'';}
@@ -2067,9 +2070,9 @@ function wtRowsHtml(m,w){
       '<div class="tst '+(s==='rec'?'':s)+'" id="wts-'+i+'-'+k+'" style="margin-bottom:8px">'+wtStTxt(s)+'</div></div>';}).join('')+'</div>';
 }
 function wtVerdictHtml(idx,w){
-  const cls=w.verdict==='PASS'?'pass':w.verdict==='HOLD'?'hold':'na';
-  const head=w.verdict==='PASS'?(w.lab!==null?'&#x2714; น้ำหนักครบทุกตัวอย่าง':'&#x2714; บันทึกน้ำหนักครบทุกตัวอย่าง'):w.verdict==='HOLD'?'&#x26A0; HOLD — น้ำหนักไม่ครบตามฉลาก':'รอข้อมูลการชั่ง';
-  return'<div class="aq-v '+cls+'" id="wtv-'+idx+'">'+head+w.low.map(x=>'<small>'+x+'</small>').join('')+(w.miss.length&&w.verdict!=='HOLD'?'<small>ยังไม่ครบ: '+w.miss.join(', ')+'</small>':'')+'</div>';
+  const cls=w.verdict==='PASS'?'pass':w.verdict==='COND'?'hold':'na';
+  const head=w.verdict==='PASS'?(w.lab!==null?'&#x2714; น้ำหนักครบทุกตัวอย่าง':'&#x2714; บันทึกน้ำหนักครบทุกตัวอย่าง'):w.verdict==='COND'?'&#x26A0; น้ำหนักไม่ครบตามฉลาก — รับแบบมีเงื่อนไข (ไม่ HOLD)':'รอข้อมูลการชั่ง';
+  return'<div class="aq-v '+cls+'" id="wtv-'+idx+'">'+head+w.low.map(x=>'<small>'+x+'</small>').join('')+(w.verdict==='COND'?'<small>สุ่มชั่งซ้ำ: แก้ค่าตัวอย่างที่ขาด ถ้าครบทุกตัวอย่างจะกลับเป็น PASS · ถ้ายังขาด ระบบบันทึกเป็นรับแบบมีเงื่อนไข แจ้ง Supplier และปิด NC ให้อัตโนมัติ</small>':'')+(w.miss.length&&w.verdict!=='COND'?'<small>ยังไม่ครบ: '+w.miss.join(', ')+'</small>':'')+'</div>';
 }
 function wtHtml(m){
   const w=wtCalc(m);if(!w)return'';const i=m.idx;
@@ -2096,12 +2099,12 @@ function setWt(idx,k,v){
 }
 function wtSummary(m){
   if(!m||!Array.isArray(m.wt))return'';const w=wtCalc(m);if(!w||!w.n)return'';
-  return'ชั่ง '+w.n+' ตัวอย่างจาก '+w.N+' ภาชนะ: '+w.vals.map(v=>v===''?'-':v).join(' / ')+' kg'+(w.lab!==null?' (ฉลาก '+w.lab+' kg) '+(w.verdict==='PASS'?'ครบ':w.verdict==='HOLD'?'ไม่ครบ':''):'');
+  return'ชั่ง '+w.n+' ตัวอย่างจาก '+w.N+' ภาชนะ: '+w.vals.map(v=>v===''?'-':v).join(' / ')+' kg'+(w.lab!==null?' (ฉลาก '+w.lab+' kg) '+(w.verdict==='PASS'?'ครบ':w.verdict==='COND'?'ไม่ครบ':''):'');
 }
 function wtCheck(m,no){
   const w=wtCalc(m);if(!w)return'';const p='รายการที่ '+no+': ';
   if(w.miss.length)return p+'สุ่มชั่งน้ำหนัก — กรอก'+w.miss[0];
-  if(w.verdict==='HOLD'&&RES_RANK[m.result]===0)return p+'น้ำหนักไม่ครบตามฉลาก — ให้ผล PASS ไม่ได้';
+  if(w.verdict==='COND'&&RES_RANK[m.result]===0)return p+'น้ำหนักไม่ครบตามฉลาก — ให้ผล PASS ไม่ได้ (สุ่มชั่งซ้ำ หรือรับแบบมีเงื่อนไข)';
   return'';
 }
 
