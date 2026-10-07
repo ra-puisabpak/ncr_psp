@@ -40,7 +40,7 @@ export default function WeighPrintPage() {
 
   // One column per set: a one-set record is headed by its Batch No.; a record of several sets (older forms) by Batch No. + set.
   const cols = (recs || []).flatMap((r) => Array.from({ length: r.sets }, (_, s) => ({ r, s, head: r.sets > 1 ? `${r.batch_no} ชุด ${s + 1}` : r.batch_no })))
-  const width = Math.max(6, cols.length)
+  const width = Math.max(4, cols.length)
   const first = recs?.[0]
   // Rows: every raw material named in any of the day's records, in formula order.
   const names = uniq((recs || []).flatMap((r) => r.lines.map((l) => l.name)))
@@ -49,7 +49,7 @@ export default function WeighPrintPage() {
 
   return (
     <div className="min-h-screen bg-gray-200 print:min-h-0 print:bg-white">
-      <style>{'@media print { @page { size: A4 landscape; margin: 8mm; } }'}</style>
+      <style>{'@media print { @page { size: A4 portrait; margin: 10mm; } }'}</style>
       <div className="no-print bg-blue-900 text-white px-4 py-3 flex items-center justify-between gap-2 shadow-lg sticky top-0 z-50">
         <button onClick={() => navigate('/qa/weigh')} className="flex items-center gap-2 hover:bg-blue-800 px-3 py-2 rounded-lg text-sm"><ArrowLeft className="w-4 h-4" />กลับ</button>
         <div className="text-sm text-center">{first ? `${first.product_name} · ${thaiDate(first.prod_date)} · ${recs.length} Batch` : FORMS.WEIGH.code}</div>
@@ -60,11 +60,11 @@ export default function WeighPrintPage() {
       </div>
       {error && <div className="no-print max-w-lg mx-auto mt-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>}
       {first && (
-        <div className="print-area bg-white mx-auto my-4 shadow p-[8mm] text-black w-[297mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none text-[11px]" style={{ fontFamily: "'Sarabun', sans-serif" }}>
+        <div className="print-area bg-white mx-auto my-4 shadow p-[8mm] text-black w-[210mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none text-[10.5px]" style={{ fontFamily: "'Sarabun', sans-serif" }}>
           <table className="w-full border-collapse mb-2">
             <tbody>
               <tr>
-                <td className={`${td} w-[60%]`} rowSpan={3}><b className="text-[13px]">{COMPANY_NAME}</b><br />ประเภทเอกสาร: เอกสารในหน่วยผลิต<br /><b>ชื่อเอกสาร: บันทึกการชั่งวัตถุดิบ</b></td>
+                <td className={`${td} w-[55%]`} rowSpan={3}><b className="text-[13px]">{COMPANY_NAME}</b><br />ประเภทเอกสาร: เอกสารในหน่วยผลิต<br /><b>ชื่อเอกสาร: บันทึกการชั่งวัตถุดิบ</b></td>
                 <td className={td}>รหัสเอกสาร: {FORMS.WEIGH.code}</td>
               </tr>
               <tr><td className={td}>แก้ไขครั้งที่: {FORMS.WEIGH.rev}</td></tr>
@@ -84,7 +84,7 @@ export default function WeighPrintPage() {
                 <th className={td} rowSpan={2}>ลำดับ</th><th className={td} rowSpan={2}>รายการวัตถุดิบ</th><th className={td} rowSpan={2}>น้ำหนักที่กำหนด (กก./ชุด)</th>
                 <th className={td} rowSpan={2}>วันที่รับเข้า / รหัส LOT</th><th className={td} rowSpan={2}>ผู้ชั่ง</th><th className={td} colSpan={width}>น้ำหนักวัตถุดิบ (กก.)</th>
               </tr>
-              <tr>{Array.from({ length: width }, (_, i) => <th key={i} className={`${td} w-[5%]`}>{cols[i] ? cols[i].head : 'Batch No.'}</th>)}</tr>
+              <tr>{Array.from({ length: width }, (_, i) => <th key={i} className={`${td} w-[9%]`}>{cols[i] ? cols[i].head : 'Batch No.'}</th>)}</tr>
             </thead>
             <tbody>
               {names.map((name, i) => {
@@ -113,9 +113,8 @@ export default function WeighPrintPage() {
               ))}
             </div>
           )}
-          <div className="mt-10 flex justify-around text-center avoid-break">
+          <div className="mt-10 flex justify-end text-center avoid-break">
             <div><div className="h-14 flex items-end justify-center">{sigs[recorder] && <img src={sigs[recorder]} alt="" className="max-h-14 max-w-56" />}</div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้บันทึก ({recorder})<br />(QC)</div>
-            <div><div className="h-14" /><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้รับทราบ<br />(หัวหน้าฝ่ายผลิต)</div>
           </div>
         </div>
       )}
