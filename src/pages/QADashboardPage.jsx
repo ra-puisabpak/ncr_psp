@@ -149,7 +149,8 @@ export default function QADashboardPage() {
         {prog && <span className="text-[11px] text-gray-500 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />สด · ข้อมูล{date === bkkToday() ? 'วันนี้' : ` ${date}`} · อัปเดต {prog.at}</span>}
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-        <Link to="/qa/weigh" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+        <div className="relative">
+          <Link to="/qa/weigh" className="bg-white rounded-xl shadow p-4 pb-9 flex items-center gap-3 hover:shadow-md transition">
           <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center shrink-0"><Scale className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">บันทึกการชั่งวัตถุดิบ</div>
@@ -158,16 +159,22 @@ export default function QADashboardPage() {
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
-        <Link to="/qa/prodctl" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <Link to={`/qa/weigh/day?date=${date}`} className="absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3" />รายงาน</Link>
+        </div>
+        <div className="relative">
+          <Link to="/qa/prodctl" className="bg-white rounded-xl shadow p-4 pb-9 flex items-center gap-3 hover:shadow-md transition">
           <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0"><Flame className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">แบบฟอร์มควบคุมการผลิต</div>
-            <div className="text-[11px] text-gray-500">{FORMS.PRODCTL.code} · ทอด/เจียว ผัดฆ่าเชื้อ พักเย็น → CCP อัตโนมัติ</div>
+            <div className="text-[11px] text-gray-500">{FORMS.PRODCTL.code} · ทอด/เจียว พักเย็น บรรจุ ปิดฝา</div>
             {user?.role === 'QA_MANAGER' && <Prog k="prodctl" prog={prog} />}
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
-        <Link to="/qa/oil" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <Link to={`/qa/prodctl/report?date=${date}`} className="absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3" />รายงาน</Link>
+        </div>
+        <div className="relative">
+          <Link to="/qa/oil" className="bg-white rounded-xl shadow p-4 pb-9 flex items-center gap-3 hover:shadow-md transition">
           <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0"><Droplets className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">คุณภาพน้ำมันทอด</div>
@@ -176,7 +183,10 @@ export default function QADashboardPage() {
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
-        <Link to="/qa/cold" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <Link to={`/qa/oil/report?month=${date.slice(0, 7)}`} className="absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3" />รายงาน</Link>
+        </div>
+        <div className="relative">
+          <Link to="/qa/cold" className="bg-white rounded-xl shadow p-4 pb-9 flex items-center gap-3 hover:shadow-md transition">
           <div className="w-10 h-10 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center shrink-0"><Thermometer className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">อุณหภูมิตู้เย็น / ตู้แช่แข็ง</div>
@@ -185,7 +195,10 @@ export default function QADashboardPage() {
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
-        <Link to="/qa/fgcheck" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <Link to={`/qa/cold/report?month=${date.slice(0, 7)}`} className="absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3" />รายงาน</Link>
+        </div>
+        <div className="relative">
+          <Link to="/qa/fgcheck" className="bg-white rounded-xl shadow p-4 pb-9 flex items-center gap-3 hover:shadow-md transition">
           <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0"><PackageSearch className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">ตรวจสอบผลิตภัณฑ์สุดท้าย</div>
@@ -194,7 +207,10 @@ export default function QADashboardPage() {
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
-        <Link to="/qa/hygiene" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <Link to={`/qa/fgcheck/report?date=${date}`} className="absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3" />รายงาน</Link>
+        </div>
+        <div className="relative">
+          <Link to="/qa/hygiene" className="bg-white rounded-xl shadow p-4 pb-9 flex items-center gap-3 hover:shadow-md transition">
           <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center shrink-0"><HandHeart className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">สุขลักษณะส่วนบุคคล</div>
@@ -203,7 +219,10 @@ export default function QADashboardPage() {
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </Link>
-        <a href={RECEIVING_URL} className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <Link to={`/qa/hygiene/report?date=${date}`} className="absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3" />รายงาน</Link>
+        </div>
+        <div className="relative">
+          <a href={RECEIVING_URL} className="bg-white rounded-xl shadow p-4 pb-9 flex items-center gap-3 hover:shadow-md transition">
           <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0"><PackageCheck className="w-5 h-5" /></div>
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-sm text-gray-800">ตรวจรับวัตถุดิบ</div>
@@ -212,6 +231,8 @@ export default function QADashboardPage() {
           </div>
           <ChevronRight className="w-4 h-4 text-gray-300" />
         </a>
+          <a href={`${RECEIVING_URL}?report=${date}`} className="absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3" />รายงาน</a>
+        </div>
       </div>
 
       {active.length > 0 && (

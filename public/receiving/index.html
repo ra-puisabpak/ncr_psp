@@ -1365,7 +1365,10 @@ function init(){
   });
   cAql();
   const hl=document.getElementById('home-logo');if(hl)hl.src=LOGO_B64;
-  syncFromCloud();
+  // ?report=YYYY-MM-DD (from the QA dashboard) opens the daily receiving report of that day
+  const rq=new URLSearchParams(location.search).get('report');
+  if(rq&&/^\d{4}-\d{2}-\d{2}$/.test(rq)){Promise.resolve(syncFromCloud()).catch(()=>{}).then(()=>{goRep();document.getElementById('rp-date').value=rq;setRep('day');});}
+  else syncFromCloud();
 }
 
 function goHome(){goS('sc-home');renderHome();}
