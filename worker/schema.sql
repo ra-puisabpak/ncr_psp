@@ -777,3 +777,13 @@ CREATE TABLE IF NOT EXISTS fg_check_rechecks (
 );
 -- The finished-product form is FM-QC-008 (was QC_10).
 UPDATE control_points SET form_code='FM-QC-008', monitoring=replace(monitoring,'QC_10','FM-QC-008') WHERE cp_id='OPRP-06' AND form_code='QC_10';
+
+-- FM-QC-004: who weighed (an employee picked from the list) and their signature; `weigher` on the record is who entered it (QC).
+CREATE TABLE IF NOT EXISTS weigh_signs (
+  wr_id         TEXT PRIMARY KEY,
+  weigher_name  TEXT NOT NULL,
+  emp_id        INTEGER,
+  sig_type      TEXT,
+  sig_data      TEXT,
+  signed_at     TEXT NOT NULL
+);

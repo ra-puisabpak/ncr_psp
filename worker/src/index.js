@@ -1796,11 +1796,18 @@ export default {
 
       if (path === '/api/weigh' && method === 'GET') {
         const sp = url.searchParams, where = ['1=1'], p = [];
-        if (isDate(sp.get('from'))) { where.push('prod_date>=?'); p.push(sp.get('from')); }
-        if (isDate(sp.get('to'))) { where.push('prod_date<=?'); p.push(sp.get('to')); }
-        for (const k of ['product_code', 'batch_no', 'wr_id']) if (sp.get(k)) { where.push(`${k}=?`); p.push(sp.get(k)); }
-        const { results } = await DB.prepare(`SELECT * FROM weigh_records WHERE ${where.join(' AND ')} ORDER BY prod_date DESC, wr_id DESC LIMIT 500`).bind(...p).all();
+        if (isDate(sp.get('from'))) { where.push('w.prod_date>=?'); p.push(sp.get('from')); }
+        if (isDate(sp.get('to'))) { where.push('w.prod_date<=?'); p.push(sp.get('to')); }
+        for (const k of ['product_code', 'batch_no', 'wr_id']) if (sp.get(k)) { where.push(`w.${k}=?`); p.push(sp.get(k)); }
+        const { results } = await DB.prepare(`SELECT w.*, s.weigher_name, s.signed_at, s.sig_data IS NOT NULL AS has_sig FROM weigh_records w LEFT JOIN weigh_signs s ON s.wr_id = w.wr_id
+          WHERE ${where.join(' AND ')} ORDER BY w.prod_date DESC, w.wr_id DESC LIMIT 500`).bind(...p).all();
         return json(results.map((r) => ({ ...r, lines: JSON.parse(r.lines), deviations: r.deviations ? JSON.parse(r.deviations) : [] })));
+      }
+      const wsg = path.match(/^\/api\/weigh\/(PD-\d{6}-\d{3})\/signature$/);
+      if (wsg && method === 'GET') {
+        const row = await DB.prepare('SELECT sig_type, sig_data FROM weigh_signs WHERE wr_id=?').bind(wsg[1]).first();
+        if (!row || !row.sig_data) fail(404, 'ไม่มีลายเซ็น');
+        return json({ data: `data:${row.sig_type};base64,${row.sig_data}` });
       }
       if (path === '/api/weigh' && method === 'POST') {
         need(user, WRITERS);
@@ -1816,6 +1823,12 @@ export default {
         if (!isDate(b.prod_date) || b.prod_date > today()) fail(400, 'กรุณาระบุวันที่ผลิต (ไม่เป็นวันในอนาคต)');
         const sets = parseInt(b.sets, 10);
         if (!(sets >= 1 && sets <= 12)) fail(400, 'จำนวนชุดต้องเป็น 1–12');
+        // The person who weighed (picked from the employee list) signs; the account that saves is the recorder.
+        const weigherName = txt(b.weigher_name, 80);
+        if (!weigherName) fail(400, 'กรุณาเลือกชื่อผู้ชั่ง');
+        if (typeof b.signature !== 'string' || !b.signature.startsWith('data:')) fail(400, 'กรุณาให้ผู้ชั่งลงลายเซ็น');
+        const sig = decodePhoto({ content_type: (/^data:([^;,]+)/.exec(b.signature) || [])[1], data: b.signature });
+        const empId = Number.isInteger(b.emp_id) ? b.emp_id : null;
         // Each set gets its own batch number. A form without `batches` (an older app) keeps all sets under batch_no.
         const split = sets > 1 && Array.isArray(b.batches);
         const batches = split ? b.batches.slice(0, sets).map(cleanBatch) : [cleanBatch(b.batch_no)];
@@ -1871,10 +1884,11 @@ export default {
           const base = parseInt(first.split('-').pop(), 10), stem = first.slice(0, first.lastIndexOf('-') + 1);
           parts.forEach((pt, i) => { pt.wr_id = `${stem}${String(base + i).padStart(3, '0')}`; pt.uid = i ? `${uid}-s${i + 1}` : uid; });
           try {
-            await DB.batch(parts.map((pt) => DB.prepare(`INSERT INTO weigh_records (wr_id,uid,product_code,product_name,prod_date,batch_no,sets,formula_version,formula_status,tolerance_pct,scale_id,lines,deviations,result,note,assessed_by,weigher,created_by,created_at)
+            await DB.batch([...parts.map((pt) => DB.prepare(`INSERT INTO weigh_records (wr_id,uid,product_code,product_name,prod_date,batch_no,sets,formula_version,formula_status,tolerance_pct,scale_id,lines,deviations,result,note,assessed_by,weigher,created_by,created_at)
               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(pt.wr_id, pt.uid, f.product_code, f.product_name, b.prod_date, pt.batch, pt.to - pt.from, f.version, f.status, tol,
               txt(b.scale_id, 40), JSON.stringify(lines.map((l) => ({ ...l, weights: l.weights.slice(pt.from, pt.to) }))), pt.deviations.length ? JSON.stringify(pt.deviations) : null,
-              pt.result, note, pt.result === 'DEVIATION' ? user.display_name : null, user.display_name, user.username, nowIso())));
+              pt.result, note, pt.result === 'DEVIATION' ? user.display_name : null, user.display_name, user.username, nowIso())),
+              ...parts.map((pt) => DB.prepare('INSERT INTO weigh_signs (wr_id,weigher_name,emp_id,sig_type,sig_data,signed_at) VALUES (?,?,?,?,?,?)').bind(pt.wr_id, weigherName, empId, sig.type, sig.b64, nowIso()))]);
           } catch (e) {
             if (/weigh_records\.product_code/.test(e.message)) fail(409, 'Batch นี้มีบันทึกการชั่งแล้ว');
             if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
@@ -1885,7 +1899,7 @@ export default {
             throw e;
           }
           for (const pt of parts) {
-            await audit(DB, user.username, 'user', 'create', 'weigh_record', pt.wr_id, { product_code: f.product_code, batch_no: pt.batch, sets: pt.to - pt.from, result: pt.result, lots: lines.map((l) => l.lot), ...(split ? { split_from: uid, set_no: pt.from + 1, of_sets: sets } : {}) });
+            await audit(DB, user.username, 'user', 'create', 'weigh_record', pt.wr_id, { weigher: weigherName, product_code: f.product_code, batch_no: pt.batch, sets: pt.to - pt.from, result: pt.result, lots: lines.map((l) => l.lot), ...(split ? { split_from: uid, set_no: pt.from + 1, of_sets: sets } : {}) });
           }
           return reply(parts.map((pt) => ({ wr_id: pt.wr_id, batch_no: pt.batch, result: pt.result })), parts.flatMap((pt) => pt.deviations), 201);
         }

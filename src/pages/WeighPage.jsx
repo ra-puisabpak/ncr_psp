@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Save, Printer, Scale, BookOpen, Plus, Trash2, CheckCircle2, AlertTriangle } from 'lucide-react'
 import Layout from '../components/Layout'
-import { formulaApi, weighApi, qaApi } from '../api/d1Api'
+import { formulaApi, weighApi, qaApi, hygApi } from '../api/d1Api'
+import SignaturePad from '../components/SignaturePad'
 import { useAuth, canWrite } from '../auth'
 import { useMaterials } from '../data/materials'
 import { Badge, bkkToday, addDays, newUid } from '../qa/shared'
@@ -30,11 +31,17 @@ export default function WeighPage() {
   const [saved, setSaved] = useState(null)
   const [recent, setRecent] = useState([])
   const [extra, setExtra] = useState([]) // batch numbers of sets 2..N
+  // Who weighed (an employee from the list) signs; the logged-in account records.
+  const [employees, setEmployees] = useState([])
+  const [weigherId, setWeigherId] = useState('')
+  const [signature, setSignature] = useState(null)
+  const [sigKey, setSigKey] = useState(0)
 
   const loadRecent = () => weighApi.list({ from: addDays(bkkToday(), -14) }).then(setRecent).catch(() => {})
   useEffect(() => {
     formulaApi.list().then(setFormulas).catch((e) => setError(e.message))
     qaApi.recvLots(180).then(setLots).catch(() => {})
+    hygApi.employees().then((l) => setEmployees(l.filter((e) => e.active))).catch(() => {})
     loadRecent()
   }, [])
   const f = formulas.find((x) => x.product_code === code)
@@ -84,9 +91,10 @@ export default function WeighPage() {
   const save = async () => {
     setSaving(true); setError(null)
     try {
-      const res = await weighApi.save({ uid, product_code: code, ...head, sets, note, ...(sets > 1 ? { batches: batches.map((x) => x.trim()) } : {}),
+      const emp = employees.find((e) => String(e.emp_id) === weigherId)
+      const res = await weighApi.save({ uid, product_code: code, ...head, sets, note, weigher_name: emp?.name || '', emp_id: emp?.emp_id, signature, ...(sets > 1 ? { batches: batches.map((x) => x.trim()) } : {}),
         lines: lines.map((l) => ({ name: l.name, lot: l.lot, doc_no: l.doc_no, code: l.code, weights: Array.from({ length: sets }, (_, s) => l.weights[s]) })) })
-      setSaved(res); setUid(newUid()); setCode(''); setLines([]); setNote('')
+      setSaved(res); setUid(newUid()); setCode(''); setLines([]); setNote(''); setSigKey((k) => k + 1)
       loadRecent(); window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e) { setError(e.message) }
     finally { setSaving(false) }
@@ -178,14 +186,25 @@ export default function WeighPage() {
               </div>
             )}
             <label className="text-xs text-gray-600 block">หมายเหตุ{devs.length ? ' / ผลการประเมิน *' : ''}<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} className={input} /></label>
+            <div className="grid sm:grid-cols-2 gap-3 border border-gray-200 rounded-lg p-2.5">
+              <div className="space-y-2">
+                <label className="text-xs text-gray-600 block">ผู้ชั่ง *<select value={weigherId} onChange={(e) => setWeigherId(e.target.value)} className={input}>
+                  <option value="">-- เลือกชื่อผู้ชั่ง --</option>
+                  {employees.map((e) => <option key={e.emp_id} value={e.emp_id}>{e.name}{e.dept ? ` · ${e.dept}` : ''}</option>)}
+                </select></label>
+                {employees.length === 0 && <div className="text-[11px] text-amber-700">ยังไม่มีรายชื่อพนักงาน — QA เพิ่มได้ที่ สุขลักษณะส่วนบุคคล → หัวข้อ / พนักงาน</div>}
+                <div className="text-xs text-gray-500">ผู้บันทึก (QC): <b>{user?.display_name}</b></div>
+              </div>
+              <div><div className="text-xs text-gray-600 mb-1">ลายเซ็นผู้ชั่ง *</div><SignaturePad onChange={setSignature} resetKey={sigKey} /></div>
+            </div>
             {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{error}</div>}
             {canWrite(user) ? (
-              <button onClick={save} disabled={saving || !complete || batches.some((x) => !x.trim()) || new Set(batches.map((x) => x.trim())).size !== batches.length || (devs.length > 0 && (!canAssess || !note.trim()))}
+              <button onClick={save} disabled={saving || !complete || !weigherId || !signature || batches.some((x) => !x.trim()) || new Set(batches.map((x) => x.trim())).size !== batches.length || (devs.length > 0 && (!canAssess || !note.trim()))}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold disabled:opacity-40">
                 <Save className="w-5 h-5" />{saving ? 'กำลังบันทึก…' : devs.length && !canAssess ? 'ต้องให้หัวหน้างาน / QA บันทึก' : 'บันทึก'}
               </button>
             ) : <div className="text-sm text-gray-500">บัญชีนี้ดูได้อย่างเดียว บันทึกไม่ได้</div>}
-            <div className="text-xs text-gray-500">ผู้ชั่ง / ผู้บันทึก: <b>{user?.display_name}</b></div>
+
           </>
         )}
       </div>
@@ -198,7 +217,7 @@ export default function WeighPage() {
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
                 <div className="font-semibold text-gray-800">{r.product_name} · Batch {r.batch_no}</div>
-                <div className="text-[11px] text-gray-500">{r.wr_id} · {r.prod_date} · {r.sets} ชุด · {r.lines.length} รายการ · {r.weigher}</div>
+                <div className="text-[11px] text-gray-500">{r.wr_id} · {r.prod_date} · {r.sets} ชุด · {r.lines.length} รายการ · ผู้ชั่ง {r.weigher_name || r.weigher}{r.weigher_name ? ` · บันทึกโดย ${r.weigher}` : ''}</div>
               </div>
               <Badge cls={r.result === 'PASS' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}>{r.result === 'PASS' ? 'ตามสูตร' : 'นอกเกณฑ์ (ประเมินแล้ว)'}</Badge>
             </div>

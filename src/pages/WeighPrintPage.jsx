@@ -17,14 +17,21 @@ export default function WeighPrintPage() {
   const navigate = useNavigate()
   const [recs, setRecs] = useState(null)
   const [error, setError] = useState(null)
+  const [sigs, setSigs] = useState({})
   useEffect(() => {
     weighApi.list({ wr_id: id }).then(async (l) => {
       const r = l[0]
       if (!r) { setError('ไม่พบบันทึก'); return }
       const day = await weighApi.list({ product_code: r.product_code, from: r.prod_date, to: r.prod_date })
-      setRecs([...day].sort((a, b) => a.wr_id.localeCompare(b.wr_id)))
+      const sorted = [...day].sort((a, b) => a.wr_id.localeCompare(b.wr_id))
+      setRecs(sorted)
+      // One signature per weigher: the first of their records that has one.
+      const firsts = Object.values(Object.fromEntries(sorted.filter((r) => r.has_sig).reverse().map((r) => [r.weigher_name, r])))
+      const got = await Promise.all(firsts.map((r) => weighApi.signature(r.wr_id).then((x) => [r.weigher_name, x.data]).catch(() => null)))
+      setSigs(Object.fromEntries(got.filter(Boolean)))
     }).catch((e) => setError(e.message))
   }, [id])
+  const weigherOf = (r) => r.weigher_name || r.weigher
 
   // One column per set: a one-set record is headed by its Batch No.; a record of several sets (older forms) by Batch No. + set.
   const cols = (recs || []).flatMap((r) => Array.from({ length: r.sets }, (_, s) => ({ r, s, head: r.sets > 1 ? `${r.batch_no} ชุด ${s + 1}` : r.batch_no })))
@@ -83,7 +90,7 @@ export default function WeighPrintPage() {
                     <td className={`${td} text-left`}>{name}{ls.some((l) => l.extra) ? ' (นอกสูตร)' : ''}</td>
                     <td className={td}>{kg(ls.find((l) => l.target != null)?.target)}</td>
                     <td className={`${td} text-left`}>{uniq(ls.map((l) => l.lot)).join(', ')}</td>
-                    <td className={td}>{uniq(recs.filter((r) => lineOf(r, name)).map((r) => r.weigher)).join(', ')}</td>
+                    <td className={td}>{uniq(recs.filter((r) => lineOf(r, name)).map(weigherOf)).join(', ')}</td>
                     {Array.from({ length: width }, (_, c) => {
                       const col = cols[c]
                       const l = col && lineOf(col.r, name)
@@ -102,8 +109,11 @@ export default function WeighPrintPage() {
             </div>
           )}
           <div className="mt-10 flex justify-around text-center avoid-break">
-            <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้บันทึก ({uniq(recs.map((r) => r.weigher)).join(', ')})<br />(เจ้าหน้าที่ฝ่ายผลิต)</div>
-            <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้รับทราบ<br />(หัวหน้าฝ่ายผลิต)</div>
+            {uniq(recs.map(weigherOf)).map((n) => (
+              <div key={n}><div className="h-14 flex items-end justify-center">{sigs[n] && <img src={sigs[n]} alt="" className="max-h-14 max-w-56" />}</div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้ชั่ง ({n})</div>
+            ))}
+            <div><div className="h-14" /><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้บันทึก ({uniq(recs.map((r) => r.weigher)).join(', ')})<br />(QC)</div>
+            <div><div className="h-14" /><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้รับทราบ<br />(หัวหน้าฝ่ายผลิต)</div>
           </div>
         </div>
       )}

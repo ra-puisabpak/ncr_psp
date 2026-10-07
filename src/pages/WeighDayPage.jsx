@@ -46,7 +46,7 @@ export default function WeighDayPage() {
           <table className="w-full border-collapse">
             <thead className="bg-violet-50 text-center">
               <tr><th className={td}>ผลิตภัณฑ์</th><th className={td}>Batch No.</th><th className={td}>เลขที่บันทึก</th><th className={td}>ชุด</th><th className={td}>รายการ</th>
-                <th className={td}>น้ำหนักรวม (กก.)</th><th className={td}>ไม่มี LOT</th><th className={td}>ผู้ชั่ง</th><th className={td}>ผล</th><th className={td}>นอกเกณฑ์ / หมายเหตุ</th></tr>
+                <th className={td}>น้ำหนักรวม (กก.)</th><th className={td}>ไม่มี LOT</th><th className={td}>ผู้ชั่ง</th><th className={td}>ผู้บันทึก</th><th className={td}>ผล</th><th className={td}>นอกเกณฑ์ / หมายเหตุ</th></tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
@@ -62,7 +62,7 @@ export default function WeighDayPage() {
                   <td className={`${td} text-center`}>{r.lines.length}</td>
                   <td className={`${td} text-right`}>{kg(total(r))}</td>
                   <td className={`${td} text-center ${noLot(r) ? 'text-amber-700' : ''}`}>{noLot(r) || '-'}</td>
-                  <td className={td}>{r.weigher}</td>
+                  <td className={td}>{r.weigher_name || '-'}{r.has_sig ? ' ✍' : ''}</td><td className={td}>{r.weigher}</td>
                   <td className={`${td} text-center ${r.result === 'PASS' ? '' : 'font-bold text-amber-800'}`}>{r.result === 'PASS' ? 'ตามสูตร' : 'นอกเกณฑ์'}</td>
                   <td className={td}>{[...(r.deviations || []).map((d) => d.text), r.note].filter(Boolean).join(' · ')}</td>
                 </tr>
