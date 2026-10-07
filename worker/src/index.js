@@ -1245,17 +1245,20 @@ export default {
       const FG_SENSORY = [['appearance', 'ลักษณะภายนอก'], ['color', 'สี'], ['odor', 'กลิ่น'], ['taste', 'รสชาติ']];
       const FG_PACK = [['pack_ok', 'สภาพบรรจุภัณฑ์ (สะอาด ไม่ชำรุด)'], ['seal_ok', 'การปิดผนึก'], ['label_ok', 'ฉลากถูกต้อง (ชื่อ อย. วันผลิต/หมดอายุ)']];
       const fgRow = (r) => ({ ...r, gross: JSON.parse(r.gross), net: JSON.parse(r.net), sensory: JSON.parse(r.sensory), pack: JSON.parse(r.pack), failed: r.failed ? JSON.parse(r.failed) : [] });
-      // The final check is of FG made the day before: batches weighed on the previous day that have no check yet.
-      const prevDay = (d) => new Date(Date.parse(d + 'T00:00:00Z') - 86400e3).toISOString().slice(0, 10);
+      // The final check is of FG made on the last production day before the day looked at (holidays are skipped):
+      // batches weighed that day that have no check yet.
       const pendingFg = async (day) => {
-        const made = (await DB.prepare('SELECT product_code, product_name, batch_no, prod_date FROM weigh_records WHERE prod_date=? ORDER BY wr_id').bind(prevDay(day)).all()).results;
-        const checked = (await DB.prepare('SELECT DISTINCT product_code, batch_no FROM fg_checks WHERE batch_no IN (SELECT batch_no FROM weigh_records WHERE prod_date=?)').bind(prevDay(day)).all()).results;
-        return { made, pending: made.filter((m) => !checked.some((c) => c.product_code === m.product_code && c.batch_no === m.batch_no)) };
+        const last = await DB.prepare('SELECT MAX(prod_date) AS d FROM weigh_records WHERE prod_date<?').bind(day).first();
+        const producedOn = last?.d || null;
+        if (!producedOn) return { producedOn, made: [], pending: [] };
+        const made = (await DB.prepare('SELECT product_code, product_name, batch_no, prod_date FROM weigh_records WHERE prod_date=? ORDER BY wr_id').bind(producedOn).all()).results;
+        const checked = (await DB.prepare('SELECT DISTINCT product_code, batch_no FROM fg_checks WHERE batch_no IN (SELECT batch_no FROM weigh_records WHERE prod_date=?)').bind(producedOn).all()).results;
+        return { producedOn, made, pending: made.filter((m) => !checked.some((c) => c.product_code === m.product_code && c.batch_no === m.batch_no)) };
       };
       if (path === '/api/fgcheck/pending' && method === 'GET') {
         const day = isDate(url.searchParams.get('date')) ? url.searchParams.get('date') : today();
-        const { made, pending } = await pendingFg(day);
-        return json({ date: day, produced_on: prevDay(day), made: made.length, pending });
+        const { producedOn, made, pending } = await pendingFg(day);
+        return json({ date: day, produced_on: producedOn, made: made.length, pending });
       }
       if (path === '/api/fgcheck' && method === 'GET') {
         const sp = url.searchParams, where = ['1=1'], p = [];
@@ -1501,7 +1504,7 @@ export default {
           oil: { done: oilN.n, stages: oil.map((r) => r.stage), expected_stages: 3 },
           cold: { done: units.length * dueSlots.length - coldMissing.length, expected: units.length * dueSlots.length, missing: coldMissing, slots_due: dueSlots },
           // the final check is of FG produced the day before
-          fgcheck: { done: fgMade.made.length - fgMade.pending.length, expected: fgMade.made.length, missing: fgMade.pending.map(label), produced_on: prevDay(day) },
+          fgcheck: { done: fgMade.made.length - fgMade.pending.length, expected: fgMade.made.length, missing: fgMade.pending.map(label), produced_on: fgMade.producedOn },
           hygiene: { done: emps.filter((e) => checked.has(e.emp_id)).length, expected: emps.length, missing: emps.filter((e) => !checked.has(e.emp_id)).map((e) => e.name) },
         });
       }

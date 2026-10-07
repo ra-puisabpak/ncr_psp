@@ -92,7 +92,7 @@ export default function FGCheckPage() {
         {pending && (
           <div className={`rounded-lg border p-2.5 ${pending.pending.length ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
             <div className="text-xs font-semibold text-gray-800">
-              ตรวจ FG ที่ผลิตเมื่อวาน ({pending.produced_on.slice(8)}/{pending.produced_on.slice(5, 7)}) — {pending.pending.length ? `รอตรวจ ${pending.pending.length} จาก ${pending.made} Batch · แตะเพื่อเลือก` : pending.made ? `ตรวจครบแล้ว ${pending.made} Batch` : 'เมื่อวานไม่มีการผลิต'}
+              ตรวจ FG ที่ผลิตล่าสุด{pending.produced_on ? ` (${pending.produced_on.slice(8)}/${pending.produced_on.slice(5, 7)})` : ''} — {pending.pending.length ? `รอตรวจ ${pending.pending.length} จาก ${pending.made} Batch · แตะเพื่อเลือก` : pending.made ? `ตรวจครบแล้ว ${pending.made} Batch` : 'ยังไม่มีวันผลิตก่อนหน้า'}
             </div>
             {pending.pending.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-1.5">

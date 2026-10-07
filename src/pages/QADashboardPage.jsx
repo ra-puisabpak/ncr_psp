@@ -52,7 +52,7 @@ function Prog({ k, prog }) {
   }
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1.5">
-      <Badge cls={PROG_CLS[cls]}>{k === 'fgcheck' ? 'FG ผลิตเมื่อวาน' : prog.date === bkkToday() ? 'วันนี้' : prog.date.slice(5)} {text}</Badge>
+      <Badge cls={PROG_CLS[cls]}>{k === 'fgcheck' ? (d.produced_on ? `FG ผลิต ${d.produced_on.slice(8)}/${d.produced_on.slice(5, 7)}` : 'FG ผลิตล่าสุด') : prog.date === bkkToday() ? 'วันนี้' : prog.date.slice(5)} {text}</Badge>
       {miss && <span className="text-[10.5px] text-red-700 truncate max-w-full">{miss}</span>}
     </div>
   )
