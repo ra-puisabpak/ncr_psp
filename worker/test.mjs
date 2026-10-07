@@ -482,11 +482,13 @@ r = await call('GET', '/api/release', { token: qc });
 check('only the QA Manager sees FG Release', r.status === 403, r);
 r = await call('GET', '/api/release?decision=RELEASE', { token: qa });
 check('releases are listed with the lots and the gate', r.status === 200 && r.j.length === 1 && r.j[0].rm_lots[0].lot === 'LOT-SHRIMP-77' && r.j[0].gate.requirements.length === 2 && r.j[0].decided_by === 'QA Manager', r.j);
-r = await call('GET', '/api/trace?q=SHRIMP-77', { token: qc });
+r = await call('GET', '/api/trace?q=SHRIMP-77', { token: qa });
 check('tracing a raw-material lot finds the batches, their records and NCRs', r.status === 200 && r.j.releases.length === 2
   && r.j.qc.some((x) => x.batch_no === 'B260916-01') && r.j.ncrs.some((x) => x.ncr_id === failRec.ncr_id), r.j);
-r = await call('GET', '/api/trace?q=B260916-01', { token: qc });
+r = await call('GET', '/api/trace?q=B260916-01', { token: qa });
 check('tracing a batch finds its records and its raw-material lots', r.status === 200 && r.j.releases[0].rm_lots[0].lot === 'LOT-SHRIMP-77' && r.j.qc.length === 2, r.j);
+r = await call('GET', '/api/trace?q=B260916-01', { token: qc });
+check('staff tracing a batch do not see release decisions', r.status === 200 && r.j.releases.length === 0 && r.j.qc.length === 2, r.j);
 r = await call('GET', '/api/trace?q=x', { token: qc });
 check('a trace search needs at least two characters', r.status === 400, r);
 r = await call('PATCH', '/api/control-points/OPRP-05', { token: qa, body: { release_required: false } });
