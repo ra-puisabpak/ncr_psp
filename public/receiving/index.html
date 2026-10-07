@@ -1579,10 +1579,11 @@ function saveRecord(){
   let ncCreated=false;
   rec.mats.forEach(m=>{
     if(m.result==='HOLD'||m.result==='REJECT'||m.result==='COND'){
-      const wtOnly=m.result==='COND'&&(m.wtV==='COND'||m.pkV==='COND')&&docEval(m)!=='FAIL'&&(!m.aql||aqlCalc(m).verdict==='PASS')&&(!isPork(m)||['PASS','COND'].includes(porkCalc(m).verdict))&&(!wtOn(m)||['PASS','COND'].includes(wtCalc(m).verdict));
+      const wtOnly=m.result==='COND'&&(m.wtV==='COND'||m.pkV==='COND'||m.docV==='COND')&&docVerdict(m)!=='HOLD'&&(!m.aql||aqlCalc(m).verdict==='PASS')&&(!isPork(m)||['PASS','COND'].includes(porkCalc(m).verdict))&&(!wtOn(m)||['PASS','COND'].includes(wtCalc(m).verdict));
+      const closeNote=[m.docV==='COND'?'แจ้ง Supplier นำส่ง COA ภายหลัง':'',(m.wtV==='COND'||m.pkV==='COND')?'แจ้ง Supplier / สุ่มชั่งซ้ำ':''].filter(Boolean).join(' · ');
       const _nc={id:nextNcId(),uid:newUid(),recUid:rec.uid,synced:false,docNo,supplier:sup,
         failType:m.result==='REJECT'?'Rejected Material':m.result==='COND'?'Conditional Acceptance — รับแบบมีเงื่อนไข':'Hold — Pending Investigation',
-        corrective:wtOnly?'แจ้ง Supplier / สุ่มชั่งซ้ำ — รับแบบมีเงื่อนไข (ปิดอัตโนมัติ)':'—',qa:insp,status:wtOnly?'Closed':'Open',closedDate:wtOnly?date:'',ncrId:'',date,result:m.result,matIdx:m.idx,brief:m.note||'',mat:{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit},note:[m.note||m.code,inspSummary(m),m.doc==='FAIL'?'เอกสาร: '+docSummary(m):'',m.wtV==='COND'?wtSummary(m):''].filter(Boolean).join(' | ')};
+        corrective:wtOnly?(closeNote||'แจ้ง Supplier')+' — รับแบบมีเงื่อนไข (ปิดอัตโนมัติ)':'—',qa:insp,status:wtOnly?'Closed':'Open',closedDate:wtOnly?date:'',ncrId:'',date,result:m.result,matIdx:m.idx,brief:m.note||'',mat:{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit},note:[m.note||m.code,inspSummary(m),m.doc==='FAIL'?'เอกสาร: '+docSummary(m):'',m.wtV==='COND'?wtSummary(m):''].filter(Boolean).join(' | ')};
       ncLogs.unshift(_nc);cloudSaveNC(_nc).catch(()=>{});ncCreated=true;
     }
   });
@@ -2023,10 +2024,17 @@ function docEval(m){            // PASS เมื่อเอกสารคร�
   if(m.coa==='Y'&&m.coaOk==='FAIL')return'FAIL';
   return'PASS';
 }
+// เอกสารไม่ผ่านจริง (ใบส่งของ/ฉลากไม่ตรง หรือ COA ผลไม่ผ่าน) = HOLD · ไม่มี COA อย่างเดียว = รับแบบมีเงื่อนไข (แจ้ง Supplier นำส่งภายหลัง)
+function docVerdict(m){
+  if(m.coa===undefined)return'PASS';
+  if(m.docDo==='FAIL'||m.docLabel==='FAIL'||(m.coa==='Y'&&m.coaOk==='FAIL'))return'HOLD';
+  return m.coa==='N'?'COND':'PASS';
+}
 function docApply(m){
-  m.doc=docEval(m);const v=m.doc==='FAIL'?'HOLD':'PASS';const prev=m.docV;m.docV=v;
+  m.doc=docEval(m);const v=docVerdict(m);const prev=m.docV;m.docV=v;
   if(m.result===prev||RES_RANK[m.result]<RES_RANK[v])m.result=v;
   if(m.aql)aqlApply(m);if(isPork(m))porkApply(m);enforceMin(m);
+  if(v==='COND'&&m.result==='COND'&&!String(m.note||'').trim())m.note='ไม่มี COA — รับแบบมีเงื่อนไข แจ้ง Supplier นำส่ง COA ภายหลัง';
 }
 function setDoc(idx,f,v){const m=curMats.find(x=>x.idx===idx);if(m){m[f]=v;if(f==='coa'&&v!=='Y'){m.coaOk='';}docApply(m);}renderMats();}
 function docSummary(m){
@@ -2037,7 +2045,7 @@ function docCheck(m,no){
   if(m.coa===undefined)return'';const p='รายการที่ '+no+': ';
   if(!m.coa)return p+'เลือกสถานะ COA (มี / ไม่มี / ไม่กำหนด)';
   if(m.coa==='Y'&&!m.coaOk)return p+'ระบุผลตรวจ COA (ผ่าน / ไม่ผ่าน)';
-  if(docEval(m)==='FAIL'&&RES_RANK[m.result]===0)return p+'เอกสารไม่ครบ/ไม่ผ่าน — ให้ผล PASS ไม่ได้ (HOLD หรือ REJECT)';
+  if(docVerdict(m)!=='PASS'&&RES_RANK[m.result]===0)return p+(docVerdict(m)==='COND'?'ไม่มี COA — ให้ผล PASS ไม่ได้ (รับแบบมีเงื่อนไข)':'เอกสารไม่ผ่าน — ให้ผล PASS ไม่ได้ (HOLD หรือ REJECT)');
   return'';
 }
 function docHtml(m){
@@ -2052,9 +2060,9 @@ function docHtml(m){
       '<button type="button" class="tp na'+(m.coa==='NA'?' sel':'')+'" onclick="setDoc('+i+',\'coa\',\'NA\')">ไม่กำหนด</button></div></div>'+
     (m.coa==='Y'?'<div class="fg"><label>เลขที่ COA / วันที่ออก</label><input type="text" value="'+escH(m.coaNo||'')+'" placeholder="เช่น COA-12345" oninput="setMat('+i+',\'coaNo\',this.value)"></div>'+
       '<div style="margin-bottom:10px">'+lb('COA ตรงกับ Lot และผลวิเคราะห์ผ่าน Specification <span class="req">*</span>')+pf('coaOk')+'</div>':'')+
-    (m.coa==='N'?'<div class="aq-v hold" style="margin-bottom:10px">COA กำหนดให้มีแต่ไม่ได้รับ — HOLD จนกว่าจะได้เอกสาร</div>':'')+
+    (m.coa==='N'?'<div class="aq-v hold" style="margin-bottom:10px">ไม่มี COA — รับแบบมีเงื่อนไข ให้แจ้ง Supplier นำส่ง COA ภายหลัง (ระบบปิด NC ให้อัตโนมัติ)</div>':'')+
     '<div>'+lb('ฉลาก / ชื่อวัตถุดิบ / Lot ตรงกับเอกสาร')+pf('docLabel')+'</div>'+
-    (bad&&m.coa!=='N'?'<div class="aq-v hold" style="margin-top:10px">เอกสารไม่ผ่าน — HOLD และออก NC</div>':'')+'</div>';
+    (docVerdict(m)==='HOLD'?'<div class="aq-v hold" style="margin-top:10px">เอกสารไม่ผ่าน — HOLD และออก NC</div>':'')+'</div>';
 }
 
 // ════ สุ่มชั่งน้ำหนักตามจำนวนตัวอย่าง (วัตถุดิบที่ต้องชั่ง ยกเว้นหมูบดซึ่งชั่งในฟอร์ม IQC และกลุ่มน้ำมัน/ของเหลว) ════
@@ -2085,7 +2093,7 @@ function wtCalc(m){
 }
 function enforceMin(m){          // ผลการตรวจรับต้องไม่ดีกว่าผลของทุกหัวข้อตรวจ
   let r=0,hard=false;const up=v=>{if(v&&RES_RANK[v]>r)r=RES_RANK[v];if(v==='HOLD')hard=true;};
-  if(m.coa!==undefined&&docEval(m)==='FAIL')up('HOLD');
+  up(docVerdict(m));
   if(m.aql)up(aqlCalc(m).verdict);
   if(isPork(m))up(porkCalc(m).verdict);
   const w=wtCalc(m);if(w)up(w.verdict);
