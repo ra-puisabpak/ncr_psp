@@ -474,6 +474,8 @@ textarea{resize:none;min-height:80px}
       <div class="sc"><div class="sc-n g" id="hs-p">0</div><div class="sc-l">PASS</div></div>
       <div class="sc"><div class="sc-n a" id="hs-n">0</div><div class="sc-l">NC Open</div></div>
     </div>
+    <div class="sec-h" style="margin-top:12px"><div class="sec-t">สรุปรายวัน</div><input type="date" id="hd-date" onchange="renderDaily()" style="border:1px solid var(--gray2,#ddd);border-radius:8px;padding:4px 8px;font-size:13px;font-family:inherit"></div>
+    <div id="hd-box" style="padding:0 16px"></div>
     <div class="sec-h" style="margin-top:12px"><div class="sec-t">เมนูหลัก</div></div>
     <div class="qgrid">
       <div class="qc p" onclick="goToForm()"><div class="qi">&#x2B;</div><div class="ql">รับวัตถุดิบ</div><div class="qs">บันทึกใหม่</div></div>
@@ -1603,7 +1605,33 @@ function closeSaveModal(){document.getElementById('save-modal').classList.remove
 function dlExcel(){exportExcel();closeSaveModal();}
 function dlPDF(){closeSaveModal();printRec(_lastRec);}
 function supNames(){return [...new Set(records.map(r=>r.supplier).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'));}
+// สรุปการรับของวันที่เลือกบนหน้าแรก: จำนวนใบรับ รายการ ผลตรวจ NC และรายการวัตถุดิบที่รับ
+function renderDaily(){
+  const box=document.getElementById('hd-box');if(!box)return;
+  const di=document.getElementById('hd-date');if(!di.value)di.value=todayStr();const d=di.value;
+  const recs=records.filter(r=>r.date===d);const docs=new Set(recs.map(r=>r.docNo));
+  const rows=[];recs.forEach(r=>{const sp=SUPPLIERS.find(s=>s.id===r.supplier)||{name:r.supplier};(r.mats||r.materials||[]).forEach(m=>rows.push({r,sp,m}));});
+  const cnt=k=>rows.filter(x=>x.m.result===k).length;
+  const ncs=ncLogs.filter(n=>docs.has(n.docNo));const ncOpen=ncs.filter(n=>n.status==='Open').length;
+  if(!recs.length){box.innerHTML=`<div class="ri" style="text-align:center;color:var(--gray3);font-size:13px">ไม่มีการรับวัตถุดิบวันที่ ${fmtD(d)}</div>`;return;}
+  const tile=(n,l,c)=>`<div style="flex:1;min-width:70px;text-align:center;padding:8px 4px;border-radius:10px;background:#f6f7f9"><div style="font-size:20px;font-weight:700;color:${c}">${n}</div><div style="font-size:11px;color:var(--gray3)">${l}</div></div>`;
+  box.innerHTML=`<div class="ri">
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+      ${tile(recs.length,'ใบรับ','var(--navy)')}${tile(rows.length,'รายการ','var(--navy)')}${tile(cnt('PASS'),'PASS','#1b7f3b')}
+      ${tile(cnt('COND'),'มีเงื่อนไข','#b35c00')}${tile(cnt('HOLD'),'HOLD','#b35c00')}${tile(cnt('REJECT'),'REJECT','#c62828')}${tile(ncs.length+(ncOpen?' ('+ncOpen+' เปิด)':''),'NC','#b35c00')}
+    </div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="text-align:left;color:var(--gray3)"><th style="padding:4px">วัตถุดิบ</th><th style="padding:4px">Lot</th><th style="padding:4px;text-align:right">จำนวน</th><th style="padding:4px">Supplier</th><th style="padding:4px">ผล</th></tr></thead>
+      <tbody>${rows.map(({sp,m})=>`<tr style="border-top:1px solid #eee"><td style="padding:4px">${escH(m.name||matName(m.code))}</td><td style="padding:4px">${escH(m.lot||'-')}</td>
+        <td style="padding:4px;text-align:right;white-space:nowrap">${m.qty!==''&&m.qty!=null?escH(String(m.qty))+' '+escH(m.unit||''):'-'}</td><td style="padding:4px">${escH(sp.name)}</td>
+        <td style="padding:4px"><span class="pill pill-${m.result==='PASS'?'pass':m.result==='REJECT'?'fail':'hold'}">${RES_TXT[m.result]||m.result||'-'}</span></td></tr>`).join('')}</tbody>
+    </table></div>
+    <button class="bm bt" style="width:100%;margin-top:10px" onclick="printDaily()">&#x1F5A8; พิมพ์รายงาน A4 วันที่ ${fmtD(d)}</button>
+  </div>`;
+}
+function printDaily(){const d=document.getElementById('hd-date').value||todayStr();goRep();document.getElementById('rp-date').value=d;setRep('day');}
 function renderHome(){
+  renderDaily();
   const dl=document.getElementById('sup-list');if(dl)dl.innerHTML=supNames().map(n=>`<option value="${escH(n)}">`).join('');
   document.getElementById('hs-t').textContent=records.length;
   document.getElementById('hs-p').textContent=records.filter(r=>(r.mats||r.materials||[]).every(m=>m.result==='PASS')).length;
