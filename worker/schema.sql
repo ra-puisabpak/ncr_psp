@@ -742,6 +742,22 @@ INSERT OR IGNORE INTO pack_sizes (pack_key,label,label_net_g,tare_g,sort) VALUES
  ('J210','กระปุกใหญ่ 210 g (กระปุก + ฝาอลู + ฝาพลาสติก + สติ๊กเกอร์ 40 g)',210,40,1),
  ('J60','กระปุกเล็ก 60 g (กระปุก + ฝา + สติ๊กเกอร์ 15 g)',60,15,2),
  ('J160','กระปุก 160 g (กระปุก + ฝา + สติ๊กเกอร์ 40 g)',160,40,3);
+-- The pack sizes a batch is filled into (set when the batch is checked), so the final check can tell which sizes are still to do.
+CREATE TABLE IF NOT EXISTS fg_batch_packs (
+  product_code TEXT NOT NULL,
+  batch_no     TEXT NOT NULL,
+  pack_keys    TEXT NOT NULL,
+  updated_by   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL,
+  PRIMARY KEY (product_code, batch_no)
+);
+-- A check entered wrongly is voided by the QA Manager (never deleted), which frees that batch + pack size to be entered again.
+CREATE TABLE IF NOT EXISTS fg_check_voids (
+  fc_id     TEXT PRIMARY KEY,
+  reason    TEXT NOT NULL,
+  voided_by TEXT NOT NULL,
+  voided_at TEXT NOT NULL
+);
 -- One row per product batch checked. Net weight = gross - jar weight of the pack size chosen; the server judges.
 CREATE TABLE IF NOT EXISTS fg_checks (
   fc_id        TEXT PRIMARY KEY,

@@ -1244,6 +1244,7 @@ export default {
       }
       const FG_SENSORY = [['appearance', 'ลักษณะภายนอก'], ['color', 'สี'], ['odor', 'กลิ่น'], ['taste', 'รสชาติ']];
       const FG_PACK = [['pack_ok', 'สภาพบรรจุภัณฑ์ (สะอาด ไม่ชำรุด)'], ['seal_ok', 'การปิดผนึก'], ['label_ok', 'ฉลากถูกต้อง (ชื่อ อย. วันผลิต/หมดอายุ)']];
+      const FG_LIVE = 'fc_id NOT IN (SELECT fc_id FROM fg_check_voids)';
       const fgRow = (r) => ({ ...r, gross: JSON.parse(r.gross), net: JSON.parse(r.net), sensory: JSON.parse(r.sensory), pack: JSON.parse(r.pack), failed: r.failed ? JSON.parse(r.failed) : [] });
       // The final check is of FG made on the last production day before the day looked at (holidays are skipped):
       // batches weighed that day that have no check yet.
@@ -1252,8 +1253,18 @@ export default {
         const producedOn = last?.d || null;
         if (!producedOn) return { producedOn, made: [], pending: [] };
         const made = (await DB.prepare('SELECT product_code, product_name, batch_no, prod_date FROM weigh_records WHERE prod_date=? ORDER BY wr_id').bind(producedOn).all()).results;
-        const checked = (await DB.prepare('SELECT DISTINCT product_code, batch_no FROM fg_checks WHERE batch_no IN (SELECT batch_no FROM weigh_records WHERE prod_date=?)').bind(producedOn).all()).results;
-        return { producedOn, made, pending: made.filter((m) => !checked.some((c) => c.product_code === m.product_code && c.batch_no === m.batch_no)) };
+        const checked = (await DB.prepare(`SELECT product_code, batch_no, pack_key FROM fg_checks WHERE ${FG_LIVE} AND batch_no IN (SELECT batch_no FROM weigh_records WHERE prod_date=?)`).bind(producedOn).all()).results;
+        const plans = (await DB.prepare('SELECT product_code, batch_no, pack_keys FROM fg_batch_packs WHERE batch_no IN (SELECT batch_no FROM weigh_records WHERE prod_date=?)').bind(producedOn).all()).results;
+        // A batch is done when every pack size it is filled into has been checked; with no plan yet, one check is enough.
+        const pending = [];
+        for (const m of made) {
+          const done = checked.filter((c) => c.product_code === m.product_code && c.batch_no === m.batch_no).map((c) => c.pack_key);
+          const plan = plans.find((x) => x.product_code === m.product_code && x.batch_no === m.batch_no);
+          const want = plan ? JSON.parse(plan.pack_keys) : [];
+          const missing = want.filter((k) => !done.includes(k));
+          if (plan ? missing.length : !done.length) pending.push({ ...m, missing_packs: plan ? missing : null, checked_packs: done });
+        }
+        return { producedOn, made, pending };
       };
       if (path === '/api/fgcheck/pending' && method === 'GET') {
         const day = isDate(url.searchParams.get('date')) ? url.searchParams.get('date') : today();
@@ -1265,7 +1276,7 @@ export default {
         if (isDate(sp.get('from'))) { where.push('check_date>=?'); p.push(sp.get('from')); }
         if (isDate(sp.get('to'))) { where.push('check_date<=?'); p.push(sp.get('to')); }
         for (const k of ['product_code', 'batch_no']) if (sp.get(k)) { where.push(`${k}=?`); p.push(sp.get(k)); }
-        const { results } = await DB.prepare(`SELECT * FROM fg_checks WHERE ${where.join(' AND ')} ORDER BY check_date DESC, fc_id DESC LIMIT 500`).bind(...p).all();
+        const { results } = await DB.prepare(`SELECT * FROM fg_checks WHERE ${FG_LIVE} AND ${where.join(' AND ')} ORDER BY check_date DESC, fc_id DESC LIMIT 500`).bind(...p).all();
         const ids = results.map((r) => r.fc_id);
         const rc = ids.length ? (await DB.prepare(`SELECT * FROM fg_check_rechecks WHERE fc_id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results : [];
         return json(results.map((r) => {
@@ -1273,6 +1284,24 @@ export default {
           row.recheck = row.gross.map((_, i) => { const x = rc.find((y) => y.fc_id === r.fc_id && y.jar === i + 1); return x ? { gross: x.gross, net: x.net } : null; });
           return row;
         }));
+      }
+      if (path === '/api/fgcheck/plan' && method === 'GET') {
+        const product = String(url.searchParams.get('product_code') || ''), batch = cleanBatch(url.searchParams.get('batch_no') || '');
+        const plan = await DB.prepare('SELECT pack_keys FROM fg_batch_packs WHERE product_code=? AND batch_no=?').bind(product, batch).first();
+        const done = (await DB.prepare(`SELECT pack_key FROM fg_checks WHERE ${FG_LIVE} AND product_code=? AND batch_no=?`).bind(product, batch).all()).results.map((x) => x.pack_key);
+        return json({ packs: plan ? JSON.parse(plan.pack_keys) : [], checked: done });
+      }
+      const fv = path.match(/^\/api\/fgcheck\/(FGC-\d{6}-\d{3})\/void$/);
+      if (fv && method === 'POST') {
+        need(user, QAM, 'เฉพาะ QA Manager เท่านั้นที่ยกเลิกรายการตรวจได้');
+        const b = await body();
+        const row = await DB.prepare('SELECT fc_id, product_code, batch_no, pack_key FROM fg_checks WHERE fc_id=?').bind(fv[1]).first();
+        if (!row) fail(404, 'ไม่พบรายการ');
+        if (blank(b.reason)) fail(400, 'กรุณาระบุเหตุผลที่ยกเลิก');
+        if (await DB.prepare('SELECT 1 FROM fg_check_voids WHERE fc_id=?').bind(row.fc_id).first()) fail(409, 'รายการนี้ถูกยกเลิกแล้ว');
+        await DB.prepare('INSERT INTO fg_check_voids (fc_id,reason,voided_by,voided_at) VALUES (?,?,?,?)').bind(row.fc_id, txt(b.reason, 300), user.display_name, nowIso()).run();
+        await audit(DB, user.username, 'user', 'void', 'fg_check', row.fc_id, { reason: txt(b.reason, 300), product_code: row.product_code, batch_no: row.batch_no, pack: row.pack_key });
+        return json({ fc_id: row.fc_id, voided: true });
       }
       if (path === '/api/fgcheck' && method === 'POST') {
         need(user, WRITERS);
@@ -1286,6 +1315,10 @@ export default {
         const batch = cleanBatch(b.batch_no);
         const pk = await DB.prepare('SELECT * FROM pack_sizes WHERE pack_key=? AND active=1').bind(String(b.pack_key || '')).first();
         if (!pk) fail(400, 'กรุณาเลือกขนาดบรรจุก่อน เพื่อหักน้ำหนักกระปุก');
+        // Every pack size this batch is filled into (the one being checked is always one of them); sizes only get added.
+        const known = (await DB.prepare('SELECT pack_key FROM pack_sizes WHERE active=1').all()).results.map((x) => x.pack_key);
+        const oldPlan = await DB.prepare('SELECT pack_keys FROM fg_batch_packs WHERE product_code=? AND batch_no=?').bind(product, batch).first();
+        const packPlan = [...new Set([...(oldPlan ? JSON.parse(oldPlan.pack_keys) : []), ...(Array.isArray(b.packs) ? b.packs : []).map(String), pk.pack_key])].filter((k) => known.includes(k));
         const numOpt = (v, label, lo, hi) => {
           if (blank(v)) return null;
           const n = Number(v);
@@ -1316,11 +1349,14 @@ export default {
         const rec = [b.check_date, product, txt(b.product_name, 200), batch, pk.pack_key, pk.label, pk.label_net_g, pk.tare_g, JSON.stringify(gross), JSON.stringify(net), JSON.stringify(sensory),
           numOpt(b.aw, 'ค่า aw', 0, 1), numOpt(b.aw_temp, 'อุณหภูมิขณะวัด aw', 0, 60), numOpt(b.ph, 'ค่า pH', 0, 14), JSON.stringify(pack),
           numOpt(b.store_temp, 'อุณหภูมิสถานที่จัดเก็บ', -40, 60), txt(b.store_area, 40), result, failed.length ? JSON.stringify(failed) : null, note, user.display_name, user.username, nowIso()];
+        if (await DB.prepare(`SELECT 1 FROM fg_checks WHERE ${FG_LIVE} AND product_code=? AND batch_no=? AND pack_key=?`).bind(product, batch, pk.pack_key).first()) fail(409, `Batch ${batch} ตรวจขนาดบรรจุ ${pk.label_net_g} g แล้ว — ถ้าบันทึกผิด ให้ QA Manager ยกเลิกรายการเดิมก่อน`);
         for (let attempt = 0; ; attempt++) {
           const fcId = await dayId(DB, 'fg_checks', 'fc_id', 'FGC', b.check_date);
           try {
             await DB.batch([DB.prepare(`INSERT INTO fg_checks (fc_id,uid,check_date,product_code,product_name,batch_no,pack_key,pack_label,label_net_g,tare_g,gross,net,sensory,aw,aw_temp,ph,pack,store_temp,store_area,result,failed,note,inspector,created_by,created_at)
               VALUES (?,?,${rec.map(() => '?').join(',')})`).bind(fcId, uid, ...rec),
+              DB.prepare('INSERT INTO fg_batch_packs (product_code,batch_no,pack_keys,updated_by,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(product_code,batch_no) DO UPDATE SET pack_keys=excluded.pack_keys, updated_by=excluded.updated_by, updated_at=excluded.updated_at')
+                .bind(product, batch, JSON.stringify(packPlan), user.display_name, nowIso()),
               ...recheck.map((x, i) => (x ? DB.prepare('INSERT INTO fg_check_rechecks (fc_id,jar,gross,net) VALUES (?,?,?,?)').bind(fcId, i + 1, x.gross, x.net) : null)).filter(Boolean)]);
           } catch (e) {
             if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {

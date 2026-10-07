@@ -732,6 +732,38 @@ check('staff see which batches made yesterday still need the final check', r.sta
 r = await call('POST', '/api/fgcheck', { token: qc, body: { uid: 'fgc-yday-0001', check_date: '2026-09-23', product_code: 'FG0004', product_name: 'น้ำพริกหมูเสวย', batch_no: 'B260922-01', pack_key: 'J210', gross: [251, 252], sensory: { appearance: true, color: true, odor: true, taste: true }, pack: { pack_ok: true, seal_ok: true, label_ok: true } } });
 r = await call('GET', '/api/fgcheck/pending?date=2026-09-23', { token: qc });
 check('a batch checked the next day leaves the pending list', r.j.pending.length === r.j.made - 1 && !r.j.pending.some((x) => x.batch_no === 'B260922-01'), r.j);
+// A batch filled into two sizes: the same size twice is refused, the other size is allowed, and the batch stays pending until all are done.
+const fgDay = { sensory: { appearance: true, color: true, odor: true, taste: true }, pack: { pack_ok: true, seal_ok: true, label_ok: true } };
+const fgRaw = (o) => ({ uid: 'fgc-pk-' + Math.random().toString(36).slice(2, 10), check_date: '2026-09-23', product_code: 'FG0004', product_name: 'น้ำพริกหมูเสวย', batch_no: 'B260922-01', pack_key: 'J210', gross: [251, 252], ...fgDay, ...o });
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgRaw() });
+check('the same batch and pack size cannot be checked twice', r.status === 409 && /ตรวจขนาดบรรจุ 210 g แล้ว/.test(r.j.error), r);
+r = await call('GET', '/api/fgcheck/plan?product_code=FG0004&batch_no=B260922-01', { token: qc });
+check('a batch with one check and no plan counts as one size', r.status === 200 && r.j.checked.length === 1 && r.j.checked[0] === 'J210', r.j);
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgRaw({ pack_key: 'J60', gross: [77, 76], packs: ['J210', 'J60', 'J160', 'NOPE'] }) });
+check('the other size of the same batch is accepted and the sizes are remembered', r.status === 201 && r.j.result === 'PASS', r);
+const jid = r.j.fc_id;
+r = await call('GET', '/api/fgcheck/plan?product_code=FG0004&batch_no=B260922-01', { token: qc });
+check('the plan keeps known sizes only', r.j.packs.join() === 'J210,J60,J160' && r.j.checked.length === 2, r.j);
+r = await call('GET', '/api/fgcheck/pending?date=2026-09-23', { token: qc });
+check('the batch stays pending while a planned size is unchecked', r.j.pending.some((x) => x.batch_no === 'B260922-01' && x.missing_packs.join() === 'J160'), r.j.pending);
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgRaw({ pack_key: 'J160', gross: [201, 203] }) });
+check('the third size is checked', r.status === 201, r);
+r = await call('GET', '/api/fgcheck/pending?date=2026-09-23', { token: qc });
+check('with every planned size checked the batch leaves the list', !r.j.pending.some((x) => x.batch_no === 'B260922-01'), r.j.pending);
+r = await call('POST', `/api/fgcheck/${jid}/void`, { token: qc, body: { reason: 'กรอกผิด' } });
+check('only the QA Manager voids a check', r.status === 403, r);
+r = await call('POST', `/api/fgcheck/${jid}/void`, { token: qa, body: {} });
+check('a void needs a reason', r.status === 400, r);
+r = await call('POST', `/api/fgcheck/${jid}/void`, { token: qa, body: { reason: 'กรอกผิด' } });
+check('the QA Manager voids a wrong check', r.status === 200 && r.j.voided === true, r);
+r = await call('POST', `/api/fgcheck/${jid}/void`, { token: qa, body: { reason: 'อีกครั้ง' } });
+check('a check is voided once', r.status === 409, r);
+r = await call('GET', '/api/fgcheck/pending?date=2026-09-23', { token: qc });
+check('a voided size is pending again', r.j.pending.some((x) => x.batch_no === 'B260922-01' && x.missing_packs.join() === 'J60'), r.j.pending);
+r = await call('GET', '/api/fgcheck?from=2026-09-23&to=2026-09-23', { token: qc });
+check('voided checks are not listed', !r.j.some((x) => x.fc_id === jid), r.j.length);
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgRaw({ pack_key: 'J60', gross: [77, 76] }) });
+check('after a void the size can be entered again', r.status === 201, r);
 // Two sets in one form: each set is its own batch
 const twoSets = (o = {}, w2 = {}) => wBody({ prod_date: '2026-09-24', batch_no: 'B260924-01', sets: 2, batches: ['B260924-01', 'B260924-02'],
   lines: fgItems.map((it) => ({ name: it.name, lot: `LOT-${it.name}`, weights: [it.target, w2[it.name] ?? it.target] })), ...o });

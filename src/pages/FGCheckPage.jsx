@@ -11,7 +11,7 @@ import { FORMS } from '../config'
 const input = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100'
 export const FG_SENSORY = [['appearance', 'ลักษณะภายนอก'], ['color', 'สี'], ['odor', 'กลิ่น'], ['taste', 'รสชาติ']]
 export const FG_PACK = [['pack_ok', 'สภาพบรรจุภัณฑ์ (สะอาด ไม่ชำรุด)'], ['seal_ok', 'การปิดผนึก'], ['label_ok', 'ฉลากถูกต้อง (ชื่อ อย. วันผลิต/หมดอายุ)']]
-const blankForm = () => ({ product_code: '', batch_no: '', pack_key: '', gross: ['', ''], recheck: [], sensory: {}, pack: {}, aw: '', aw_temp: '', ph: '', store_temp: '', store_area: '', note: '' })
+const blankForm = () => ({ product_code: '', batch_no: '', pack_key: '', packs: [], gross: ['', ''], recheck: [], sensory: {}, pack: {}, aw: '', aw_temp: '', ph: '', store_temp: '', store_area: '', note: '' })
 
 function PassFail({ value, onChange }) {
   return (
@@ -34,6 +34,7 @@ export default function FGCheckPage() {
   const [error, setError] = useState(null)
   const [saved, setSaved] = useState(null)
   const [rows, setRows] = useState([])
+  const [plan, setPlan] = useState({ packs: [], checked: [] }) // sizes this batch is filled into / already checked
   const [pending, setPending] = useState(null) // batches made the day before that still need this check
   const load = () => fgCheckApi.list({ from: date, to: date }).then(setRows).catch((e) => setError(e.message))
   useEffect(() => { fgCheckApi.packSizes().then((l) => setSizes(l.filter((x) => x.active))).catch((e) => setError(e.message)) }, [])
@@ -44,6 +45,13 @@ export default function FGCheckPage() {
     weighApi.list({ product_code: f.product_code, from: addDays(date, -30), to: date }).then((l) => setBatches([...new Set(l.map((w) => w.batch_no))])).catch(() => setBatches([]))
   }, [f.product_code, date])
 
+  useEffect(() => {
+    if (!f.product_code || !f.batch_no.trim()) { setPlan({ packs: [], checked: [] }); return }
+    let live = true
+    fgCheckApi.plan(f.product_code, f.batch_no.trim()).then((p) => { if (!live) return; setPlan(p); setF((x) => (x.checked_for === `${x.product_code}|${x.batch_no}` ? x : { ...x, checked_for: `${x.product_code}|${x.batch_no}`, packs: [...new Set([...p.packs, ...(x.pack_key ? [x.pack_key] : [])])], pack_key: p.checked.includes(x.pack_key) ? '' : x.pack_key })) }).catch(() => {})
+    return () => { live = false }
+  }, [f.product_code, f.batch_no, saved])
+  const label = (k) => sizes.find((s) => s.pack_key === k)?.label_net_g
   const pk = sizes.find((x) => x.pack_key === f.pack_key)
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }))
   const netOf = (g) => (pk && g !== '' && Number.isFinite(Number(g)) ? Math.round((Number(g) - pk.tare_g) * 100) / 100 : null)
@@ -60,12 +68,17 @@ export default function FGCheckPage() {
     && FG_SENSORY.every(([k]) => typeof f.sensory[k] === 'boolean') && FG_PACK.every(([k]) => typeof f.pack[k] === 'boolean')
     && (!failsNow.length || f.note.trim())
 
+  const voidRow = async (r) => {
+    const reason = window.prompt(`ยกเลิกรายการ ${r.fc_id} (${r.product_name || r.product_code} ${r.batch_no} · ${r.label_net_g} g)\nระบุเหตุผล:`)
+    if (!reason || !reason.trim()) return
+    try { await fgCheckApi.void(r.fc_id, reason.trim()); load(); fgCheckApi.pending(date).then(setPending).catch(() => {}); setSaved(null) } catch (e) { setError(e.message) }
+  }
   const save = async () => {
     setSaving(true); setError(null)
     try {
       const p = PRODUCTS.find((x) => x.code === f.product_code)
-      const res = await fgCheckApi.save({ uid, check_date: date, ...f, recheck: f.gross.map((_, i) => (short[i] ? f.recheck[i] : null)), product_name: p?.label || '' })
-      setSaved(res); setUid(newUid()); setF((x) => ({ ...blankForm(), pack_key: x.pack_key, store_area: x.store_area, store_temp: x.store_temp })); load()
+      const res = await fgCheckApi.save({ uid, check_date: date, ...f, packs: [...new Set([...f.packs, f.pack_key])], recheck: f.gross.map((_, i) => (short[i] ? f.recheck[i] : null)), product_name: p?.label || '' })
+      setSaved(res); setUid(newUid()); setF((x) => ({ ...blankForm(), store_area: x.store_area, store_temp: x.store_temp })); load()
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e) { setError(e.message) } finally { setSaving(false) }
   }
@@ -99,7 +112,7 @@ export default function FGCheckPage() {
                 {pending.pending.map((b) => (
                   <button key={`${b.product_code}-${b.batch_no}`} type="button" onClick={() => setF((x) => ({ ...x, product_code: b.product_code, batch_no: b.batch_no }))}
                     className={`text-xs px-2.5 py-1 rounded-lg border ${f.product_code === b.product_code && f.batch_no === b.batch_no ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white border-amber-300 text-gray-700'}`}>
-                    {b.product_name || b.product_code} · {b.batch_no}
+                    {b.product_name || b.product_code} · {b.batch_no}{b.missing_packs?.length ? ` · เหลือ ${b.missing_packs.map(label).join(', ')} g` : ''}
                   </button>
                 ))}
               </div>
@@ -117,14 +130,32 @@ export default function FGCheckPage() {
         <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-2.5">
           <div className="text-xs font-semibold text-emerald-900 mb-1.5">1. เลือกขนาดบรรจุ * (หักน้ำหนักกระปุกให้อัตโนมัติ)</div>
           <div className="flex flex-wrap gap-2">
-            {sizes.map((s) => (
-              <button key={s.pack_key} type="button" onClick={() => set('pack_key', s.pack_key)}
-                className={`text-left text-sm px-3 py-2 rounded-lg border ${f.pack_key === s.pack_key ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white border-gray-300 text-gray-700'}`}>
-                <div className="font-semibold">น้ำหนักสุทธิบนฉลาก {s.label_net_g} g</div>
-                <div className="text-[11px] opacity-80">หักกระปุก {s.tare_g} g</div>
-              </button>
-            ))}
+            {sizes.map((s) => {
+              const done = plan.checked.includes(s.pack_key)
+              return (
+                <button key={s.pack_key} type="button" disabled={done} onClick={() => setF((x) => ({ ...x, pack_key: s.pack_key, packs: [...new Set([...x.packs, s.pack_key])] }))}
+                  className={`text-left text-sm px-3 py-2 rounded-lg border disabled:opacity-50 disabled:cursor-not-allowed ${f.pack_key === s.pack_key ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white border-gray-300 text-gray-700'}`}>
+                  <div className="font-semibold">น้ำหนักสุทธิบนฉลาก {s.label_net_g} g</div>
+                  <div className="text-[11px] opacity-80">{done ? 'ตรวจแล้ว ✓' : `หักกระปุก ${s.tare_g} g`}</div>
+                </button>
+              )
+            })}
           </div>
+          {f.product_code && f.batch_no.trim() && (
+            <div className="mt-2 text-xs text-emerald-900">
+              Batch นี้บรรจุขนาด:{' '}
+              {sizes.map((s) => {
+                const on = f.packs.includes(s.pack_key) || plan.packs.includes(s.pack_key) || f.pack_key === s.pack_key
+                const locked = plan.packs.includes(s.pack_key) || f.pack_key === s.pack_key
+                return (
+                  <label key={s.pack_key} className="inline-flex items-center gap-1 mr-3">
+                    <input type="checkbox" checked={on} disabled={locked} onChange={(e) => setF((x) => ({ ...x, packs: e.target.checked ? [...x.packs, s.pack_key] : x.packs.filter((k) => k !== s.pack_key) }))} />{s.label_net_g} g
+                  </label>
+                )
+              })}
+              <span className="block text-[11px] text-emerald-700">ติ๊กทุกขนาดที่ Batch นี้บรรจุ ระบบจะแจ้งเตือนจนกว่าจะตรวจครบทุกขนาด</span>
+            </div>
+          )}
         </div>
 
         <div>
@@ -200,6 +231,7 @@ export default function FGCheckPage() {
               {r.failed.length > 0 && <div className="text-[11px] text-red-700">{r.failed.join(' · ')}</div>}
             </div>
             <ResultBadge result={r.result} />
+            {user?.role === 'QA_MANAGER' && <button onClick={() => voidRow(r)} className="text-[11px] text-gray-500 border border-gray-300 rounded-lg px-2 py-1 hover:text-red-700">ยกเลิก</button>}
           </div>
         ))}
       </div>
