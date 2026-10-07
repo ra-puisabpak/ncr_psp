@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import A4Sheet from '../components/A4Sheet'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { oilApi } from '../api/d1Api'
@@ -35,7 +36,7 @@ export default function OilReportPage() {
       {error && <div className="no-print max-w-lg mx-auto mt-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>}
       {rows && rows.length === 0 && <div className="no-print text-center text-gray-500 py-16">ไม่มีบันทึกของเดือน{thaiMonth(month)}</div>}
       {rows && rows.length > 0 && (
-        <div className="print-area bg-white mx-auto my-4 shadow p-[8mm] text-black w-[297mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none text-[10.5px]" style={{ fontFamily: "'Sarabun', sans-serif" }}>
+        <A4Sheet landscape={true} margin={8} className="text-[10.5px]">
           <FormHeader form={FORMS.OIL} title="บันทึกการตรวจสอบคุณภาพน้ำมันทอดและอุณหภูมิ" en="Frying Oil Quality & Temperature Record" type="รายเดือน" />
           <FormInfo items={[['เดือน / ปี', thaiMonth(month)], ['ผลิตภัณฑ์ / ไลน์', lines.join(', ') || '-'], ['เครื่องวัด TPM', meters.join(', ') || '-'], ['เครื่องวัดอุณหภูมิ', thermos.join(', ') || '-']]} />
           <table className="w-full border-collapse">
@@ -73,7 +74,7 @@ export default function OilReportPage() {
           <div className="mt-8 flex justify-around text-center avoid-break">
             {['ผู้ตรวจ', 'ผู้ทวนสอบ (QA/QC)', 'หัวหน้างาน'].map((s) => <div key={s}><div className="border-t border-dotted border-black w-48 mx-auto mb-1" />{s}<br />วันที่ ................</div>)}
           </div>
-        </div>
+        </A4Sheet>
       )}
     </div>
   )

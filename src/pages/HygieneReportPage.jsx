@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import A4Sheet from '../components/A4Sheet'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { hygApi } from '../api/d1Api'
@@ -42,7 +43,7 @@ export default function HygieneReportPage() {
       {rows && rows.length === 0 && <div className="no-print text-center text-gray-500 py-16">ไม่มีบันทึกการตรวจของวันที่ {thaiDate(date)}</div>}
 
       {rows && rows.length > 0 && (
-        <div className="print-area bg-white mx-auto my-4 shadow p-[10mm] text-black w-[210mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none" style={{ fontFamily: "'Sarabun', sans-serif" }}>
+        <A4Sheet landscape={false} margin={10} className="">
           <FormHeader form={FORMS.HYGIENE} title="แบบบันทึกการตรวจสุขลักษณะส่วนบุคคลก่อนเข้าปฏิบัติงาน" en="Personal Hygiene Inspection Record" dept="Quality Assurance (QA)" type="รายวัน" />
           <FormInfo items={[['วันที่ตรวจ', thaiDate(date)], ['ผู้ตรวจ', inspectors.join(', ')], ['จำนวน', `${rows.length} คน`]]} />
           <table className="w-full border-collapse text-[11px]">
@@ -96,7 +97,7 @@ export default function HygieneReportPage() {
             <div><div className="border-t border-dotted border-black w-52 mx-auto mb-1" />ผู้ทวนสอบ (QA)<br />วันที่ ......................</div>
           </div>
           <div className="mt-4 text-[10px] text-gray-500">พิมพ์จากระบบ QA eForm · เลขที่บันทึก {rows[0].rec_id} ถึง {rows[rows.length - 1].rec_id}</div>
-        </div>
+        </A4Sheet>
       )}
     </div>
   )

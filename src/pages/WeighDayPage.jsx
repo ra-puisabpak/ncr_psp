@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import A4Sheet from '../components/A4Sheet'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { weighApi } from '../api/d1Api'
@@ -32,7 +33,7 @@ export default function WeighDayPage() {
       {error && <div className="no-print max-w-lg mx-auto mt-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>}
       {rows && rows.length === 0 && <div className="no-print text-center text-gray-500 py-16">ไม่มีบันทึกการชั่งวันที่ {thaiDate(date)}</div>}
       {rows && rows.length > 0 && (
-        <div className="print-area bg-white mx-auto my-4 shadow p-[8mm] text-black w-[297mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none text-[11px]" style={{ fontFamily: "'Sarabun', sans-serif" }}>
+        <A4Sheet landscape={true} margin={8} className="text-[11px]">
           <FormHeader form={FORMS.WEIGH} title="สรุปการชั่งวัตถุดิบประจำวัน" en="Daily Raw Material Weighing Summary" dept="Production QC" type="รายวัน" />
           <FormInfo items={[['วันที่ผลิต', thaiDate(date)]]} />
           <FormStats items={[[products.length, 'ผลิตภัณฑ์'], [rows.length, 'Batch'], [kg(rows.reduce((a, r) => a + total(r), 0)), 'น้ำหนักวัตถุดิบรวม (กก.)'], [dev, 'นอกเกณฑ์ (ประเมินแล้ว)', dev ? '#b45309' : undefined]]} />
@@ -64,7 +65,7 @@ export default function WeighDayPage() {
           <div className="mt-10 flex justify-end text-center avoid-break">
             <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้รับทราบ<br />(หัวหน้าฝ่ายผลิต / QA)</div>
           </div>
-        </div>
+        </A4Sheet>
       )}
     </div>
   )

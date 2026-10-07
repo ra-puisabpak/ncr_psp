@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import A4Sheet from '../components/A4Sheet'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { coldApi } from '../api/d1Api'
@@ -21,7 +22,7 @@ function UnitSheet({ unit, rows, month, first }) {
   const lastDay = month === monthOf(bkkToday()) ? Number(bkkToday().slice(8)) : days
   const pass = scheduled.filter((r) => r.status === 'PASS').length
   return (
-    <div className={`print-area bg-white mx-auto my-4 shadow p-[8mm] text-black w-[210mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none text-[10px] ${first ? '' : 'page-break'}`} style={{ fontFamily: "'Sarabun', sans-serif" }}>
+    <A4Sheet landscape={false} margin={8} className={`text-[10px] ${first ? '' : 'page-break'}`}>
       <FormHeader form={FORMS.COLD} title="บันทึกการตรวจสอบอุณหภูมิตู้เย็นและตู้แช่แข็ง" en="Refrigerator & Freezer Temperature Record" type="รายเดือน" />
       <table className="w-full border-collapse my-1.5">
         <tbody>
@@ -79,7 +80,7 @@ function UnitSheet({ unit, rows, month, first }) {
       <div className="mt-6 flex justify-around text-center avoid-break">
         {['ผู้บันทึก (QC)', 'ผู้ทบทวน (QC Supervisor)'].map((s) => <div key={s}><div className="border-t border-dotted border-black w-52 mx-auto mb-1" />{s}<br />วันที่ ................</div>)}
       </div>
-    </div>
+    </A4Sheet>
   )
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import A4Sheet from '../components/A4Sheet'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { prodctlApi, oilApi, qaApi } from '../api/d1Api'
@@ -49,7 +50,7 @@ export default function ProdControlReportPage() {
       {error && <div className="no-print max-w-lg mx-auto mt-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>}
       {rows && rows.length === 0 && <div className="no-print text-center text-gray-500 py-16">ไม่มีบันทึกของวันที่ {thai(date)}</div>}
       {rows && rows.length > 0 && (
-        <div className="print-area bg-white mx-auto my-4 shadow p-[7mm] text-black w-[297mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none text-[9.5px]" style={{ fontFamily: "'Sarabun', sans-serif" }}>
+        <A4Sheet landscape={true} margin={7} className="text-[9.5px]">
           <FormHeader form={FORMS.PRODCTL} title="แบบฟอร์มควบคุมการผลิต" en="Production Control Record" type="รายวัน" />
           <div className="flex flex-wrap gap-x-6 mb-1 text-[10.5px]">
             <div><b>วันที่ผลิต:</b> {thai(date)}</div>
@@ -107,7 +108,7 @@ export default function ProdControlReportPage() {
             <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้บันทึก ({[...new Set(rows.map((r) => r.inspector))].join(', ')})<br />(เจ้าหน้าที่ฝ่ายควบคุมคุณภาพ)</div>
             <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้รับทราบ<br />(หัวหน้าฝ่ายควบคุมคุณภาพ)</div>
           </div>
-        </div>
+        </A4Sheet>
       )}
     </div>
   )

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import A4Sheet from '../components/A4Sheet'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { weighApi } from '../api/d1Api'
@@ -62,7 +63,7 @@ export default function WeighPrintPage() {
       </div>
       {error && <div className="no-print max-w-lg mx-auto mt-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>}
       {first && (
-        <div className="print-area bg-white mx-auto my-4 shadow p-[8mm] text-black w-[210mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none text-[10.5px]" style={{ fontFamily: "'Sarabun', sans-serif" }}>
+        <A4Sheet landscape={false} margin={8} className="text-[10.5px]">
           <FormHeader form={FORMS.WEIGH} title="บันทึกการชั่งวัตถุดิบ" en="Raw Material Weighing Record" dept="Production QC" type="รายวัน" ref2={recs.map((r) => r.wr_id).join(', ')} />
           <div className="flex flex-wrap gap-x-8 mb-1.5">
             <div><b>ชื่อผลิตภัณฑ์:</b> {first.product_name} ({first.product_code})</div>
@@ -108,7 +109,7 @@ export default function WeighPrintPage() {
           <div className="mt-10 flex justify-end text-center avoid-break">
             <div><div className="h-14 flex items-end justify-center">{sigs[recorder] && <img src={sigs[recorder]} alt="" className="max-h-14 max-w-56" />}</div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้บันทึก ({recorder})<br />(QC)</div>
           </div>
-        </div>
+        </A4Sheet>
       )}
     </div>
   )

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import A4Sheet from '../components/A4Sheet'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { fgCheckApi } from '../api/d1Api'
@@ -35,11 +36,11 @@ export default function FGCheckReportPage() {
       {error && <div className="no-print max-w-lg mx-auto mt-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>}
       {rows && rows.length === 0 && <div className="no-print text-center text-gray-500 py-16">ไม่มีบันทึกวันที่ {thai(date)}</div>}
       {rows && rows.length > 0 && (
-        <div className="print-area bg-white mx-auto my-4 shadow p-[8mm] text-black w-[297mm] max-w-full print:w-auto print:m-0 print:p-0 print:shadow-none text-[10px]" style={{ fontFamily: "'Sarabun', sans-serif" }}>
+        <A4Sheet landscape={true} margin={8} className="text-[10px]">
           <FormHeader form={FORMS.FG_CHECK} title={FORMS.FG_CHECK.name} en="Finished Product Inspection Report" type="รายวัน" />
           <div className="flex flex-wrap gap-x-8 mb-1.5">
             <div><b>วันที่ตรวจสอบ:</b> {thai(date)}</div>
-            <div><b>น้ำหนักกระปุกที่หัก:</b> {sizes.map((s) => `${s.label_net_g} g = ${s.tare_g} g`).join(' · ')} (กระปุก + ฝาอลู + ฝาพลาสติก + สติ๊กเกอร์)</div>
+            <div><b>น้ำหนักกระปุกที่หัก:</b> {sizes.map((s) => `ขนาด ${s.label_net_g} g หัก ${s.tare_g} g`).join(' · ')} (รวมฝาและสติ๊กเกอร์)</div>
           </div>
           <table className="w-full border-collapse text-center">
             <thead className="bg-[#0f2744] text-white">
@@ -52,7 +53,7 @@ export default function FGCheckReportPage() {
               <tr>
                 {FG_SENSORY.map(([k, l]) => <th key={k} className={td} rowSpan={2}>{l}</th>)}
                 <th className={td} colSpan={2}>aw</th><th className={td} rowSpan={2}>pH</th>
-                <th className={td} colSpan={cols}>น้ำหนักรวม / สุทธิ (g)</th>
+                <th className={td} colSpan={cols}>น้ำหนักที่ชั่ง (g)<br /><span className="font-normal text-[9px]">รวม = ทั้งกระปุก · สุทธิ = เนื้อน้ำพริก</span></th>
                 {FG_PACK.map(([k, l]) => <th key={k} className={td} rowSpan={2}>{l}</th>)}
                 <th className={td} rowSpan={2}>อุณหภูมิที่จัดเก็บ (°C)</th>
               </tr>
@@ -70,7 +71,7 @@ export default function FGCheckReportPage() {
                   {FG_SENSORY.map(([k]) => <td key={k} className={`${td} ${r.sensory[k] ? '' : 'text-red-700 font-bold'}`}>{mark(r.sensory[k])}</td>)}
                   <td className={td}>{r.aw ?? '-'}</td><td className={td}>{r.aw_temp ?? '-'}</td><td className={td}>{r.ph ?? '-'}</td>
                   {Array.from({ length: cols }, (_, i) => (
-                    <td key={i} className={`${td} ${(r.recheck?.[i] ? r.recheck[i].net : r.net[i]) < r.label_net_g ? 'text-red-700 font-bold' : ''}`}>{r.gross[i] != null ? <>{r.gross[i]}<br /><span className="text-[9px]">{r.net[i]}</span>{r.recheck?.[i] && <><br /><span className="text-[9px]">ซ้ำ {r.recheck[i].gross}/{r.recheck[i].net}</span></>}</> : ''}</td>
+                    <td key={i} className={`${td} ${(r.recheck?.[i] ? r.recheck[i].net : r.net[i]) < r.label_net_g ? 'text-red-700 font-bold' : ''}`}>{r.gross[i] != null ? <><span className="text-[8.5px] text-gray-600">รวม {r.gross[i]}</span><br /><b>สุทธิ {r.net[i]}</b>{r.recheck?.[i] && <><br /><span className="text-[8.5px]">ชั่งซ้ำ: รวม {r.recheck[i].gross} → <b>สุทธิ {r.recheck[i].net}</b></span></>}</> : ''}</td>
                   ))}
                   {FG_PACK.map(([k]) => <td key={k} className={`${td} ${r.pack[k] ? '' : 'text-red-700 font-bold'}`}>{mark(r.pack[k])}</td>)}
                   <td className={td}>{r.store_area === 'CHILL' ? 'Chill ' : ''}{r.store_temp ?? ''}</td>
@@ -84,12 +85,12 @@ export default function FGCheckReportPage() {
               <b>ไม่ผ่าน / หมายเหตุ:</b> {rows.filter((r) => r.failed.length || r.note).map((r) => `${r.product_name || r.product_code} ${r.batch_no}: ${[...r.failed, r.note].filter(Boolean).join(', ')}`).join(' · ')}
             </div>
           )}
-          <div className="mt-1 text-[9px] text-gray-700">น้ำหนักสุทธิ = น้ำหนักรวม − น้ำหนักกระปุกตามขนาดบรรจุ · เกณฑ์: น้ำหนักสุทธิไม่ต่ำกว่าที่ระบุบนฉลาก ต่ำกว่าให้ชั่งซ้ำ ผลชั่งซ้ำเป็นตัวตัดสิน (ซ้ำ = รวม/สุทธิ) · ✓ = ผ่าน ✗ = ไม่ผ่าน</div>
+          <div className="mt-1 text-[9px] text-gray-700">วิธีอ่าน: "รวม" = ชั่งทั้งกระปุก (กระปุก + ฝา + สติ๊กเกอร์ + น้ำพริก) · "สุทธิ" = น้ำพริกอย่างเดียว (รวม − น้ำหนักกระปุก) · เกณฑ์: สุทธิต้องไม่ต่ำกว่าน้ำหนักบนฉลาก ถ้าต่ำกว่าให้ชั่งซ้ำ และใช้ผลชั่งซ้ำตัดสิน · ✓ = ผ่าน ✗ = ไม่ผ่าน</div>
           <div className="mt-8 flex justify-around text-center avoid-break">
             <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้บันทึก ({[...new Set(rows.map((r) => r.inspector))].join(', ')})<br />(เจ้าหน้าที่ฝ่ายควบคุมคุณภาพ)</div>
             <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้รับทราบ<br />(หัวหน้าฝ่ายควบคุมคุณภาพ)</div>
           </div>
-        </div>
+        </A4Sheet>
       )}
     </div>
   )
