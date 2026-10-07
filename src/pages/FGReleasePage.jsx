@@ -29,7 +29,7 @@ export const DECISION = {
 const CHECKS = [
   ['label_ok', 'ฉลาก วันผลิต วันหมดอายุ และเลขล็อตถูกต้องตรงสูตร'],
   ['pack_ok', 'บรรจุภัณฑ์ ฝา และรอยซีลสมบูรณ์'],
-  ['spec_ok', 'ผลตรวจผลิตภัณฑ์สำเร็จรูปเป็นไปตาม Specification (QC_10)'],
+  ['spec_ok', 'ผลตรวจผลิตภัณฑ์สำเร็จรูปเป็นไปตาม Specification (FM-QC-008)'],
 ]
 
 function Gate({ gate }) {
@@ -140,7 +140,7 @@ function DecisionForm({ gate, onSaved }) {
       }
     }).catch(() => setWeighed(false))
   }, [gate.product_code, gate.batch_no])
-  // QC_10 results of this batch, shown beside the spec check.
+  // FM-QC-008 results of this batch, shown beside the spec check.
   const [fgc, setFgc] = useState([])
   useEffect(() => { fgCheckApi.list({ product_code: gate.product_code, batch_no: gate.batch_no }).then(setFgc).catch(() => setFgc([])) }, [gate.product_code, gate.batch_no])
   const [checks, setChecks] = useState({})

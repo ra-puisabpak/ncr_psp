@@ -724,7 +724,7 @@ INSERT OR IGNORE INTO materials (code,name,type,unit,cat,min_temp,max_temp,temp_
 ('SUP-025','ลาเบล 100x150x350','CM','ม้วน','Consumable',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,1,'system',datetime('now'),'system',datetime('now')),
 ('SUP-026','บับเบิ้ล ไซส์ XL','CM','ม้วน','Consumable',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,1,'system',datetime('now'),'system',datetime('now'));
 
--- ===== Finished-product inspection (QC_10 บันทึกการตรวจสอบผลิตภัณฑ์สุดท้าย) =====
+-- ===== Finished-product inspection (FM-QC-008, formerly QC_10: บันทึกการตรวจสอบผลิตภัณฑ์สุดท้าย) =====
 -- Pack sizes: the jar weight (jar + aluminium lid + plastic lid + sticker) deducted from the gross weight.
 CREATE TABLE IF NOT EXISTS pack_sizes (
   pack_key     TEXT PRIMARY KEY,
@@ -767,3 +767,13 @@ CREATE TABLE IF NOT EXISTS fg_checks (
 );
 CREATE INDEX IF NOT EXISTS idx_fg_checks_date ON fg_checks(check_date);
 CREATE INDEX IF NOT EXISTS idx_fg_checks_batch ON fg_checks(product_code, batch_no);
+-- A jar whose net weight is under the label is weighed again; the re-check decides the result.
+CREATE TABLE IF NOT EXISTS fg_check_rechecks (
+  fc_id      TEXT NOT NULL,
+  jar        INTEGER NOT NULL,
+  gross      REAL NOT NULL,
+  net        REAL NOT NULL,
+  PRIMARY KEY (fc_id, jar)
+);
+-- The finished-product form is FM-QC-008 (was QC_10).
+UPDATE control_points SET form_code='FM-QC-008', monitoring=replace(monitoring,'QC_10','FM-QC-008') WHERE cp_id='OPRP-06' AND form_code='QC_10';

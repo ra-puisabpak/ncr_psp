@@ -163,7 +163,7 @@ export const materialApi = {
   update: (code, body) => patch(`/api/materials/${enc(code)}`, body),
 }
 
-// QC_10 finished-product inspection.
+// FM-QC-008 finished-product inspection.
 export const fgCheckApi = {
   packSizes: () => request('/api/pack-sizes'),
   list: (params = {}) => request(`/api/fgcheck?${new URLSearchParams(params)}`),

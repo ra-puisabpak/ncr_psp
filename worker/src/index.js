@@ -1237,7 +1237,7 @@ export default {
         return json({ success: true, status: next.status, closedDate: next.closed_date || '', ncrId: next.ncr_id || '', closeNote: JSON.parse(data || '{}').closeNote || '' });
       }
 
-      // ===== Finished-product inspection (QC_10) =====
+      // ===== Finished-product inspection (FM-QC-008) =====
       if (path === '/api/pack-sizes' && method === 'GET') {
         const { results } = await DB.prepare('SELECT * FROM pack_sizes ORDER BY sort, pack_key').all();
         return json(results);
@@ -1251,7 +1251,13 @@ export default {
         if (isDate(sp.get('to'))) { where.push('check_date<=?'); p.push(sp.get('to')); }
         for (const k of ['product_code', 'batch_no']) if (sp.get(k)) { where.push(`${k}=?`); p.push(sp.get(k)); }
         const { results } = await DB.prepare(`SELECT * FROM fg_checks WHERE ${where.join(' AND ')} ORDER BY check_date DESC, fc_id DESC LIMIT 500`).bind(...p).all();
-        return json(results.map(fgRow));
+        const ids = results.map((r) => r.fc_id);
+        const rc = ids.length ? (await DB.prepare(`SELECT * FROM fg_check_rechecks WHERE fc_id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results : [];
+        return json(results.map((r) => {
+          const row = fgRow(r);
+          row.recheck = row.gross.map((_, i) => { const x = rc.find((y) => y.fc_id === r.fc_id && y.jar === i + 1); return x ? { gross: x.gross, net: x.net } : null; });
+          return row;
+        }));
       }
       if (path === '/api/fgcheck' && method === 'POST') {
         need(user, WRITERS);
@@ -1274,11 +1280,19 @@ export default {
         const gross = (Array.isArray(b.gross) ? b.gross : []).slice(0, 10).filter((v) => !blank(v)).map((v) => numOpt(v, 'น้ำหนักรวม', 0, 5000));
         if (gross.length < 2) fail(400, 'กรุณาชั่งน้ำหนักอย่างน้อย 2 กระปุก');
         const net = gross.map((g) => Math.round((g - pk.tare_g) * 100) / 100);
+        // A numeric criterion that fails is checked again: a jar under the label weight is re-weighed, and the re-check decides.
+        const rcIn = Array.isArray(b.recheck) ? b.recheck : [];
+        const recheck = net.map((n, i) => {
+          if (n >= pk.label_net_g) return null;
+          if (blank(rcIn[i])) fail(400, `น้ำหนักสุทธิกระปุกที่ ${i + 1} = ${n} g ต่ำกว่า ${pk.label_net_g} g บนฉลาก กรุณาชั่งซ้ำแล้วกรอกน้ำหนักที่ชั่งซ้ำ`);
+          const g = numOpt(rcIn[i], 'น้ำหนักที่ชั่งซ้ำ', 0, 5000);
+          return { gross: g, net: Math.round((g - pk.tare_g) * 100) / 100 };
+        });
         const bool = (o, k, label) => { const v = o?.[k]; if (v !== true && v !== false) fail(400, `กรุณาเลือกผล "${label}"`); return v; };
         const sensory = Object.fromEntries(FG_SENSORY.map(([k, l]) => [k, bool(b.sensory, k, l)]));
         const pack = Object.fromEntries(FG_PACK.map(([k, l]) => [k, bool(b.pack, k, l)]));
         const failed = [];
-        net.forEach((n, i) => { if (n < pk.label_net_g) failed.push(`น้ำหนักสุทธิกระปุกที่ ${i + 1}: ${n} g (ต่ำกว่า ${pk.label_net_g} g บนฉลาก)`); });
+        recheck.forEach((x, i) => { if (x && x.net < pk.label_net_g) failed.push(`น้ำหนักสุทธิกระปุกที่ ${i + 1}: ${net[i]} g ชั่งซ้ำ ${x.net} g (ต่ำกว่า ${pk.label_net_g} g บนฉลาก)`); });
         FG_SENSORY.forEach(([k, l]) => { if (!sensory[k]) failed.push(`${l} ไม่ผ่าน`); });
         FG_PACK.forEach(([k, l]) => { if (!pack[k]) failed.push(`${l} ไม่ผ่าน`); });
         const result = failed.length ? 'FAIL' : 'PASS';
@@ -1290,8 +1304,9 @@ export default {
         for (let attempt = 0; ; attempt++) {
           const fcId = await dayId(DB, 'fg_checks', 'fc_id', 'FGC', b.check_date);
           try {
-            await DB.prepare(`INSERT INTO fg_checks (fc_id,uid,check_date,product_code,product_name,batch_no,pack_key,pack_label,label_net_g,tare_g,gross,net,sensory,aw,aw_temp,ph,pack,store_temp,store_area,result,failed,note,inspector,created_by,created_at)
-              VALUES (?,?,${rec.map(() => '?').join(',')})`).bind(fcId, uid, ...rec).run();
+            await DB.batch([DB.prepare(`INSERT INTO fg_checks (fc_id,uid,check_date,product_code,product_name,batch_no,pack_key,pack_label,label_net_g,tare_g,gross,net,sensory,aw,aw_temp,ph,pack,store_temp,store_area,result,failed,note,inspector,created_by,created_at)
+              VALUES (?,?,${rec.map(() => '?').join(',')})`).bind(fcId, uid, ...rec),
+              ...recheck.map((x, i) => (x ? DB.prepare('INSERT INTO fg_check_rechecks (fc_id,jar,gross,net) VALUES (?,?,?,?)').bind(fcId, i + 1, x.gross, x.net) : null)).filter(Boolean)]);
           } catch (e) {
             if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
               const again = await DB.prepare('SELECT fc_id, result FROM fg_checks WHERE uid=?').bind(uid).first();
@@ -1300,8 +1315,8 @@ export default {
             }
             throw e;
           }
-          await audit(DB, user.username, 'user', 'create', 'fg_check', fcId, { product_code: product, batch_no: batch, pack: pk.pack_key, net, result });
-          return json({ fc_id: fcId, result, net, failed }, 201);
+          await audit(DB, user.username, 'user', 'create', 'fg_check', fcId, { product_code: product, batch_no: batch, pack: pk.pack_key, net, recheck, result });
+          return json({ fc_id: fcId, result, net, recheck, failed }, 201);
         }
       }
 

@@ -338,13 +338,17 @@ check('net weight deducts the 40 g jar of the 210 g size and passes', r.status =
 r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ product_code: 'FG0001', batch_no: 'B261005-02', pack_key: 'J60', gross: [77, 75], aw: '', aw_temp: '' }) });
 check('a 60 g jar deducts 15 g; aw may be left blank', r.status === 201 && r.j.result === 'PASS' && r.j.net.join() === '62,60', r.j);
 r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ batch_no: 'B261005-03', gross: [251, 248] }) });
-check('a short net weight fails and needs what was done', r.status === 400, r);
-r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ batch_no: 'B261005-03', gross: [251, 248], sensory: { appearance: true, color: true, odor: false, taste: true }, note: 'กักไว้ แจ้ง QA' }) });
-check('short weight and a sensory fail are listed; no NCR is opened', r.status === 201 && r.j.result === 'FAIL' && r.j.failed.length === 2 && /208/.test(r.j.failed[0]) && !r.j.ncr_id, r.j);
+check('a net weight under the label asks for a re-weigh', r.status === 400 && /ชั่งซ้ำ/.test(r.j.error), r);
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ batch_no: 'B261005-03', gross: [251, 248], recheck: [null, 251.5] }) });
+check('a jar that passes when re-weighed passes, keeping both weights', r.status === 201 && r.j.result === 'PASS' && r.j.recheck[1].net === 211.5 && r.j.net[1] === 208, r.j);
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ batch_no: 'B261005-04', gross: [251, 248], recheck: [null, 249], note: '' }) });
+check('still short after the re-weigh fails and needs what was done', r.status === 400, r);
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ batch_no: 'B261005-04', gross: [251, 248], recheck: [null, 249], sensory: { appearance: true, color: true, odor: false, taste: true }, note: 'กักไว้ แจ้ง QA' }) });
+check('still short after the re-weigh and a sensory fail are listed; no NCR is opened', r.status === 201 && r.j.result === 'FAIL' && r.j.failed.length === 2 && /ชั่งซ้ำ 209/.test(r.j.failed[0]) && !r.j.ncr_id, r.j);
 r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ sensory: { appearance: true } }) });
 check('every sensory check needs a result', r.status === 400, r);
 r = await call('GET', '/api/fgcheck?from=2026-10-05&to=2026-10-05', { token: qc });
-check('the day lists every product checked with weights and results', r.status === 200 && r.j.length === 3 && r.j.some((x) => x.pack_key === 'J60' && x.aw === null), r.j.length);
+check('the day lists every product checked with weights, re-checks and results', r.status === 200 && r.j.length === 4 && r.j.some((x) => x.pack_key === 'J60' && x.aw === null) && r.j.some((x) => x.recheck[1]?.net === 211.5), r.j.length);
 
 // conditional acceptance
 const condBody = (uid, note) => { const x = recvBody(uid, ''); x.record.mats = [{ idx: 1, code: 'PKG-001', result: 'COND', note, condBy: 'someone else', photo1: null, photo2: null }]; return x; };

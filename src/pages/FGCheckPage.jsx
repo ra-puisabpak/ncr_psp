@@ -11,7 +11,7 @@ import { FORMS } from '../config'
 const input = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100'
 export const FG_SENSORY = [['appearance', 'ลักษณะภายนอก'], ['color', 'สี'], ['odor', 'กลิ่น'], ['taste', 'รสชาติ']]
 export const FG_PACK = [['pack_ok', 'สภาพบรรจุภัณฑ์ (สะอาด ไม่ชำรุด)'], ['seal_ok', 'การปิดผนึก'], ['label_ok', 'ฉลากถูกต้อง (ชื่อ อย. วันผลิต/หมดอายุ)']]
-const blankForm = () => ({ product_code: '', batch_no: '', pack_key: '', gross: ['', ''], sensory: {}, pack: {}, aw: '', aw_temp: '', ph: '', store_temp: '', store_area: '', note: '' })
+const blankForm = () => ({ product_code: '', batch_no: '', pack_key: '', gross: ['', ''], recheck: [], sensory: {}, pack: {}, aw: '', aw_temp: '', ph: '', store_temp: '', store_area: '', note: '' })
 
 function PassFail({ value, onChange }) {
   return (
@@ -22,7 +22,7 @@ function PassFail({ value, onChange }) {
   )
 }
 
-// QC_10: one entry per product batch. The pack size is chosen first; its jar weight is deducted from every gross weight.
+// FM-QC-008: one entry per product batch. The pack size is chosen first; its jar weight is deducted from every gross weight.
 export default function FGCheckPage() {
   const { user } = useAuth()
   const [date, setDate] = useState(bkkToday())
@@ -46,12 +46,15 @@ export default function FGCheckPage() {
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }))
   const netOf = (g) => (pk && g !== '' && Number.isFinite(Number(g)) ? Math.round((Number(g) - pk.tare_g) * 100) / 100 : null)
   const nets = f.gross.map(netOf)
+  // A jar under the label weight is weighed again; the re-check decides.
+  const short = nets.map((n) => n !== null && n < pk.label_net_g)
+  const reNets = f.gross.map((_, i) => (short[i] ? netOf(f.recheck[i] ?? '') : null))
   const failsNow = [
-    ...nets.filter((n) => n !== null && n < pk.label_net_g).map((n) => `น้ำหนักสุทธิ ${n} g ต่ำกว่า ${pk.label_net_g} g`),
+    ...reNets.filter((n, i) => short[i] && n !== null && n < pk.label_net_g).map((n) => `ชั่งซ้ำแล้วน้ำหนักสุทธิ ${n} g ยังต่ำกว่า ${pk.label_net_g} g`),
     ...FG_SENSORY.filter(([k]) => f.sensory[k] === false).map(([, l]) => `${l} ไม่ผ่าน`),
     ...FG_PACK.filter(([k]) => f.pack[k] === false).map(([, l]) => `${l} ไม่ผ่าน`),
   ]
-  const complete = f.product_code && f.batch_no.trim() && pk && nets.filter((n) => n !== null).length >= 2
+  const complete = f.product_code && f.batch_no.trim() && pk && nets.filter((n) => n !== null).length >= 2 && short.every((x, i) => !x || reNets[i] !== null)
     && FG_SENSORY.every(([k]) => typeof f.sensory[k] === 'boolean') && FG_PACK.every(([k]) => typeof f.pack[k] === 'boolean')
     && (!failsNow.length || f.note.trim())
 
@@ -59,7 +62,7 @@ export default function FGCheckPage() {
     setSaving(true); setError(null)
     try {
       const p = PRODUCTS.find((x) => x.code === f.product_code)
-      const res = await fgCheckApi.save({ uid, check_date: date, ...f, product_name: p?.label || '' })
+      const res = await fgCheckApi.save({ uid, check_date: date, ...f, recheck: f.gross.map((_, i) => (short[i] ? f.recheck[i] : null)), product_name: p?.label || '' })
       setSaved(res); setUid(newUid()); setF((x) => ({ ...blankForm(), pack_key: x.pack_key, store_area: x.store_area, store_temp: x.store_temp })); load()
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e) { setError(e.message) } finally { setSaving(false) }
@@ -79,7 +82,7 @@ export default function FGCheckPage() {
       {saved && (
         <div className={`rounded-xl p-3 mb-4 text-sm font-semibold flex items-start gap-2 ${saved.result === 'PASS' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
           {saved.result === 'PASS' ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-          <span>บันทึก {saved.fc_id} — {saved.result === 'PASS' ? 'ผ่าน' : 'ไม่ผ่าน'} · น้ำหนักสุทธิ {saved.net?.join(' / ')} g{saved.failed?.length ? <span className="block font-normal">{saved.failed.join(' · ')}</span> : null}</span>
+          <span>บันทึก {saved.fc_id} — {saved.result === 'PASS' ? 'ผ่าน' : 'ไม่ผ่าน'} · น้ำหนักสุทธิ {saved.net?.map((n, i) => (saved.recheck?.[i] ? `${n}→${saved.recheck[i].net}` : n)).join(' / ')} g{saved.failed?.length ? <span className="block font-normal">{saved.failed.join(' · ')}</span> : null}</span>
         </div>
       )}
 
@@ -114,7 +117,14 @@ export default function FGCheckPage() {
                 <label key={i} className="text-xs text-gray-600">ตัวที่ {i + 1}
                   <input type="number" inputMode="decimal" step="0.1" min="0" disabled={!pk} value={g} placeholder={pk ? 'g' : 'เลือกขนาดก่อน'}
                     onChange={(e) => set('gross', f.gross.map((x, j) => (j === i ? e.target.value : x)))} className={input} />
-                  {n !== null && <span className={`block mt-0.5 font-semibold ${n < pk.label_net_g ? 'text-red-700' : 'text-green-700'}`}>สุทธิ {n} g</span>}
+                  {n !== null && <span className={`block mt-0.5 font-semibold ${n < pk.label_net_g ? 'text-red-700' : 'text-green-700'}`}>สุทธิ {n} g{n < pk.label_net_g ? ' — ต่ำกว่าฉลาก ชั่งซ้ำ' : ''}</span>}
+                  {short[i] && (
+                    <span className="block mt-1 rounded-lg bg-amber-50 border border-amber-300 p-1.5">
+                      <span className="text-amber-900 font-semibold">ชั่งซ้ำ (g) *</span>
+                      <input type="number" inputMode="decimal" step="0.1" min="0" value={f.recheck[i] ?? ''} onChange={(e) => set('recheck', Object.assign([...f.recheck], { [i]: e.target.value }))} className={input} />
+                      {reNets[i] !== null && <span className={`block mt-0.5 font-semibold ${reNets[i] < pk.label_net_g ? 'text-red-700' : 'text-green-700'}`}>สุทธิ {reNets[i]} g {reNets[i] < pk.label_net_g ? 'ไม่ผ่าน' : 'ผ่าน'}</span>}
+                    </span>
+                  )}
                 </label>
               )
             })}
@@ -167,7 +177,7 @@ export default function FGCheckPage() {
           <div key={r.fc_id} className="p-3 text-sm flex items-start gap-2">
             <div className="min-w-0 flex-1">
               <div className="font-semibold text-gray-800">{r.product_name || r.product_code} · {r.batch_no}</div>
-              <div className="text-[11px] text-gray-500">{r.fc_id} · {r.label_net_g} g (หัก {r.tare_g} g) · สุทธิ {r.net.join(' / ')} g{r.aw != null ? ` · aw ${r.aw}` : ''}{r.ph != null ? ` · pH ${r.ph}` : ''} · {r.inspector}</div>
+              <div className="text-[11px] text-gray-500">{r.fc_id} · {r.label_net_g} g (หัก {r.tare_g} g) · สุทธิ {r.net.map((n, i) => (r.recheck?.[i] ? `${n} (ชั่งซ้ำ ${r.recheck[i].net})` : n)).join(' / ')} g{r.aw != null ? ` · aw ${r.aw}` : ''}{r.ph != null ? ` · pH ${r.ph}` : ''} · {r.inspector}</div>
               {r.failed.length > 0 && <div className="text-[11px] text-red-700">{r.failed.join(' · ')}</div>}
             </div>
             <ResultBadge result={r.result} />

@@ -11,7 +11,7 @@ const TH_M = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 
 const thai = (iso) => { const [y, m, d] = iso.split('-').map(Number); return `${d} ${TH_M[m - 1]} ${y + 543}` }
 const mark = (v) => (v ? '✓' : '✗')
 
-// QC_10 for one day on A4 landscape, laid out like the paper form.
+// FM-QC-008 for one day on A4 landscape, laid out like the paper form.
 export default function FGCheckReportPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
@@ -77,7 +77,7 @@ export default function FGCheckReportPage() {
                   {FG_SENSORY.map(([k]) => <td key={k} className={`${td} ${r.sensory[k] ? '' : 'text-red-700 font-bold'}`}>{mark(r.sensory[k])}</td>)}
                   <td className={td}>{r.aw ?? '-'}</td><td className={td}>{r.aw_temp ?? '-'}</td><td className={td}>{r.ph ?? '-'}</td>
                   {Array.from({ length: cols }, (_, i) => (
-                    <td key={i} className={`${td} ${r.net[i] != null && r.net[i] < r.label_net_g ? 'text-red-700 font-bold' : ''}`}>{r.gross[i] != null ? <>{r.gross[i]}<br /><span className="text-[9px]">{r.net[i]}</span></> : ''}</td>
+                    <td key={i} className={`${td} ${(r.recheck?.[i] ? r.recheck[i].net : r.net[i]) < r.label_net_g ? 'text-red-700 font-bold' : ''}`}>{r.gross[i] != null ? <>{r.gross[i]}<br /><span className="text-[9px]">{r.net[i]}</span>{r.recheck?.[i] && <><br /><span className="text-[9px]">ซ้ำ {r.recheck[i].gross}/{r.recheck[i].net}</span></>}</> : ''}</td>
                   ))}
                   {FG_PACK.map(([k]) => <td key={k} className={`${td} ${r.pack[k] ? '' : 'text-red-700 font-bold'}`}>{mark(r.pack[k])}</td>)}
                   <td className={td}>{r.store_area === 'CHILL' ? 'Chill ' : ''}{r.store_temp ?? ''}</td>
@@ -91,7 +91,7 @@ export default function FGCheckReportPage() {
               <b>ไม่ผ่าน / หมายเหตุ:</b> {rows.filter((r) => r.failed.length || r.note).map((r) => `${r.product_name || r.product_code} ${r.batch_no}: ${[...r.failed, r.note].filter(Boolean).join(', ')}`).join(' · ')}
             </div>
           )}
-          <div className="mt-1 text-[9px] text-gray-700">น้ำหนักสุทธิ = น้ำหนักรวม − น้ำหนักกระปุกตามขนาดบรรจุ · เกณฑ์: น้ำหนักสุทธิไม่ต่ำกว่าที่ระบุบนฉลาก · ✓ = ผ่าน ✗ = ไม่ผ่าน</div>
+          <div className="mt-1 text-[9px] text-gray-700">น้ำหนักสุทธิ = น้ำหนักรวม − น้ำหนักกระปุกตามขนาดบรรจุ · เกณฑ์: น้ำหนักสุทธิไม่ต่ำกว่าที่ระบุบนฉลาก ต่ำกว่าให้ชั่งซ้ำ ผลชั่งซ้ำเป็นตัวตัดสิน (ซ้ำ = รวม/สุทธิ) · ✓ = ผ่าน ✗ = ไม่ผ่าน</div>
           <div className="mt-8 flex justify-around text-center avoid-break">
             <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้บันทึก ({[...new Set(rows.map((r) => r.inspector))].join(', ')})<br />(เจ้าหน้าที่ฝ่ายควบคุมคุณภาพ)</div>
             <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้รับทราบ<br />(หัวหน้าฝ่ายควบคุมคุณภาพ)</div>
