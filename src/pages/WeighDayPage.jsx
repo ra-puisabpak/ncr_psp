@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import A4Sheet from '../components/A4Sheet'
+import Nw from '../components/Nw'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { weighApi } from '../api/d1Api'
@@ -47,7 +48,7 @@ export default function WeighDayPage() {
                 <tr key={r.wr_id} className="avoid-break">
                   {(i === 0 || rows[i - 1].product_code !== r.product_code) && (
                     <td className={`${td} align-top`} rowSpan={rows.filter((x) => x.product_code === r.product_code).length}>
-                      <Link to={`/qa/weigh/${r.wr_id}/print`} className="hover:underline print:no-underline">{r.product_name}</Link><br /><span className="text-[9px] text-gray-600">{r.product_code}</span>
+                      <Link to={`/qa/weigh/${r.wr_id}/print`} className="hover:underline print:no-underline"><Nw>{r.product_name}</Nw></Link><br /><span className="text-[9px] text-gray-600">{r.product_code}</span>
                     </td>
                   )}
                   <td className={`${td} text-center font-semibold`}>{r.batch_no}</td>

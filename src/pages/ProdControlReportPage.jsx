@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import A4Sheet from '../components/A4Sheet'
+import Nw from '../components/Nw'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { prodctlApi, oilApi, qaApi } from '../api/d1Api'
@@ -87,8 +88,8 @@ export default function ProdControlReportPage() {
                 ].filter(Boolean)
                 return (
                   <tr key={r.pc_id} className="avoid-break">
-                    <td className={`${td} text-left`}>{r.product_name || r.product_code}{d.fry.chili.done ? <span className="text-gray-600"> ({d.fry.chili.kind})</span> : null}</td>
-                    <td className={td}>{r.batch_no}</td>
+                    <td className={`${td} text-left`}><Nw>{r.product_name || r.product_code}</Nw>{d.fry.chili.done ? <span className="text-gray-600"> ({d.fry.chili.kind})</span> : null}</td>
+                    <td className={`${td} whitespace-nowrap`}>{r.batch_no}</td>
                     {[...fry(d.fry.garlic), ...fry(d.fry.shallot), ...fry(d.fry.chili)].map((x, i) => <td key={i} className={`${td} ${i % 4 === 3 && shortFry(r, ['garlic', 'shallot', 'chili'][Math.floor(i / 4)]) ? 'text-red-700 font-bold' : ''}`}>{x}</td>)}
                     <td className={td}>{v(d.grind.count)}</td><td className={td}>{v(d.grind.w_after)}</td>
                     <td className={`${td} ${bad(r, 'CCP-01') ? 'text-red-700 font-bold' : ''}`}>{heatT}</td><td className={`${td} ${bad(r, 'CCP-01') ? 'text-red-700 font-bold' : ''}`}>{heatM}</td>

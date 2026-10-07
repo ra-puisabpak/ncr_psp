@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import A4Sheet from '../components/A4Sheet'
+import Nw from '../components/Nw'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { fgCheckApi } from '../api/d1Api'
@@ -65,8 +66,8 @@ export default function FGCheckReportPage() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.fc_id} className="avoid-break">
-                  <td className={`${td} text-left`}>{r.product_name || r.product_code}</td>
-                  <td className={td}>{r.batch_no}</td>
+                  <td className={`${td} text-left`}><Nw>{r.product_name || r.product_code}</Nw></td>
+                  <td className={`${td} whitespace-nowrap`}>{r.batch_no}</td>
                   <td className={td}>{r.label_net_g}</td>
                   {FG_SENSORY.map(([k]) => <td key={k} className={`${td} ${r.sensory[k] ? '' : 'text-red-700 font-bold'}`}>{mark(r.sensory[k])}</td>)}
                   <td className={td}>{r.aw ?? '-'}</td><td className={td}>{r.aw_temp ?? '-'}</td><td className={td}>{r.ph ?? '-'}</td>
