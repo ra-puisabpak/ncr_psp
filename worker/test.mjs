@@ -666,7 +666,7 @@ check('readings are listed per unit with the limits in force', r.status === 200 
 // ----- formulas and PD_03 weighing -----
 r = await call('GET', '/api/formulas', { token: qc });
 const fg4 = r.j.find((f) => f.product_code === 'FG0004');
-check('formulas start from the latest PD_03 weighings, all draft', r.status === 200 && r.j.length === 10 && r.j.every((f) => f.status === 'DRAFT' && f.tolerance_pct === null)
+check('formulas start from the latest PD_03 weighings, all draft', r.status === 200 && r.j.length === 11 && r.j.every((f) => f.status === 'DRAFT' && f.tolerance_pct === null)
   && fg4.items.find((i) => i.name === 'หมูบด').target === 46.51 && /เจือปน/.test(fg4.items.find((i) => i.name === 'โปแตสเซียม').note), r.j.map((f) => f.product_code));
 r = await call('PATCH', '/api/formulas/FG0004', { token: qa, body: { status: 'APPROVED' } });
 check('a formula cannot be approved without a weighing tolerance', r.status === 422, r);
