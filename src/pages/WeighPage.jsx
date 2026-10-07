@@ -34,7 +34,7 @@ export default function WeighPage() {
   // Who weighed (an employee from the list) signs; the logged-in account records.
   const [employees, setEmployees] = useState([])
   const [weigherId, setWeigherId] = useState('') // default for every line; a line may name its own
-  const [signatures, setSignatures] = useState({}) // weigher name → signature
+  const [signature, setSignature] = useState(null) // the recorder's (logged-in QC) signature
   const [sigKey, setSigKey] = useState(0)
   const empName = (id) => employees.find((e) => String(e.emp_id) === String(id))?.name || ''
   const lineWeigher = (l) => empName(l.weigherId || weigherId)
@@ -95,9 +95,9 @@ export default function WeighPage() {
     setSaving(true); setError(null)
     try {
       const res = await weighApi.save({ uid, product_code: code, ...head, sets, note, ...(sets > 1 ? { batches: batches.map((x) => x.trim()) } : {}),
-        signatures: weighers.map((n) => ({ name: n, emp_id: employees.find((e) => e.name === n)?.emp_id, data: signatures[n] })),
+        recorder_signature: signature,
         lines: lines.map((l) => ({ name: l.name, lot: l.lot, doc_no: l.doc_no, code: l.code, weigher: lineWeigher(l), weights: Array.from({ length: sets }, (_, s) => l.weights[s]) })) })
-      setSaved(res); setUid(newUid()); setCode(''); setLines([]); setNote(''); setSignatures({}); setSigKey((k) => k + 1)
+      setSaved(res); setUid(newUid()); setCode(''); setLines([]); setNote(''); setSignature(null); setSigKey((k) => k + 1)
       loadRecent(); window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e) { setError(e.message) }
     finally { setSaving(false) }
@@ -200,19 +200,14 @@ export default function WeighPage() {
               </div>
             )}
             <label className="text-xs text-gray-600 block">หมายเหตุ{devs.length ? ' / ผลการประเมิน *' : ''}<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} className={input} /></label>
-            <div className="border border-gray-200 rounded-lg p-2.5 space-y-2">
-              <div className="text-xs text-gray-600">ลายเซ็นผู้ชั่ง * {weighers.length === 0 ? '— เลือกผู้ชั่งก่อน' : `(${weighers.length} คน · ลงคนละครั้ง)`}</div>
-              <div className="grid sm:grid-cols-2 gap-3">
-                {weighers.map((n) => (
-                  <div key={n}><div className="text-xs font-semibold text-gray-700 mb-1">{n} <span className="font-normal text-gray-500">· {lines.filter((l) => lineWeigher(l) === n).length} รายการ</span></div>
-                    <SignaturePad onChange={(d) => setSignatures((x) => ({ ...x, [n]: d }))} resetKey={sigKey} /></div>
-                ))}
-              </div>
-              <div className="text-xs text-gray-500">ผู้บันทึก (QC): <b>{user?.display_name}</b></div>
+            <div className="border border-gray-200 rounded-lg p-2.5 space-y-2 sm:max-w-sm">
+              <div className="text-xs text-gray-600">ลายเซ็นผู้บันทึก (QC) * — <b>{user?.display_name}</b></div>
+              <SignaturePad onChange={setSignature} resetKey={sigKey} />
+              {weighers.length > 0 && <div className="text-[11px] text-gray-500">ผู้ชั่ง: {weighers.join(', ')} (ระบุชื่อ ไม่ต้องเซ็น)</div>}
             </div>
             {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5">{error}</div>}
             {canWrite(user) ? (
-              <button onClick={save} disabled={saving || !complete || lines.some((l) => !lineWeigher(l)) || weighers.some((n) => !signatures[n]) || batches.some((x) => !x.trim()) || new Set(batches.map((x) => x.trim())).size !== batches.length || (devs.length > 0 && (!canAssess || !note.trim()))}
+              <button onClick={save} disabled={saving || !complete || lines.some((l) => !lineWeigher(l)) || !signature || batches.some((x) => !x.trim()) || new Set(batches.map((x) => x.trim())).size !== batches.length || (devs.length > 0 && (!canAssess || !note.trim()))}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold disabled:opacity-40">
                 <Save className="w-5 h-5" />{saving ? 'กำลังบันทึก…' : devs.length && !canAssess ? 'ต้องให้หัวหน้างาน / QA บันทึก' : 'บันทึก'}
               </button>

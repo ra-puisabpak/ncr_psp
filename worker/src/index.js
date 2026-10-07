@@ -1826,17 +1826,14 @@ export default {
         if (!isDate(b.prod_date) || b.prod_date > today()) fail(400, 'กรุณาระบุวันที่ผลิต (ไม่เป็นวันในอนาคต)');
         const sets = parseInt(b.sets, 10);
         if (!(sets >= 1 && sets <= 12)) fail(400, 'จำนวนชุดต้องเป็น 1–12');
-        // Who weighed each line (picked from the employee list) signs once; the account that saves is the recorder.
-        // An older app sends one weigher_name + signature for the whole form.
+        // Who weighed each line is picked from the employee list (named, not signing); the account that saves is the
+        // recorder and signs once. An older app sends one weigher_name for the form and its signature(s): the first signature is used.
         const defaultWeigher = txt(b.weigher_name, 80);
-        const sigsIn = Array.isArray(b.signatures) ? b.signatures.slice(0, 20)
-          : defaultWeigher && typeof b.signature === 'string' ? [{ name: defaultWeigher, emp_id: b.emp_id, data: b.signature }] : [];
-        const signatures = new Map();
-        for (const x of sigsIn) {
-          const name = txt(x?.name, 80);
-          if (!name || typeof x.data !== 'string' || !x.data.startsWith('data:')) continue;
-          signatures.set(name, { name, emp_id: Number.isInteger(x.emp_id) ? x.emp_id : null, ...decodePhoto({ content_type: (/^data:([^;,]+)/.exec(x.data) || [])[1], data: x.data }) });
-        }
+        const rawSig = typeof b.recorder_signature === 'string' ? b.recorder_signature
+          : Array.isArray(b.signatures) && typeof b.signatures[0]?.data === 'string' ? b.signatures[0].data
+          : typeof b.signature === 'string' ? b.signature : '';
+        if (!rawSig.startsWith('data:')) fail(400, 'กรุณาให้ผู้บันทึกลงลายเซ็น');
+        const sig = decodePhoto({ content_type: (/^data:([^;,]+)/.exec(rawSig) || [])[1], data: rawSig });
         // Each set gets its own batch number. A form without `batches` (an older app) keeps all sets under batch_no.
         const split = sets > 1 && Array.isArray(b.batches);
         const batches = split ? b.batches.slice(0, sets).map(cleanBatch) : [cleanBatch(b.batch_no)];
@@ -1855,7 +1852,6 @@ export default {
           const lot = String(l?.lot || '').trim().slice(0, 60);
           const weigher = txt(l?.weigher, 80) || defaultWeigher;
           if (!weigher) fail(400, `กรุณาเลือกชื่อผู้ชั่งของ ${name}`);
-          if (!signatures.has(weigher)) fail(400, `กรุณาให้ ${weigher} (ผู้ชั่ง) ลงลายเซ็น`);
           const line = { name, target, lot, weigher, doc_no: String(l?.doc_no || '').slice(0, 40), code: String(l?.code || '').slice(0, 40), weights: w };
           if (extra) line.extra = true;
           return line;
@@ -1901,8 +1897,9 @@ export default {
               txt(b.scale_id, 40), JSON.stringify(lines.map((l) => ({ ...l, weights: l.weights.slice(pt.from, pt.to) }))), pt.deviations.length ? JSON.stringify(pt.deviations) : null,
               pt.result, note, pt.result === 'DEVIATION' ? user.display_name : null, user.display_name, user.username, nowIso())),
               ...parts.map((pt) => DB.prepare('INSERT INTO weigh_signs (wr_id,weigher_name,emp_id,sig_type,sig_data,signed_at) VALUES (?,?,?,?,?,?)')
-                .bind(pt.wr_id, used.join(', '), signatures.get(used[0]).emp_id, null, null, nowIso())),
-              ...parts.flatMap((pt) => used.map((n) => { const x = signatures.get(n); return DB.prepare('INSERT INTO weigh_signatures (wr_id,weigher_name,emp_id,sig_type,sig_data,signed_at) VALUES (?,?,?,?,?,?)').bind(pt.wr_id, n, x.emp_id, x.type, x.b64, nowIso()); }))]);
+                .bind(pt.wr_id, used.join(', '), null, null, null, nowIso())),
+              // the recorder's signature (name = the recorder's display name)
+              ...parts.map((pt) => DB.prepare('INSERT INTO weigh_signatures (wr_id,weigher_name,emp_id,sig_type,sig_data,signed_at) VALUES (?,?,?,?,?,?)').bind(pt.wr_id, user.display_name, null, sig.type, sig.b64, nowIso()))]);
           } catch (e) {
             if (/weigh_records\.product_code/.test(e.message)) fail(409, 'Batch นี้มีบันทึกการชั่งแล้ว');
             if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
@@ -1913,7 +1910,7 @@ export default {
             throw e;
           }
           for (const pt of parts) {
-            await audit(DB, user.username, 'user', 'create', 'weigh_record', pt.wr_id, { weighers: used, product_code: f.product_code, batch_no: pt.batch, sets: pt.to - pt.from, result: pt.result, lots: lines.map((l) => l.lot), ...(split ? { split_from: uid, set_no: pt.from + 1, of_sets: sets } : {}) });
+            await audit(DB, user.username, 'user', 'create', 'weigh_record', pt.wr_id, { weighers: used, signed_by: user.display_name, product_code: f.product_code, batch_no: pt.batch, sets: pt.to - pt.from, result: pt.result, lots: lines.map((l) => l.lot), ...(split ? { split_from: uid, set_no: pt.from + 1, of_sets: sets } : {}) });
           }
           return reply(parts.map((pt) => ({ wr_id: pt.wr_id, batch_no: pt.batch, result: pt.result })), parts.flatMap((pt) => pt.deviations), 201);
         }
