@@ -527,6 +527,10 @@ INSERT OR IGNORE INTO formulas (product_code,product_name,version,status,toleran
 ('FG0009','พริกผัดน้ำมันมะกอก สูตรเผ็ด',1,'DRAFT',NULL,'[{"name": "หอมแดง", "target": 55.01}, {"name": "กระเทียม", "target": 20.35}, {"name": "พริกแห้งไม่มีก้าน", "target": 6.0}, {"name": "พริกแห้งมีก้าน", "target": 1.0}, {"name": "เกลือ", "target": 1.6}, {"name": "ชูรส", "target": 1.6, "note": "ยืนยันว่าอยู่ในสูตรที่ขึ้นทะเบียนและฉลาก"}, {"name": "น้ำตาลหล่อ", "target": 0.7}, {"name": "น้ำมันปรุง", "target": 16.0}]','ใบชั่ง PD_03 วันที่ 2/10/2026 (2 ชุด เฉลี่ยต่อชุด) — น้ำหนักที่ชั่งจริง ยังไม่ใช่สูตรที่อนุมัติ','system',datetime('now')),
 ('FG0010','พริกผัดน้ำมันงา',1,'DRAFT',NULL,'[{"name": "หอมแดง", "target": 55.01}, {"name": "กระเทียม", "target": 20.58}, {"name": "พริกแห้ง", "target": 1.2}, {"name": "งาคั่ว", "target": 1.5}, {"name": "เกลือ", "target": 0.7}, {"name": "ชูรส", "target": 0.7, "note": "ยืนยันว่าอยู่ในสูตรที่ขึ้นทะเบียนและฉลาก"}, {"name": "น้ำตาลหล่อ", "target": 0.4}, {"name": "น้ำมันหอมเจียว", "target": 8.0}, {"name": "น้ำมันงา", "target": 6.0}]','ใบชั่ง PD_03 วันที่ 25/09/2026 (1 ชุด เฉลี่ยต่อชุด) — น้ำหนักที่ชั่งจริง ยังไม่ใช่สูตรที่อนุมัติ','system',datetime('now'));
 
+-- Roasted ground chili: a single ingredient, 100% (100 kg per set).
+INSERT OR IGNORE INTO formulas (product_code,product_name,version,status,tolerance_pct,items,source,updated_by,updated_at) VALUES
+('FG0011','พริกคั่วป่น 100%',1,'DRAFT',NULL,'[{"name": "พริกแห้ง (เด็ดขั้ว)", "target": 100}]','สูตร 100% (QA Manager)','system','2026-10-07T00:00:00Z');
+
 -- One weighing record (PD_03) of one production batch: every line with its raw-material lot and the weight of each set.
 CREATE TABLE IF NOT EXISTS weigh_records (
   wr_id          TEXT PRIMARY KEY,
