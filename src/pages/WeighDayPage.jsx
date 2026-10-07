@@ -19,7 +19,6 @@ export default function WeighDayPage() {
   useEffect(() => { setRows(null); weighApi.list({ from: date, to: date }).then((l) => setRows([...l].sort((a, b) => a.product_code.localeCompare(b.product_code) || a.wr_id.localeCompare(b.wr_id)))).catch((e) => setError(e.message)) }, [date])
   const products = [...new Set((rows || []).map((r) => r.product_code))]
   const dev = (rows || []).filter((r) => r.result === 'DEVIATION').length
-  const noLot = (r) => r.lines.filter((l) => !l.lot).length
 
   return (
     <div className="min-h-screen bg-gray-200 print:min-h-0 print:bg-white">
@@ -46,7 +45,7 @@ export default function WeighDayPage() {
           <table className="w-full border-collapse">
             <thead className="bg-violet-50 text-center">
               <tr><th className={td}>ผลิตภัณฑ์</th><th className={td}>Batch No.</th><th className={td}>เลขที่บันทึก</th><th className={td}>ชุด</th><th className={td}>รายการ</th>
-                <th className={td}>น้ำหนักรวม (กก.)</th><th className={td}>ไม่มี LOT</th><th className={td}>ผู้ชั่ง</th><th className={td}>ผู้บันทึก</th><th className={td}>ผล</th><th className={td}>นอกเกณฑ์ / หมายเหตุ</th></tr>
+                <th className={td}>น้ำหนักรวม (กก.)</th><th className={td}>ผู้บันทึก</th><th className={td}>ผล</th><th className={td}>นอกเกณฑ์ / หมายเหตุ</th></tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
@@ -61,16 +60,14 @@ export default function WeighDayPage() {
                   <td className={`${td} text-center`}>{r.sets}</td>
                   <td className={`${td} text-center`}>{r.lines.length}</td>
                   <td className={`${td} text-right`}>{kg(total(r))}</td>
-                  <td className={`${td} text-center ${noLot(r) ? 'text-amber-700' : ''}`}>{noLot(r) || '-'}</td>
-                  <td className={td}>{r.weigher_name || '-'}{r.has_sig ? ' ✍' : ''}</td><td className={td}>{r.weigher}</td>
+                  <td className={td}>{r.weigher}</td>
                   <td className={`${td} text-center ${r.result === 'PASS' ? '' : 'font-bold text-amber-800'}`}>{r.result === 'PASS' ? 'ตามสูตร' : 'นอกเกณฑ์'}</td>
                   <td className={td}>{[...(r.deviations || []).map((d) => d.text), r.note].filter(Boolean).join(' · ')}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div className="mt-10 flex justify-around text-center avoid-break">
-            <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้สรุป<br />(เจ้าหน้าที่ฝ่ายผลิต)</div>
+          <div className="mt-10 flex justify-end text-center avoid-break">
             <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้รับทราบ<br />(หัวหน้าฝ่ายผลิต / QA)</div>
           </div>
         </div>
