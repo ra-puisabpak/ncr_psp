@@ -1632,6 +1632,33 @@ function renderDaily(){
   </div>`;
 }
 function printDaily(){const d=document.getElementById('hd-date').value||todayStr();goRep();document.getElementById('rp-date').value=d;setRep('day');}
+// ── รูปถ่ายวัตถุดิบของใบรับ: ชิปจำนวนรูป + ภาพย่อ (หน้าแรก) กดเพื่อดูภาพเต็ม ──
+function photoCount(r){return(r.mats||r.materials||[]).reduce((n,m)=>n+((m.photo1||m.hasPhoto1)?1:0)+((m.photo2||m.hasPhoto2)?1:0),0);}
+function photoChip(r,thumbs){
+  const n=photoCount(r);if(!n)return'';
+  return `<div class="pchip" onclick="event.stopPropagation();viewPhotos('${escH(r.docNo)}')" style="display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer"><span class="pill pill-hold" style="background:#e6f4f1;color:#0d7a5f">&#x1F4F7; ${n} รูป</span>${thumbs?`<span class="pth" data-doc="${escH(r.docNo)}" style="display:flex;gap:4px"></span>`:''}<span style="font-size:11px;color:var(--gray3)">กดดูรูป</span></div>`;
+}
+async function fillThumbs(){
+  for(const el of document.querySelectorAll('#rl .pth')){
+    const rec=records.find(x=>x.docNo===el.dataset.doc);if(!rec)continue;
+    try{await ensurePhotos(rec);}catch(e){continue;}
+    const imgs=(rec.mats||rec.materials||[]).flatMap(m=>[m.photo1,m.photo2]).filter(Boolean).slice(0,4);
+    el.innerHTML=imgs.map(u=>`<img src="${u}" style="width:34px;height:34px;object-fit:cover;border-radius:6px;border:1px solid var(--border)">`).join('');
+  }
+}
+async function viewPhotos(docNo){
+  const rec=records.find(x=>x.docNo===docNo);if(!rec)return;
+  let ov=document.getElementById('photo-ov');
+  if(!ov){ov=document.createElement('div');ov.id='photo-ov';ov.style.cssText='position:fixed;inset:0;background:rgba(10,20,30,.94);z-index:9999;overflow:auto;padding:14px;color:#fff';document.body.appendChild(ov);}
+  const head=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;position:sticky;top:0"><b style="font-family:monospace">${escH(docNo)}</b><button onclick="document.getElementById('photo-ov').remove()" style="background:#fff;color:#111;border:0;border-radius:8px;padding:8px 14px;font-weight:700;font-size:14px">ปิด ✕</button></div>`;
+  ov.innerHTML=head+'<div style="text-align:center;padding:40px">กำลังโหลดรูป…</div>';
+  try{await ensurePhotos(rec);}catch(e){ov.innerHTML=head+'<div style="text-align:center;padding:40px">โหลดรูปไม่ได้ ลองใหม่อีกครั้ง</div>';return;}
+  const mats=rec.mats||rec.materials||[];
+  const blocks=mats.map((m,i)=>{const ph=[m.photo1,m.photo2].filter(Boolean);if(!ph.length)return'';
+    const nm=matName(m.code)||m.code;
+    return `<div style="margin-bottom:18px"><div style="font-weight:600;margin-bottom:6px">${i+1}. ${escH(nm)}${m.lot?` <span style="opacity:.7;font-weight:400">· Lot ${escH(m.lot)}</span>`:''}</div>${ph.map(u=>`<img src="${u}" onclick="this.style.maxHeight=this.style.maxHeight==='none'?'60vh':'none'" style="display:block;width:100%;max-height:60vh;object-fit:contain;background:#000;border-radius:10px;margin-bottom:8px;cursor:zoom-in">`).join('')}</div>`;}).join('');
+  ov.innerHTML=head+(blocks||'<div style="text-align:center;padding:40px">ไม่มีรูปถ่ายในใบรับนี้</div>')+'<div style="text-align:center;font-size:12px;opacity:.7">แตะรูปเพื่อขยาย / ย่อ</div>';
+}
 function renderHome(){
   renderDaily();
   const dl=document.getElementById('sup-list');if(dl)dl.innerHTML=supNames().map(n=>`<option value="${escH(n)}">`).join('');
@@ -1652,8 +1679,9 @@ function renderHome(){
     return `<div class="ri"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="rdoc">${r.docNo}${r.synced?'':isDemo()?' <span style="color:#8a5200">(ทดลอง)</span>':' <span style="color:#e8900a">(รอส่ง)</span>'}</span><span style="font-size:12px;color:var(--gray3)">${r.date}</span></div>
       <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;margin-right:8px">${sp.name}</span>
         <div style="display:flex;gap:6px;flex-shrink:0">${hasNC?'<span class="pill pill-open">NC</span>':''}<span class="pill pill-${rc}">${RES_TXT[worstRes(mats)]}</span></div></div>
-      <div style="font-size:12px;color:var(--gray3);margin-top:4px">${mats.length} รายการ — ${r.inspector}</div></div>`;
+      <div style="font-size:12px;color:var(--gray3);margin-top:4px">${mats.length} รายการ — ${r.inspector}</div>${photoChip(r,true)}</div>`;
   }).join('');
+  fillThumbs();
 }
 function renderHist(){
   const q=(document.getElementById('h-search').value||'').toLowerCase();
@@ -1665,7 +1693,8 @@ function renderHist(){
     const mats=r.mats||r.materials||[];const aP=mats.every(m=>m.result==='PASS');const rc=aP?'pass':mats.some(m=>m.result==='REJECT')?'fail':'hold';
     return `<div class="hi"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="rdoc">${r.docNo}${r.synced?'':isDemo()?' <span style="color:#8a5200">(ทดลอง)</span>':' <span style="color:#e8900a">(รอส่ง)</span>'}</span><span style="font-size:12px;color:var(--gray3)">${r.date} ${r.time||''}</span></div>
       <div style="font-size:14px;font-weight:600;margin-bottom:6px">${sp.name}</div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      ${photoChip(r,false)}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
         <span style="font-size:12px;color:var(--gray3)">&#x1F321; ${r.carTemp!=null?r.carTemp+'°C':'—'}</span>
         <span style="font-size:12px;color:var(--gray3)">&#x1F4E6; ${mats.length} รายการ</span>
         <span style="font-size:12px;color:var(--gray3)">&#x1F464; ${r.inspector}</span>
