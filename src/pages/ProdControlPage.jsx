@@ -56,6 +56,7 @@ export default function ProdControlPage() {
   const cpOf = (id) => cps.find((x) => x.cp_id === id)
   const groupA = product && applies('CCP-01')
   const groupB = product && applies('CCP-02')
+  const packCp = product && applies('OPRP-05') // packing / capping checks follow OPRP-05 itself, whichever products QA has put under it
   const recorded = new Set(rows.map((r) => `${r.product_code}|${r.batch_no}`))
   const open = weighed.filter((w) => !recorded.has(`${w.product_code}|${w.batch_no}`))
   const setFry = (k, field, v) => setF((x) => ({ ...x, fry: { ...x.fry, [k]: { ...x.fry[k], [field]: v } } }))
@@ -76,8 +77,8 @@ export default function ProdControlPage() {
     if (groupA) {
       if (readings.some((v) => v < (lim('CCP-01', 'temp_min').min ?? 85))) out.push(`CCP-01: อุณหภูมิต่ำกว่า ${lim('CCP-01', 'temp_min').min ?? 85}°C`)
       if (hold !== null && hold < (lim('CCP-01', 'hold_min').min ?? 120)) out.push(`CCP-01: คงอุณหภูมิ ${hold} นาที (เกณฑ์ ≥ ${lim('CCP-01', 'hold_min').min ?? 120})`)
-      if (above(f.cool.fill_temp, 'OPRP-05', 'fill_temp')) out.push(`OPRP-05: บรรจุที่ ${f.cool.fill_temp}°C (ต้องต่ำกว่า 60°C)`)
     }
+    if (packCp && above(f.cool.fill_temp, 'OPRP-05', 'fill_temp')) out.push(`OPRP-05: บรรจุที่ ${f.cool.fill_temp}°C (ต้องต่ำกว่า 60°C)`)
     if (groupB) {
       if (f.fry.garlic.done && below(f.fry.garlic.min, 'CCP-02', 'garlic_min')) out.push(`CCP-02: เจียวกระเทียม ${f.fry.garlic.min} นาที (เกณฑ์ ≥ ${lim('CCP-02', 'garlic_min').min})`)
       if (f.fry.shallot.done && below(f.fry.shallot.min, 'CCP-02', 'shallot_min')) out.push(`CCP-02: เจียวหอม ${f.fry.shallot.min} นาที (เกณฑ์ ≥ ${lim('CCP-02', 'shallot_min').min})`)
@@ -85,7 +86,7 @@ export default function ProdControlPage() {
     }
     if (f.cool.foreign_ok === false) out.push('พบสิ่งปลอมปน')
     return out
-  }, [f, groupA, groupB, cps]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [f, groupA, groupB, packCp, cps]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {
     setSaving(true); setError(null)
@@ -93,7 +94,7 @@ export default function ProdControlPage() {
       const res = await prodctlApi.save({ uid, product_code: product, product_name: PRODUCTS.find((p) => p.code === product)?.label || '', prod_date: date, batch_no: batch, oil_type: oil,
         ...f, ccp1: groupA ? f.ccp1 : null, fry_thermo_ok: groupB ? f.fry_thermo_ok : null,
         // Fields of a section hidden for this product are never sent, even if typed before switching product.
-        cool: groupA ? f.cool : { temp: f.cool.temp, min: f.cool.min, foreign_ok: f.cool.foreign_ok }, note })
+        cool: packCp ? f.cool : { temp: f.cool.temp, min: f.cool.min, foreign_ok: f.cool.foreign_ok }, note })
       setSaved(res); setUid(newUid()); setF(blankForm()); setNote(''); setProduct(''); setBatch('')
       loadDay(); window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e) { setError(e.message) }
@@ -215,13 +216,13 @@ export default function ProdControlPage() {
             </div>
           )}
 
-          <div className={`bg-white rounded-xl shadow p-4 space-y-2 ${groupA ? 'border-2 border-amber-200' : ''}`}>
-            <h2 className="text-sm font-bold text-gray-700">พักให้เย็น{groupA ? ' — OPRP-05' : ''}</h2>
+          <div className={`bg-white rounded-xl shadow p-4 space-y-2 ${packCp ? 'border-2 border-amber-200' : ''}`}>
+            <h2 className="text-sm font-bold text-gray-700">พักให้เย็น{packCp ? ' — OPRP-05' : ''}</h2>
             <div className="grid grid-cols-2 gap-2">
               <label className="text-[11px] text-gray-600">อุณหภูมิเมื่อพักเสร็จ (°C)<Num value={f.cool.temp} onChange={(v) => setSec('cool', 'temp', v)} /></label>
               <label className="text-[11px] text-gray-600">เวลาพัก (นาที)<Num value={f.cool.min} onChange={(v) => setSec('cool', 'min', v)} /></label>
             </div>
-            {groupA && (
+            {packCp && (
               <>
                 <div className="grid grid-cols-3 gap-2">
                   <label className="text-[11px] text-gray-600">อุณหภูมิขณะบรรจุ (°C) *<Num value={f.cool.fill_temp} onChange={(v) => setSec('cool', 'fill_temp', v)} bad={above(f.cool.fill_temp, 'OPRP-05', 'fill_temp')} /></label>
