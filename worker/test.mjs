@@ -620,6 +620,25 @@ r = await call('GET', '/api/trace?q=LOT-หมูบด', { token: qc });
 check('tracing a raw-material lot finds the batches that weighed it', r.status === 200 && r.j.weighings.length === 3 && r.j.weighings.some((w) => w.batch_no === 'B260922-02' && w.lots.some((l) => l.kg === 46.51)), r.j.weighings);
 r = await call('POST', '/api/weigh', { token: qc, body: wBody({ batch_no: 'B260922-09', lines: linesFor().map((l, i) => (i ? l : { ...l, lot: '' })) }) });
 check('a line may leave its raw-material lot blank', r.status === 201 && r.j.result === 'PASS', r);
+// Two sets in one form: each set is its own batch
+const twoSets = (o = {}, w2 = {}) => wBody({ prod_date: '2026-09-24', batch_no: 'B260924-01', sets: 2, batches: ['B260924-01', 'B260924-02'],
+  lines: fgItems.map((it) => ({ name: it.name, lot: `LOT-${it.name}`, weights: [it.target, w2[it.name] ?? it.target] })), ...o });
+r = await call('POST', '/api/weigh', { token: qc, body: twoSets({ batches: ['B260924-01', 'B260924-01'] }) });
+check('each set needs its own batch number', r.status === 400, r);
+r = await call('POST', '/api/weigh', { token: qc, body: twoSets({ batches: ['B260924-01'] }) });
+check('every set needs a batch number', r.status === 400, r);
+const split = twoSets();
+r = await call('POST', '/api/weigh', { token: qc, body: split });
+check('two sets are saved as two batches', r.status === 201 && r.j.records.length === 2 && r.j.records[0].wr_id === 'PD-260924-001' && r.j.records[1].wr_id === 'PD-260924-002'
+  && r.j.records.map((x) => x.batch_no).join() === 'B260924-01,B260924-02', r.j);
+r = await call('POST', '/api/weigh', { token: qc, body: split });
+check('saving the same form again returns both batches', r.status === 200 && r.j.records.length === 2, r.j);
+r = await call('GET', '/api/weigh?product_code=FG0004&batch_no=B260924-02', { token: qc });
+check('the second set is its own one-set batch with its own weights and lots', r.j.length === 1 && r.j[0].sets === 1 && r.j[0].lines.every((l) => l.weights.length === 1 && l.lot), r.j);
+r = await call('POST', '/api/weigh', { token: qa, body: twoSets({ batches: ['B260924-03', 'B260924-04'], note: 'ประเมินแล้ว' }, { หมูบด: 46.51 }) });
+check('a deviation in set 2 marks only the second batch', r.status === 201 && r.j.records[0].result === 'PASS' && r.j.records[1].result === 'DEVIATION' && !/ชุดที่/.test(r.j.deviations[0].text), r.j);
+r = await call('POST', '/api/weigh', { token: qc, body: twoSets({ uid: 'wr-uid-dupcheck01', batches: ['B260924-05', 'B260924-02'] }) });
+check('a set whose batch is already weighed is refused', r.status === 409 && /B260924-02/.test(r.j.error), r);
 
 // ----- QC_08 production control → CCP-01 / CCP-02 / OPRP-05 records -----
 const fryOff = { garlic: { done: false }, shallot: { done: false }, chili: { done: false } };
