@@ -433,7 +433,7 @@ check('a retired control point takes no records', r.status === 409, r);
 r = await call('GET', '/api/audit?entity_id=CCP-01', { token: qa });
 check('control point changes are in the audit trail', r.status === 200 && r.j.some((a) => a.action === 'approve'), r.j);
 // ----- Smart QA: finished-goods release and traceability -----
-const gateOf = (p, b) => call('GET', `/api/release/check?product_code=${p}&batch_no=${encodeURIComponent(b)}`, { token: qc });
+const gateOf = (p, b) => call('GET', `/api/release/check?product_code=${p}&batch_no=${encodeURIComponent(b)}`, { token: qa });
 r = await gateOf('FG0002', 'B260915-01');
 const st = (g, id) => g.requirements.find((x) => x.cp_id === id)?.state;
 check('the gate lists the per-batch points for the product and what blocks release', r.status === 200 && !r.j.releasable
@@ -478,7 +478,9 @@ await call('PATCH', `/api/ncr/${failRec.ncr_id}`, { token: qa, body: { dispositi
 r = await call('PATCH', `/api/ncr/${failRec.ncr_id}`, { token: qa, body: { status: 'Closed' } });
 r = await gateOf('FG0002', 'B260915-01');
 check('a failed CCP whose NCR QA closed with "release" counts as a concession', r.status === 200 && st(r.j, 'CCP-01') === 'CONCESSION' && r.j.releasable, r.j);
-r = await call('GET', '/api/release?decision=RELEASE', { token: qc });
+r = await call('GET', '/api/release', { token: qc });
+check('only the QA Manager sees FG Release', r.status === 403, r);
+r = await call('GET', '/api/release?decision=RELEASE', { token: qa });
 check('releases are listed with the lots and the gate', r.status === 200 && r.j.length === 1 && r.j[0].rm_lots[0].lot === 'LOT-SHRIMP-77' && r.j[0].gate.requirements.length === 2 && r.j[0].decided_by === 'QA Manager', r.j);
 r = await call('GET', '/api/trace?q=SHRIMP-77', { token: qc });
 check('tracing a raw-material lot finds the batches, their records and NCRs', r.status === 200 && r.j.releases.length === 2
@@ -727,7 +729,7 @@ r = await call('POST', '/api/prodctl', { token: qc, body: pcB({ batch_no: 'B2609
 check('foreign matter opens an NCR and fails the batch', r.status === 201 && r.j.result === 'FAIL' && /^NCR-/.test(r.j.ncr_id), r.j);
 r = await call('GET', '/api/prodctl?from=2026-09-23&to=2026-09-23', { token: qc });
 check('QC_08 records are listed with their derived checks', r.status === 200 && r.j.length === 5 && r.j.every((x) => x.inspector === 'QC One' && x.result !== 'PENDING'), r.j.map((x) => [x.pc_id, x.result]));
-r = await call('GET', '/api/release/check?product_code=FG0002&batch_no=B260923-01', { token: qc });
+r = await call('GET', '/api/release/check?product_code=FG0002&batch_no=B260923-01', { token: qa });
 check('FG Release sees the derived CCP records', r.status === 200 && r.j.requirements.find((x) => x.cp_id === 'CCP-01').state === 'PASS', r.j.requirements);
 
 // The schema runs at every deploy: running it again changes nothing people entered, and retires only untouched first-register entries.

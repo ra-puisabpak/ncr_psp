@@ -60,8 +60,8 @@ export default function App() {
           <Route path="/qa" element={<Private><QADashboardPage /></Private>} />
           <Route path="/qa/record/:cpId" element={<Private><QCRecordPage /></Private>} />
           <Route path="/qa/records" element={<Private><QCRecordsPage /></Private>} />
-          <Route path="/qa/control-points" element={<Private><ControlPointsPage /></Private>} />
-          <Route path="/qa/release" element={<Private><FGReleasePage /></Private>} />
+          <Route path="/qa/control-points" element={<Private role="QA_MANAGER"><ControlPointsPage /></Private>} />
+          <Route path="/qa/release" element={<Private role="QA_MANAGER"><FGReleasePage /></Private>} />
           <Route path="/qa/trace" element={<Private><TracePage /></Private>} />
           <Route path="/qa/hygiene" element={<Private><HygienePage /></Private>} />
           <Route path="/qa/hygiene/report" element={<Private><HygieneReportPage /></Private>} />

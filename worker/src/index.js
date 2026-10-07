@@ -15,6 +15,8 @@ const LOCK_MINUTES = 15;
 const ROLES = ['QA_MANAGER', 'FSTL', 'QC', 'SUPERVISOR', 'VIEWER'];
 const WRITERS = new Set(['QA_MANAGER', 'FSTL', 'QC', 'SUPERVISOR']);
 const QA = new Set(['QA_MANAGER', 'FSTL']);
+// Validation and release decisions: the QA Manager alone (control point register, FG Release).
+const QAM = new Set(['QA_MANAGER']);
 // Production-side checks (CCP/OPRP records, FM-QC-002, FM-QC-005, FM-QC-006) open NCRs only when
 // AUTO_NCR_PRODUCTION = "on". Off during the trial: a failed check is still recorded as FAIL. Receiving NCs are unaffected.
 let AUTO_NCR = false;
@@ -1305,7 +1307,7 @@ export default {
         return json(results.map(cpRow));
       }
       if (path === '/api/control-points' && method === 'POST') {
-        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่เพิ่มจุดควบคุมได้');
+        need(user, QAM, 'เฉพาะ QA Manager เท่านั้นที่เพิ่มจุดควบคุมได้');
         const b = await body();
         const id = String(b.cp_id || '').trim().toUpperCase();
         if (!/^[A-Z][A-Z0-9]{1,5}-[A-Z0-9-]{1,20}$/.test(id)) fail(400, 'รหัสจุดควบคุมต้องเป็นรูปแบบ CCP-03, OPRP-07 หรือ PRP-01');
@@ -1323,7 +1325,7 @@ export default {
       }
       const cpm = path.match(/^\/api\/control-points\/([A-Z][A-Z0-9]{1,5}-[A-Z0-9-]{1,20})$/);
       if (cpm && method === 'PATCH') {
-        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่แก้ไขจุดควบคุมได้');
+        need(user, QAM, 'เฉพาะ QA Manager เท่านั้นที่แก้ไขจุดควบคุมได้');
         const b = await body();
         const row = await DB.prepare('SELECT * FROM control_points WHERE cp_id=?').bind(cpm[1]).first();
         if (!row) fail(404, 'ไม่พบจุดควบคุม');
@@ -1410,6 +1412,7 @@ export default {
 
       // ===== PSP QUALITY APP: finished-goods release =====
       if (path === '/api/release/check' && method === 'GET') {
+        need(user, QAM, 'FG Release ใช้ได้เฉพาะ QA Manager');
         const product = String(url.searchParams.get('product_code') || '');
         if (!product) fail(400, 'กรุณาเลือกผลิตภัณฑ์');
         const batch = cleanBatch(url.searchParams.get('batch_no'));
@@ -1418,6 +1421,7 @@ export default {
         return json({ ...gate, history: results.map(relRow) });
       }
       if (path === '/api/release' && method === 'GET') {
+        need(user, QAM, 'FG Release ใช้ได้เฉพาะ QA Manager');
         const sp = url.searchParams, where = ['1=1'], p = [];
         if (sp.get('from')) { where.push('substr(created_at,1,10)>=?'); p.push(sp.get('from')); }
         if (sp.get('to')) { where.push('substr(created_at,1,10)<=?'); p.push(sp.get('to')); }
@@ -1428,7 +1432,7 @@ export default {
         return json(results.map(relRow));
       }
       if (path === '/api/release' && method === 'POST') {
-        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่ตัดสินการปล่อยสินค้าได้');
+        need(user, QAM, 'เฉพาะ QA Manager เท่านั้นที่ตัดสินการปล่อยสินค้าได้');
         const b = await body();
         const uid = recvUid(b.uid);
         const done = await DB.prepare('SELECT rel_id, decision FROM fg_releases WHERE uid=?').bind(uid).first();
@@ -1511,7 +1515,7 @@ export default {
         const { results: ncrs } = await DB.prepare(
           `SELECT ncr_id, issue_date, status, severity, disposition, source_type, lot_no, product_lot_no, material_name, nc_description FROM ncr_records
             WHERE lot_no LIKE ? OR product_lot_no LIKE ? OR product_lot_no IN (${ph}) ORDER BY ncr_id LIMIT 200`).bind(like, like, ...batches).all();
-        return json({ q, received, weighings, releases: rels.map(relRow), qc, ncrs: ncrs.map((n) => ({ ...n, nc_description: String(n.nc_description || '').slice(0, 200) })) });
+        return json({ q, received, weighings, releases: QAM.has(user.role) ? rels.map(relRow) : [], qc, ncrs: ncrs.map((n) => ({ ...n, nc_description: String(n.nc_description || '').slice(0, 200) })) });
       }
 
       // ===== PSP QUALITY APP: personal hygiene check before work =====
