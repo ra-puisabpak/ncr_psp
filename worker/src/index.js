@@ -1226,6 +1226,12 @@ export default {
             sig.hasSig = 1;
           }
           if (sig) sig.sigBase64 = null;
+          // The photo of the delivery vehicle (number plate) is one per record: kept beside the signature, slot 9.
+          if (typeof rest.carPhoto === 'string' && rest.carPhoto.startsWith('data:')) {
+            photos.push({ idx: 0, slot: 9, ph: decodePhoto({ content_type: (/^data:([^;,]+)/.exec(rest.carPhoto) || [])[1], data: rest.carPhoto }) });
+            rest.hasCarPhoto = 1;
+          }
+          rest.carPhoto = null;
           const data = JSON.stringify({ ...rest, sig, mats });
           if (data.length > 1500000) fail(413, 'ข้อมูลใบตรวจรับใหญ่เกินไป');
           // COND (accepted with conditions) is a deviation, so the record as a whole counts as not clean: it is filed under HOLD here.

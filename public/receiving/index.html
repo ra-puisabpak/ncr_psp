@@ -34,7 +34,7 @@ function newUid(){return (window.crypto&&crypto.randomUUID)?crypto.randomUUID():
 function saveLocal(){
   if(isDemo())return true;
   // ใบที่ส่งขึ้นฐานข้อมูลแล้วไม่ต้องเก็บรูปในเครื่อง (ดึงจากฐานข้อมูลเมื่อใช้) — ใบที่ยังไม่ส่งเก็บรูปไว้ด้วย
-  const pack=noPhoto=>JSON.stringify({records:records.map(r=>{const o={...r,mats:(r.mats||r.materials||[]).map(m=>(noPhoto||r.synced)?{...m,photo1:null,photo2:null}:m)};if(r.synced&&o.sig)o.sig={...o.sig,sigBase64:null};delete o.materials;return o;}),ncLogs});
+  const pack=noPhoto=>JSON.stringify({records:records.map(r=>{const o={...r,mats:(r.mats||r.materials||[]).map(m=>(noPhoto||r.synced)?{...m,photo1:null,photo2:null}:m)};if(noPhoto||r.synced)o.carPhoto=null;if(r.synced&&o.sig)o.sig={...o.sig,sigBase64:null};delete o.materials;return o;}),ncLogs});
   try{localStorage.setItem(LS_KEY,pack(false));return true;}
   catch(e){
     try{localStorage.setItem(LS_KEY,pack(true));showCloudStatus('⚠ พื้นที่เก็บเต็ม — บันทึกโดยไม่เก็บรูปถ่าย','warn');return true;}
@@ -73,6 +73,7 @@ async function _syncRun(){
       const res=await api('POST','/api/recv',{uid:rec.uid,record:o,ncs});
       rec.docNo=res.docNo;rec.synced=true;
       (rec.mats||[]).forEach(m=>{if(m.photo1)m.hasPhoto1=1;if(m.photo2)m.hasPhoto2=1;});
+      if(rec.carPhoto)rec.hasCarPhoto=1;
       if(rec.sig&&rec.sig.sigBase64)rec.sig.hasSig=1;
       ncs.forEach(n=>{const x=(res.ncs||[]).find(y=>y.uid===n.uid);if(x){n.id=x.id;if(/^NCR-/.test(x.id))n.ncrId=x.id;}n.docNo=res.docNo;n.synced=true;});
     }catch(e){err=e.message||'เชื่อมต่อไม่ได้';if(e.status!==400&&e.status!==413)break;}
@@ -110,9 +111,9 @@ async function pullAll(){
 async function ensurePhotos(rec){
   if(!rec||!rec.synced||isDemo())return;
   const mats=rec.mats||rec.materials||[];
-  if(!mats.some(m=>(m.hasPhoto1&&!m.photo1)||(m.hasPhoto2&&!m.photo2))&&!(rec.sig&&rec.sig.hasSig&&!rec.sig.sigBase64))return;
+  if(!mats.some(m=>(m.hasPhoto1&&!m.photo1)||(m.hasPhoto2&&!m.photo2))&&!(rec.sig&&rec.sig.hasSig&&!rec.sig.sigBase64)&&!(rec.hasCarPhoto&&!rec.carPhoto))return;
   const list=await api('GET','/api/recv/'+encodeURIComponent(rec.docNo)+'/photos');
-  list.forEach(p=>{if(p.slot===0){if(rec.sig)rec.sig.sigBase64=p.data;return;}const m=mats.find(x=>x.idx===p.idx);if(m)m['photo'+p.slot]=p.data;});
+  list.forEach(p=>{if(p.slot===9){rec.carPhoto=p.data;return;}if(p.slot===0){if(rec.sig)rec.sig.sigBase64=p.data;return;}const m=mats.find(x=>x.idx===p.idx);if(m)m['photo'+p.slot]=p.data;});
 }
 async function refreshAll(manual){
   if(!session){showLogin();return;}
@@ -530,6 +531,13 @@ textarea{resize:none;min-height:80px}
           <input type="number" id="f-ctemp" step="0.1" inputmode="decimal" placeholder="0.0" oninput="chkCT()">
           <div id="ct-st" style="margin-top:4px;font-size:12px;font-weight:600"></div></div>
       </div>
+      <div class="fg"><label>&#x1F4F7; รูปรถขนส่ง — ถ่ายให้เห็นป้ายทะเบียนชัดเจน</label>
+        <div class="photo-slot" id="car-ps" style="max-width:240px">
+          <img class="photo-preview" id="car-pp" style="display:none;height:150px;object-fit:contain;background:#eef0f2">
+          <label class="psl" id="car-pl" for="car-pi"><span class="psi">&#x1F4F7;</span><span class="pst">เลือกรูปหรือถ่ายภาพ</span><span class="pss">JPG, PNG</span></label>
+          <input type="file" accept="image/*" id="car-pi" style="display:none" onchange="setCarPhoto(this)">
+          <button class="photo-clear" id="car-pc" style="display:none" onclick="clrCarPhoto()">&#x2715;</button>
+        </div></div>
       <div class="fg"><label>PO / DO No. (เลขที่ใบสั่งซื้อ / ใบส่งของ)</label><input type="text" id="f-po" placeholder="เช่น PO-2569-0123 / DO-4567" autocomplete="off"></div>
       <div class="fg"><label>หมายเหตุ</label><textarea id="f-note" placeholder="หมายเหตุ..." rows="2"></textarea></div>
     </div>
@@ -1500,6 +1508,33 @@ function renderMats(){
     </div></div>`;
   }).join('');
 }
+let curCarPhoto=null;   // รูปรถขนส่ง (เห็นป้ายทะเบียน) — 1 รูปต่อใบตรวจรับ
+function setCarPhoto(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const sc=Math.min(1,900/Math.max(img.width,img.height));
+      const cv=document.createElement('canvas');cv.width=Math.round(img.width*sc);cv.height=Math.round(img.height*sc);
+      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+      curCarPhoto=cv.toDataURL('image/jpeg',0.7);
+      const p=document.getElementById('car-pp');p.src=curCarPhoto;p.style.display='block';
+      document.getElementById('car-ps').classList.add('has-photo');
+      document.getElementById('car-pc').style.display='flex';document.getElementById('car-pl').style.display='none';
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function clrCarPhoto(){
+  curCarPhoto=null;
+  const p=document.getElementById('car-pp');if(!p)return;
+  p.src='';p.style.display='none';
+  document.getElementById('car-ps').classList.remove('has-photo');
+  document.getElementById('car-pc').style.display='none';document.getElementById('car-pl').style.display='flex';
+  const i=document.getElementById('car-pi');if(i)i.value='';
+}
 function setPhoto(idx,slot,input){
   const file=input.files[0];if(!file)return;
   const reader=new FileReader();
@@ -1581,7 +1616,7 @@ function saveRecord(){
   const sigName=document.getElementById('sig-name').value||insp;
   const sigDt=document.getElementById('sig-dt').value||new Date().toLocaleString('th-TH');
   const rec={docNo,date,time:document.getElementById('f-time').value,supplier:sup,
-    carReg:document.getElementById('f-car').value,
+    carReg:document.getElementById('f-car').value,carPhoto:curCarPhoto,
     carTemp:document.getElementById('f-ctemp').value!==''?parseFloat(document.getElementById('f-ctemp').value):null,
     uid:newUid(),synced:false,inspector:insp,note:document.getElementById('f-note').value,poNo:document.getElementById('f-po').value.trim(),
     mats:curMats.map(m=>({...m,...(m.result==='COND'?{condBy:session.user.display_name}:{})})),materials:[],
@@ -1617,6 +1652,7 @@ function resetForm(){
   document.getElementById('f-docno').value=genDoc();
   ['f-sup','f-mtype','f-car','f-note','f-po'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('f-ctemp').value='';document.getElementById('ct-st').textContent='';
+  clrCarPhoto();
   curMats=[];matIdx=0;renderMats();goFP(1);clearSig();
 }
 function closeSaveModal(){document.getElementById('save-modal').classList.remove('open');}
@@ -1653,7 +1689,7 @@ function renderDaily(){
 }
 function printDaily(){const d=document.getElementById('hd-date').value||todayStr();goRep();document.getElementById('rp-date').value=d;setRep('day');}
 // ── รูปถ่ายวัตถุดิบของใบรับ: ชิปจำนวนรูป + ภาพย่อ (หน้าแรก) กดเพื่อดูภาพเต็ม ──
-function photoCount(r){return(r.mats||r.materials||[]).reduce((n,m)=>n+((m.photo1||m.hasPhoto1)?1:0)+((m.photo2||m.hasPhoto2)?1:0),0);}
+function photoCount(r){return(r.mats||r.materials||[]).reduce((n,m)=>n+((m.photo1||m.hasPhoto1)?1:0)+((m.photo2||m.hasPhoto2)?1:0),0)+((r.carPhoto||r.hasCarPhoto)?1:0);}
 function photoChip(r,thumbs){
   const n=photoCount(r);if(!n)return'';
   return `<div class="pchip" onclick="event.stopPropagation();viewPhotos('${escH(r.docNo)}')" style="display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer"><span class="pill pill-hold" style="background:#e6f4f1;color:#0d7a5f">&#x1F4F7; ${n} รูป</span>${thumbs?`<span class="pth" data-doc="${escH(r.docNo)}" style="display:flex;gap:4px"></span>`:''}<span style="font-size:11px;color:var(--gray3)">กดดูรูป</span></div>`;
@@ -1662,7 +1698,7 @@ async function fillThumbs(){
   for(const el of document.querySelectorAll('#rl .pth')){
     const rec=records.find(x=>x.docNo===el.dataset.doc);if(!rec)continue;
     try{await ensurePhotos(rec);}catch(e){continue;}
-    const imgs=(rec.mats||rec.materials||[]).flatMap(m=>[m.photo1,m.photo2]).filter(Boolean).slice(0,4);
+    const imgs=[rec.carPhoto,...(rec.mats||rec.materials||[]).flatMap(m=>[m.photo1,m.photo2])].filter(Boolean).slice(0,4);
     el.innerHTML=imgs.map(u=>`<img src="${u}" style="width:34px;height:34px;object-fit:cover;border-radius:6px;border:1px solid var(--border)">`).join('');
   }
 }
@@ -1674,7 +1710,8 @@ async function viewPhotos(docNo){
   ov.innerHTML=head+'<div style="text-align:center;padding:40px">กำลังโหลดรูป…</div>';
   try{await ensurePhotos(rec);}catch(e){ov.innerHTML=head+'<div style="text-align:center;padding:40px">โหลดรูปไม่ได้ ลองใหม่อีกครั้ง</div>';return;}
   const mats=rec.mats||rec.materials||[];
-  const blocks=mats.map((m,i)=>{const ph=[m.photo1,m.photo2].filter(Boolean);if(!ph.length)return'';
+  const carBlock=rec.carPhoto?`<div style="margin-bottom:18px"><div style="font-weight:600;margin-bottom:6px">รถขนส่ง${rec.carReg?' · ทะเบียน '+escH(rec.carReg):''}</div><img src="${rec.carPhoto}" onclick="this.style.maxHeight=this.style.maxHeight==='none'?'60vh':'none'" style="display:block;width:100%;max-height:60vh;object-fit:contain;background:#000;border-radius:10px;cursor:zoom-in"></div>`:'';
+  const blocks=carBlock+mats.map((m,i)=>{const ph=[m.photo1,m.photo2].filter(Boolean);if(!ph.length)return'';
     const nm=matName(m.code)||m.code;
     return `<div style="margin-bottom:18px"><div style="font-weight:600;margin-bottom:6px">${i+1}. ${escH(nm)}${m.lot?` <span style="opacity:.7;font-weight:400">· Lot ${escH(m.lot)}</span>`:''}</div>${ph.map(u=>`<img src="${u}" onclick="this.style.maxHeight=this.style.maxHeight==='none'?'60vh':'none'" style="display:block;width:100%;max-height:60vh;object-fit:contain;background:#000;border-radius:10px;margin-bottom:8px;cursor:zoom-in">`).join('')}</div>`;}).join('');
   ov.innerHTML=head+(blocks||'<div style="text-align:center;padding:40px">ไม่มีรูปถ่ายในใบรับนี้</div>')+'<div style="text-align:center;font-size:12px;opacity:.7">แตะรูปเพื่อขยาย / ย่อ</div>';

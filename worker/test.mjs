@@ -404,6 +404,24 @@ r = await call('GET', '/api/health', { headers: { Origin: 'https://app.example' 
 check('allowed origin gets CORS header', r.res.headers.get('Access-Control-Allow-Origin') === 'https://app.example');
 r = await call('DELETE', `/api/ncr/${id}`, { token: qa });
 check('no delete route', r.status === 404, r);
+// ----- receiving: photo of the delivery vehicle -----
+{
+  const bodyCar = recvBody('uid-car-0001', 'FM-QC-001-20261004-005');
+  bodyCar.record.carReg = '1กข 1234';
+  bodyCar.record.carPhoto = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/';
+  r = await call('POST', '/api/recv', { token: qc, body: bodyCar });
+  check('a record saves the photo of the delivery vehicle', r.status === 201, r);
+  const carDoc = r.j.docNo;
+  r = await call('GET', `/api/recv/${carDoc}/photos`, { token: qc });
+  check('the vehicle photo comes back with the record photos (slot 9)', r.status === 200 && r.j.some((x) => x.slot === 9 && x.data.startsWith('data:image/jpeg;base64,')), r.j.map((x) => x.slot));
+  r = await call('GET', '/api/recv', { token: qc });
+  const carRec = r.j.records.find((x) => x.docNo === carDoc);
+  check('the list carries a flag, not the picture', carRec.hasCarPhoto === 1 && carRec.carPhoto === null, [carRec.hasCarPhoto, carRec.carPhoto]);
+  const bad = recvBody('uid-car-0002', 'FM-QC-001-20261004-006'); bad.record.carPhoto = 'data:image/jpeg;base64,AAAAAAAAAAAAAAAAAAAA';
+  r = await call('POST', '/api/recv', { token: qc, body: bad });
+  check('a vehicle file that is not a picture is refused', r.status === 400, r);
+}
+
 // ----- receiving: the QA Manager voids a record entered wrongly -----
 r = await call('POST', '/api/recv', { token: qc, body: recvBody('uid-void-0001', 'FM-QC-001-20261004-001') });
 check('a record to be voided is saved', r.status === 201, r);
