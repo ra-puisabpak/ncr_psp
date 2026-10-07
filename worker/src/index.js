@@ -1072,13 +1072,26 @@ export default {
       }
 
       // ===== Receiving inspection (FM-QC-001) =====
+      const RECV_LIVE = 'doc_no NOT IN (SELECT doc_no FROM recv_voids)';
+      const rvoid = path.match(/^\/api\/recv\/(FM-QC-001-\d{8}-\d{3})\/void$/);
+      if (rvoid && method === 'POST') {
+        need(user, QAM, 'เฉพาะ QA Manager เท่านั้นที่ยกเลิกใบตรวจรับได้');
+        const b = await body();
+        const row = await DB.prepare('SELECT doc_no, supplier, recv_date FROM recv_records WHERE doc_no=?').bind(rvoid[1]).first();
+        if (!row) fail(404, 'ไม่พบใบตรวจรับ');
+        if (blank(b.reason)) fail(400, 'กรุณาระบุเหตุผลที่ยกเลิก');
+        if (await DB.prepare('SELECT 1 FROM recv_voids WHERE doc_no=?').bind(row.doc_no).first()) fail(409, 'ใบนี้ถูกยกเลิกแล้ว');
+        await DB.prepare('INSERT INTO recv_voids (doc_no,reason,voided_by,voided_at) VALUES (?,?,?,?)').bind(row.doc_no, txt(b.reason, 300), user.display_name, nowIso()).run();
+        await audit(DB, user.username, 'user', 'void', 'recv_record', row.doc_no, { reason: txt(b.reason, 300), supplier: row.supplier, recv_date: row.recv_date });
+        return json({ doc_no: row.doc_no, voided: true });
+      }
       // Records are kept as the app's own JSON; photos sit in their own rows so one record never outgrows a D1 row.
       if (path === '/api/recv' && method === 'GET') {
         const recs = await DB.prepare(
-          'SELECT doc_no, uid, data, created_by, created_at FROM recv_records ORDER BY recv_date DESC, doc_no DESC LIMIT 1000').all();
+          `SELECT doc_no, uid, data, created_by, created_at FROM recv_records WHERE ${RECV_LIVE} ORDER BY recv_date DESC, doc_no DESC LIMIT 1000`).all();
         const ncs = await DB.prepare(
           `SELECT n.nc_id, n.uid, n.doc_no, n.status, n.ncr_id, n.closed_date, n.data, r.status AS ncr_status, r.closed_date AS ncr_closed
-             FROM recv_nc n LEFT JOIN ncr_records r ON r.ncr_id = n.ncr_id ORDER BY n.created_at DESC, n.nc_id DESC LIMIT 1000`).all();
+             FROM recv_nc n LEFT JOIN ncr_records r ON r.ncr_id = n.ncr_id WHERE n.doc_no NOT IN (SELECT doc_no FROM recv_voids) ORDER BY n.created_at DESC, n.nc_id DESC LIMIT 1000`).all();
         return json({
           records: recs.results.map((r) => ({ ...JSON.parse(r.data), docNo: r.doc_no, uid: r.uid, savedBy: r.created_by, savedAt: r.created_at })),
           // An NC that is an NCR takes its status from the NCR: it is closed in the e-Form, not here.
@@ -1558,7 +1571,7 @@ export default {
         const prodctl = await all('SELECT product_code, batch_no FROM prod_controls WHERE prod_date=?', day);
         const fgMade = await pendingFg(day);
         const missingFrom = (done) => weighed.filter((w) => !done.some((d) => d.product_code === w.product_code && d.batch_no === w.batch_no)).map(label);
-        const recv = await first("SELECT COUNT(*) AS n, COALESCE(SUM(json_array_length(json_extract(data,'$.mats'))),0) AS items FROM recv_records WHERE recv_date=?", day);
+        const recv = await first("SELECT COUNT(*) AS n, COALESCE(SUM(json_array_length(json_extract(data,'$.mats'))),0) AS items FROM recv_records WHERE recv_date=? AND doc_no NOT IN (SELECT doc_no FROM recv_voids)", day);
         const oil = await all('SELECT DISTINCT stage FROM oil_checks WHERE check_date=?', day);
         const oilN = await first('SELECT COUNT(*) AS n FROM oil_checks WHERE check_date=?', day);
         const units = await all('SELECT unit_id, name FROM cold_units WHERE active=1 ORDER BY unit_id');
@@ -1603,7 +1616,7 @@ export default {
       if (path === '/api/recv/lots' && method === 'GET') {
         const days = Math.min(Math.max(parseInt(url.searchParams.get('days') || '120', 10) || 120, 1), 730);
         const since = new Date(Date.parse(today()) - days * 86400e3).toISOString().slice(0, 10);
-        const { results } = await DB.prepare('SELECT doc_no, recv_date, supplier, data FROM recv_records WHERE recv_date >= ? ORDER BY recv_date DESC, doc_no DESC LIMIT 500').bind(since).all();
+        const { results } = await DB.prepare('SELECT doc_no, recv_date, supplier, data FROM recv_records WHERE recv_date >= ? AND doc_no NOT IN (SELECT doc_no FROM recv_voids) ORDER BY recv_date DESC, doc_no DESC LIMIT 500').bind(since).all();
         const lots = [];
         for (const r of results) {
           for (const m of JSON.parse(r.data).mats || []) {
@@ -1697,7 +1710,7 @@ export default {
         if (q.length < 2) fail(400, 'กรุณาระบุเลขล็อตหรือเลข Batch อย่างน้อย 2 ตัวอักษร');
         const like = `%${q}%`;
         const { results: rels } = await DB.prepare('SELECT * FROM fg_releases WHERE batch_no LIKE ? OR rm_lots LIKE ? ORDER BY created_at DESC LIMIT 100').bind(like, like).all();
-        const { results: recvRows } = await DB.prepare('SELECT doc_no, recv_date, supplier, result, data FROM recv_records WHERE data LIKE ? ORDER BY recv_date DESC LIMIT 100').bind(like).all();
+        const { results: recvRows } = await DB.prepare('SELECT doc_no, recv_date, supplier, result, data FROM recv_records WHERE data LIKE ? AND doc_no NOT IN (SELECT doc_no FROM recv_voids) ORDER BY recv_date DESC LIMIT 100').bind(like).all();
         const received = [];
         for (const r of recvRows) {
           for (const m of JSON.parse(r.data).mats || []) {

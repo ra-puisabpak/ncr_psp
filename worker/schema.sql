@@ -757,6 +757,13 @@ INSERT OR IGNORE INTO pack_sizes (pack_key,label,label_net_g,tare_g,sort) VALUES
  ('J210','กระปุกใหญ่ 210 g (กระปุก + ฝาอลู + ฝาพลาสติก + สติ๊กเกอร์ 40 g)',210,40,1),
  ('J60','กระปุกเล็ก 60 g (กระปุก + ฝา + สติ๊กเกอร์ 15 g)',60,15,2),
  ('J160','กระปุก 160 g (กระปุก + ฝา + สติ๊กเกอร์ 40 g)',160,40,3);
+-- A receiving record entered wrongly is voided by the QA Manager (kept, never deleted); it then leaves every list and count.
+CREATE TABLE IF NOT EXISTS recv_voids (
+  doc_no    TEXT PRIMARY KEY,
+  reason    TEXT NOT NULL,
+  voided_by TEXT NOT NULL,
+  voided_at TEXT NOT NULL
+);
 -- The pack sizes a batch is filled into (set when the batch is checked), so the final check can tell which sizes are still to do.
 CREATE TABLE IF NOT EXISTS fg_batch_packs (
   product_code TEXT NOT NULL,

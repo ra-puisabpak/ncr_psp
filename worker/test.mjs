@@ -404,6 +404,22 @@ r = await call('GET', '/api/health', { headers: { Origin: 'https://app.example' 
 check('allowed origin gets CORS header', r.res.headers.get('Access-Control-Allow-Origin') === 'https://app.example');
 r = await call('DELETE', `/api/ncr/${id}`, { token: qa });
 check('no delete route', r.status === 404, r);
+// ----- receiving: the QA Manager voids a record entered wrongly -----
+r = await call('POST', '/api/recv', { token: qc, body: recvBody('uid-void-0001', 'FM-QC-001-20261004-001') });
+check('a record to be voided is saved', r.status === 201, r);
+r = await call('POST', '/api/recv/FM-QC-001-20261004-001/void', { token: qc, body: { reason: 'กรอกผิด' } });
+check('QC cannot void a receiving record', r.status === 403, r);
+r = await call('POST', '/api/recv/FM-QC-001-20261004-001/void', { token: qa, body: {} });
+check('a void needs a reason', r.status === 400, r);
+r = await call('POST', '/api/recv/FM-QC-001-20261004-001/void', { token: qa, body: { reason: 'พนักงานกรอกผิด' } });
+check('the QA Manager voids a receiving record', r.status === 200 && r.j.voided === true, r);
+r = await call('POST', '/api/recv/FM-QC-001-20261004-001/void', { token: qa, body: { reason: 'อีกครั้ง' } });
+check('a record is voided once', r.status === 409, r);
+r = await call('GET', '/api/recv', { token: qc });
+check('a voided record leaves the receiving list', !r.j.records.some((x) => x.docNo === 'FM-QC-001-20261004-001'), r.j.records.map((x) => x.docNo));
+r = await call('POST', '/api/recv', { token: qc, body: recvBody('uid-void-0002', 'FM-QC-001-20261004-001') });
+check('the voided number is not reused', r.status === 201 && r.j.docNo !== 'FM-QC-001-20261004-001', r);
+
 // ----- Smart QA: control points and monitoring records -----
 r = await call('GET', '/api/control-points', { token: qc });
 check('control point register follows QP-HA-001 Rev.01 plus the pH/aw record, all draft', r.status === 200 && r.j.length === 9 && r.j.every((c) => c.status === 'DRAFT')

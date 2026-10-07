@@ -1703,8 +1703,15 @@ function renderHist(){
         <span style="font-size:12px;color:var(--gray3)">&#x1F464; ${r.inspector}</span>
         <span class="pill pill-${rc}">${RES_TXT[worstRes(mats)]}</span>
         <button onclick="printDoc('${r.docNo}')" style="margin-left:auto;padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--white);color:var(--teal);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer">&#x1F5A8; พิมพ์ใบรับ</button>
+        ${session&&session.user&&session.user.role==='QA_MANAGER'&&r.synced&&!isDemo()?`<button onclick="voidRec('${r.docNo}')" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--white);color:#c62828;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer">ยกเลิกใบนี้</button>`:''}
       </div></div>`;
   }).join('');
+}
+async function voidRec(docNo){
+  const reason=prompt('ยกเลิกใบ '+docNo+'\n(ใบจะไม่ถูกนับและไม่แสดงในรายการ แต่เก็บประวัติไว้)\nระบุเหตุผล:');
+  if(!reason||!reason.trim())return;
+  try{await api('POST','/api/recv/'+encodeURIComponent(docNo)+'/void',{reason:reason.trim()});showToast('ยกเลิกใบ '+docNo+' แล้ว');await refreshAll();}
+  catch(e){showToast(e.message||'ยกเลิกไม่สำเร็จ','err');}
 }
 function renderNC(){
   const el=document.getElementById('ncl');
