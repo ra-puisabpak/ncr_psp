@@ -2182,7 +2182,7 @@ export default {
         const sp = url.searchParams, where = ['1=1'], p = [];
         if (isDate(sp.get('from'))) { where.push('check_date>=?'); p.push(sp.get('from')); }
         if (isDate(sp.get('to'))) { where.push('check_date<=?'); p.push(sp.get('to')); }
-        const { results } = await DB.prepare(`SELECT c.*, r.minutes AS reach_min FROM oil_checks c LEFT JOIN oil_reach r ON r.chk_id = c.chk_id WHERE ${where.join(' AND ').replace(/check_date/g, 'c.check_date')} ORDER BY c.check_date DESC, c.chk_id DESC LIMIT 1000`).bind(...p).all();
+        const { results } = await DB.prepare(`SELECT * FROM oil_checks WHERE ${where.join(' AND ')} ORDER BY check_date DESC, chk_id DESC LIMIT 1000`).bind(...p).all();
         return json(results.map((r) => ({ ...r, tpm: JSON.parse(r.tpm), temps: r.temps ? JSON.parse(r.temps) : [] })));
       }
       if (path === '/api/oil' && method === 'POST') {
@@ -2206,8 +2206,6 @@ export default {
         if (b.temp_result !== 'NA' && !temps.length) fail(400, 'กรุณากรอกอุณหภูมิน้ำมัน หรือเลือก N/A พร้อมเหตุผล');
         // The usable oil temperature range is a fixed criterion (150–180 °C): the result follows the readings, not the operator's choice.
         const tempRes = b.temp_result !== 'NA' && temps.length ? (temps.some((t) => t < OIL_TEMP_MIN || t > OIL_TEMP_MAX) ? 'FAIL' : 'PASS') : b.temp_result;
-        const reach = blank(b.reach_min) ? null : Number(b.reach_min);
-        if (reach !== null && (!Number.isFinite(reach) || reach < 0 || reach > 120)) fail(400, 'เวลาที่น้ำมันถึง 160 °C ต้องเป็นตัวเลข 0–120 นาที');
         const tpmMax = Math.max(...tpm);
         const result = tpmMax >= 25 || tempRes === 'FAIL' ? 'FAIL' : tpmMax >= 20 ? 'WATCH' : 'PASS';
         const note = txt(b.note, 500), action = txt(b.action, 500);
@@ -2238,7 +2236,6 @@ export default {
             }));
           }
           const cols = Object.keys(rec);
-          if (reach !== null) stmts.push(DB.prepare('INSERT INTO oil_reach (chk_id,minutes) VALUES (?,?)').bind(chkId, reach));
           stmts.push(DB.prepare(`INSERT INTO oil_checks (chk_id,uid,${cols.join(',')},ncr_id,created_by,created_at) VALUES (?,?,${cols.map(() => '?').join(',')},?,?,?)`)
             .bind(chkId, uid, ...cols.map((k) => rec[k]), ncrId, user.username, nowIso()));
           try { await DB.batch(stmts); } catch (e) {
