@@ -1110,6 +1110,37 @@ export default {
         await audit(DB, user.username, 'user', 'void', 'recv_record', row.doc_no, { reason: txt(b.reason, 300), supplier: row.supplier, recv_date: row.recv_date });
         return json({ doc_no: row.doc_no, voided: true });
       }
+      // Receiving specifications (RD-RMS / RD-PMS): the checklist per material group. Anyone signed in may read; QA edits the items.
+      if (path === '/api/recv/specs' && method === 'GET') {
+        const groups = (await DB.prepare('SELECT group_key, sg, kind, name, sample_plan, store FROM spec_groups ORDER BY group_key').all()).results;
+        const items = (await DB.prepare('SELECT group_key, seq, title, criterion, method, level, active FROM spec_items ORDER BY group_key, seq').all()).results;
+        const mats = (await DB.prepare('SELECT code, group_key FROM spec_materials').all()).results;
+        return json({
+          groups: groups.map((g) => ({ key: g.group_key, sg: g.sg, kind: g.kind, name: g.name, sample_plan: g.sample_plan, store: g.store, items: items.filter((i) => i.group_key === g.group_key).map((i) => ({ seq: i.seq, title: i.title, criterion: i.criterion, method: i.method, level: i.level, active: !!i.active })) })),
+          mats: Object.fromEntries(mats.map((m) => [m.code, m.group_key])),
+        });
+      }
+      const spi = path.match(/^\/api\/recv\/specs\/(RD-(?:RMS|PMS)-\d{3})\/(\d{1,3})$/);
+      if (spi && method === 'PATCH') {
+        const has = (o, k) => k in o;
+        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่แก้ไขข้อกำหนดได้');
+        const b = await body();
+        const row = await DB.prepare('SELECT * FROM spec_items WHERE group_key=? AND seq=?').bind(spi[1], Number(spi[2])).first();
+        if (!row) fail(404, 'ไม่พบรายการตรวจนี้');
+        const next = {
+          title: has(b, 'title') ? txt(b.title, 200) : row.title,
+          criterion: has(b, 'criterion') ? txt(b.criterion, 500) : row.criterion,
+          method: has(b, 'method') ? txt(b.method, 300) : row.method,
+          level: has(b, 'level') ? String(b.level) : row.level,
+          active: has(b, 'active') ? (b.active ? 1 : 0) : row.active,
+        };
+        if (!next.title) fail(400, 'กรุณาระบุหัวข้อ');
+        if (!['Critical', 'Major', 'Minor'].includes(next.level)) fail(400, 'ระดับต้องเป็น Critical / Major / Minor');
+        await DB.prepare('UPDATE spec_items SET title=?,criterion=?,method=?,level=?,active=?,updated_by=?,updated_at=? WHERE group_key=? AND seq=?')
+          .bind(next.title, next.criterion, next.method, next.level, next.active, user.display_name, nowIso(), spi[1], Number(spi[2])).run();
+        await audit(DB, user.username, 'user', 'update', 'spec_item', `${spi[1]}#${spi[2]}`, { before: { title: row.title, criterion: row.criterion, method: row.method, level: row.level, active: row.active }, after: next });
+        return json({ group_key: spi[1], seq: Number(spi[2]), ...next, active: !!next.active });
+      }
       // Records are kept as the app's own JSON; photos sit in their own rows so one record never outgrows a D1 row.
       if (path === '/api/recv' && method === 'GET') {
         const recs = await DB.prepare(
@@ -1195,6 +1226,15 @@ export default {
         if (rec.mats.some((m) => m && m.result === 'COND')) {
           need(user, COND_ROLES, 'บัญชีนี้ไม่มีสิทธิ์รับแบบมีเงื่อนไข');
           if (rec.mats.some((m) => m.result === 'COND' && blank(m.note))) fail(400, 'รับแบบมีเงื่อนไข ต้องระบุเงื่อนไขในช่องหมายเหตุ');
+        }
+        // A failed item of the receiving specification sets the lowest result the item may take: Critical = REJECT, Major / Minor = HOLD (or accepted with conditions).
+        for (const m of rec.mats) {
+          if (!m || !m.spec || typeof m.spec.g !== 'string' || !m.spec.r || typeof m.spec.r !== 'object') continue;
+          const lv = (await DB.prepare('SELECT seq, level FROM spec_items WHERE group_key=?').bind(m.spec.g).all()).results;
+          const failed = lv.filter((i) => m.spec.r[i.seq] === 'F');
+          const need2 = failed.some((i) => i.level === 'Critical') ? 'REJECT' : failed.length ? 'HOLD' : 'PASS';
+          const rank = { PASS: 0, COND: 1, HOLD: 1, REJECT: 2 };
+          if ((rank[m.result] ?? 0) < rank[need2]) fail(400, `${m.code || 'รายการ'}: ไม่ผ่านข้อกำหนดตรวจรับ ผลต้องไม่ดีกว่า ${need2}`);
         }
         const ncList = Array.isArray(b.ncs) ? b.ncs.slice(0, 60) : [];
         for (let attempt = 0; ; attempt++) {

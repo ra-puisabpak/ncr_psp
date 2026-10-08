@@ -258,9 +258,33 @@ r = await call('POST', '/api/recv', { token: qc, body: { uid: 'uid-cccc-0003', r
 check('receiving record without supplier is refused', r.status === 400, r);
 r = await call('POST', '/api/recv', { token: qc, body: { ...recvBody('uid-dddd-0004', ''), record: { ...recvBody('x', '').record, mats: [{ idx: 1, result: 'PASS', photo1: 'data:image/jpeg;base64,' + Buffer.from('<script>').toString('base64') }] } } });
 check('a file that is not a picture is refused', r.status === 400, r);
+// ----- receiving specification (RD-RMS / RD-PMS) -----
+r = await call('GET', '/api/recv/specs', { token: qc });
+check('specs: groups, items and the material map are served', r.status === 200 && r.j.groups.length === 11 && r.j.mats['RM-007'] === 'RD-RMS-002' && r.j.mats['PKG-001'] === 'RD-PMS-001'
+  && r.j.groups.find((g) => g.key === 'RD-RMS-002').items.some((i) => i.level === 'Critical'), r.j && r.j.groups && r.j.groups.length);
+const specMat = (code, rr, result) => ({ idx: 1, code, lot: 'L9', qty: '5', result, spec: { g: 'RD-RMS-002', r: rr }, photo1: null, photo2: null });
+const specRec = (uid, mats) => ({ ...recvBody(uid, '').record, mats });
+r = await call('POST', '/api/recv', { token: qc, body: { uid: 'uid-spec-0001', record: specRec('x', [specMat('RM-007', { 3: 'F' }, 'PASS')]) } });
+check('specs: a failed Critical item cannot be PASS', r.status === 400, r);
+r = await call('POST', '/api/recv', { token: qc, body: { uid: 'uid-spec-0002', record: specRec('x', [specMat('RM-007', { 3: 'F' }, 'HOLD')]) } });
+check('specs: a failed Critical item cannot be HOLD either', r.status === 400, r);
+r = await call('POST', '/api/recv', { token: qc, body: { uid: 'uid-spec-0003', record: specRec('x', [specMat('RM-007', { 1: 'F' }, 'PASS')]) } });
+check('specs: a failed Major item cannot be PASS', r.status === 400, r);
+r = await call('PATCH', '/api/recv/specs/RD-RMS-002/6', { token: qc, body: { criterion: 'x' } });
+check('specs: only QA edits an item', r.status === 403, r);
+r = await call('PATCH', '/api/recv/specs/RD-RMS-002/6', { token: qa, body: { criterion: 'ไม่เกิน 3% โดยน้ำหนัก', level: 'Major' } });
+check('specs: QA edits the criterion and level', r.status === 200 && r.j.level === 'Major' && r.j.criterion.includes('3%'), r);
+r = await call('PATCH', '/api/recv/specs/RD-RMS-002/6', { token: qa, body: { level: 'Fatal' } });
+check('specs: an unknown level is refused', r.status === 400, r);
+r = await call('PATCH', '/api/recv/specs/RD-RMS-002/99', { token: qa, body: { level: 'Minor' } });
+check('specs: an unknown item is 404', r.status === 404, r);
 r = await call('GET', '/api/recv', { token: qc });
 check('receiving list returns records without photo data and the NC log', r.status === 200 && r.j.records.length === 2 && r.j.ncLogs.length === 2
   && r.j.records.every((x) => x.mats[0].photo1 === null && x.mats[0].hasPhoto1 === 1 && x.sig.hasSig === 1 && x.sig.sigBase64 === null && x.savedBy === 'qc1') && !JSON.stringify(r.j).includes('base64,/9j'), r.j);
+r = await call('POST', '/api/recv', { token: qc, body: { uid: 'uid-spec-0004', record: specRec('x', [specMat('RM-007', { 3: 'F', 1: 'P' }, 'REJECT')]) } });
+check('specs: a failed Critical item saved as REJECT is accepted and keeps the checklist', r.status === 201 || r.status === 200, r);
+r = await call('GET', '/api/recv', { token: qc });
+check('specs: the saved checklist comes back with the record', r.j.records.some((x) => x.mats.some((m) => m.spec && m.spec.g === 'RD-RMS-002' && m.spec.r[3] === 'F')), r.j.records.length);
 r = await call('GET', '/api/recv/FM-QC-001-20261003-001/photos', { token: qc });
 check('photos of a receiving record come back on request', r.status === 200 && r.j.length === 2 && r.j[0].slot === 0 && r.j[0].data.startsWith('data:image/png') && r.j[1].idx === 1 && r.j[1].slot === 1 && r.j[1].data === jpg, r.j);
 r = await call('POST', '/api/recv-nc', { token: qc, body: { uid: 'uid-nc-00003', id: 'NC001', docNo: 'FM-QC-001-20261003-001', failType: 'Other', note: 'manual' } });

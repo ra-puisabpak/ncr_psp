@@ -866,3 +866,212 @@ CREATE TABLE IF NOT EXISTS weigh_signatures (
   signed_at     TEXT NOT NULL,
   PRIMARY KEY (wr_id, weigher_name)
 );
+
+-- Receiving specifications (RD-RMS raw materials / RD-PMS packaging, Rev.00 draft): the checklist a lot is inspected against.
+-- Values marked 'ค่าเสนอ' in the source files are starting values; QA edits them in the app and later deploys never overwrite an edit.
+CREATE TABLE IF NOT EXISTS spec_groups (
+  group_key   TEXT PRIMARY KEY,
+  sg          TEXT,
+  kind        TEXT NOT NULL CHECK(kind IN ('RMS','PMS')),
+  name        TEXT NOT NULL,
+  sample_plan TEXT,
+  store       TEXT
+);
+CREATE TABLE IF NOT EXISTS spec_items (
+  group_key TEXT NOT NULL,
+  seq       INTEGER NOT NULL,
+  title     TEXT NOT NULL,
+  criterion TEXT,
+  method    TEXT,
+  level     TEXT NOT NULL CHECK(level IN ('Critical','Major','Minor')),
+  active    INTEGER NOT NULL DEFAULT 1,
+  updated_by TEXT,
+  updated_at TEXT,
+  PRIMARY KEY (group_key, seq)
+);
+CREATE TABLE IF NOT EXISTS spec_materials (
+  code      TEXT PRIMARY KEY,
+  group_key TEXT NOT NULL
+);
+INSERT OR IGNORE INTO spec_groups (group_key,sg,kind,name,sample_plan,store) VALUES ('RD-RMS-002','SG-02','RMS','ข้อกำหนดวัตถุดิบ กลุ่มพริกแห้งและพริกป่น','','');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-002',1,'สี','แดงตามธรรมชาติของพริกแห้ง ไม่ซีด ไม่ดำคล้ำ','ดูด้วยตา เทียบตัวอย่างอ้างอิง','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-002',2,'กลิ่น','กลิ่นพริกแห้ง ไม่มีกลิ่นอับ กลิ่นหืน หรือกลิ่นแปลกปลอม','ดม','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-002',3,'รา','ไม่พบราที่มองเห็น','ดูด้วยตา','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-002',4,'แมลง มอด มูลสัตว์','ไม่พบ','ดูด้วยตา / ร่อน','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-002',5,'สิ่งแปลกปลอม','ไม่พบหิน กรวด โลหะ แก้ว พลาสติก เศษไม้','ดูด้วยตา / ร่อน','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-002',6,'ขั้วติด (RM-007)','ค่าเสนอ: ไม่เกิน 2% โดยน้ำหนัก','คัดแยกจากตัวอย่าง ชั่งน้ำหนัก','Minor');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-002',7,'ความละเอียด (พริกป่น)','ตามตัวอย่างอ้างอิงที่อนุมัติ','เทียบตัวอย่างอ้างอิง','Minor');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-002',8,'ความแห้ง','แห้ง ไม่จับเป็นก้อน ไม่นิ่มชื้น','บีบ / ดูด้วยตา','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-002',9,'น้ำหนักสุทธิ','ไม่น้อยกว่าที่ระบุต่อภาชนะ','สุ่มชั่งตามจำนวนตัวอย่าง','Major');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-007','RD-RMS-002');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-008','RD-RMS-002');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-028','RD-RMS-002');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-029','RD-RMS-002');
+INSERT OR IGNORE INTO spec_groups (group_key,sg,kind,name,sample_plan,store) VALUES ('RD-RMS-003','SG-03','RMS','ข้อกำหนดวัตถุดิบ กลุ่มอาหารทะเลแห้งและของแห้ง','','');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-003',1,'สี','ตามธรรมชาติ (กุ้งแห้ง: ส้มแดงธรรมชาติ ไม่สีจัดผิดปกติ; ปลาป่น: น้ำตาลตามชนิดปลา; เห็ดหอม: น้ำตาล ด้านใต้ครีม)','ดูด้วยตา เทียบตัวอย่างอ้างอิง','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-003',2,'กลิ่น','กลิ่นตามธรรมชาติ ไม่มีกลิ่นเน่า กลิ่นแอมโมเนีย กลิ่นอับ หรือกลิ่นหืน','ดม','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-003',3,'รา','ไม่พบราที่มองเห็น','ดูด้วยตา','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-003',4,'แมลง หนอน มอด','ไม่พบ (เห็ดหอม: ไม่มีรูแมลงเจาะ)','ดูด้วยตา / ร่อน','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-003',5,'สิ่งแปลกปลอม','ไม่พบหิน กรวด โลหะ พลาสติก เส้นผม','ดูด้วยตา / ร่อน','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-003',6,'ความแห้ง','ไม่ชื้นแฉะ ไม่เกาะเป็นก้อน ไม่เหนียวมือ','บีบ / ดูด้วยตา','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-003',7,'เปลือก หัว ก้างปน','ค่าเสนอ: ไม่เกิน 5% โดยน้ำหนัก (ยกเว้น RM-021 กุ้งติดเปลือก)','คัดแยกจากตัวอย่าง ชั่งน้ำหนัก','Minor');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-003',8,'ขนาด / เกรด','ตามที่ตกลง (เห็ดหอมเกรด B4; กุ้งแห้งจิ๋วตามตัวอย่างอ้างอิง)','เทียบตัวอย่างอ้างอิง','Minor');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-003',9,'น้ำหนักสุทธิ','ไม่น้อยกว่าที่ระบุต่อภาชนะ','สุ่มชั่งตามจำนวนตัวอย่าง','Major');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-011','RD-RMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-012','RD-RMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-013','RD-RMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-016','RD-RMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-017','RD-RMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-018','RD-RMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-019','RD-RMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-020','RD-RMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-021','RD-RMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-022','RD-RMS-003');
+INSERT OR IGNORE INTO spec_groups (group_key,sg,kind,name,sample_plan,store) VALUES ('RD-RMS-004','SG-04','RMS','ข้อกำหนดวัตถุดิบ กลุ่มผลิตภัณฑ์หมัก (ปลาร้า กะปิ)','','');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-004',1,'ภาชนะบวม / รั่ว','ไม่พบ (ภาชนะบวมแสดงการเสื่อมเสีย)','ดูด้วยตา','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-004',2,'หนอน แมลง','ไม่พบ','ดูด้วยตา','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-004',3,'รา / ฝ้าผิดปกติ','ไม่พบ','ดูด้วยตา','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-004',4,'กลิ่น','กลิ่นตามธรรมชาติของปลาร้า / กะปิ ไม่มีกลิ่นเน่าเหม็นผิดปกติ','ดม','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-004',5,'สี / เนื้อสัมผัส','ตามธรรมชาติ (กะปิ: ม่วงอมน้ำตาล ไม่ชมพูจัดผิดปกติ)','ดูด้วยตา','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-004',6,'สิ่งแปลกปลอม','ไม่พบเศษพลาสติก โลหะ หิน','ดูด้วยตา','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-004',7,'ฉลากและเลขสารบบ','ครบถ้วน ตรงกับที่อนุมัติ','ตรวจฉลาก','Critical');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-014','RD-RMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-015','RD-RMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-027','RD-RMS-004');
+INSERT OR IGNORE INTO spec_groups (group_key,sg,kind,name,sample_plan,store) VALUES ('RD-RMS-005','SG-05','RMS','ข้อกำหนดวัตถุดิบ กลุ่มเนื้อสัตว์และปลาแช่เย็น / แช่แข็ง','','');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-005',1,'อุณหภูมิใจกลาง (หมูบด)','0–4°C','เทอร์โมมิเตอร์เสียบใจกลางถุง (IQC หมูบด)','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-005',2,'อุณหภูมิ (ปลาแช่แข็ง)','≤ -18°C','เทอร์โมมิเตอร์','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-005',3,'pH (หมูบด)','5.5–6.2 รับ | ต่ำกว่า 5.4 ไม่รับ (PSE) | 6.3–6.4 ไม่รับ (DFD) | 6.5 ขึ้นไป ไม่รับ (เริ่มเน่าเสีย) | 5.4–5.5 และ 6.2–6.3 HOLD ให้ QC Supervisor ตัดสิน','pH meter แบบปลายแหลม เสียบกึ่งกลางถุง ทำความสะอาดหัววัดทุกถุง','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-005',4,'สี (หมูบด)','แดงหรือชมพูตามธรรมชาติ ไม่คล้ำเขียว','ดูด้วยตา','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-005',5,'กลิ่น','ไม่มีกลิ่นเหม็นเปรี้ยวหรือกลิ่นเน่า','ดม','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-005',6,'สิ่งแปลกปลอม','ไม่พบเศษกระดูก พลาสติก โลหะ','ดูด้วยตา','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-005',7,'สภาพบรรจุภัณฑ์','ซีลสนิท ไม่ฉีกขาด ไม่มีน้ำเลือดซึม','ดูด้วยตา','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-005',8,'ปลาแช่แข็ง: การละลายแล้วแช่ซ้ำ','ไม่พบก้อนน้ำแข็งเกาะผิดปกติหรือปลาจับก้อนแข็ง','ดูด้วยตา','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-005',9,'น้ำหนักสุทธิ','ไม่น้อยกว่าที่ระบุหน้าถุง (หักน้ำหนักถุง)','ชั่งรายถุงที่สุ่ม','Major');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-009','RD-RMS-005');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-010','RD-RMS-005');
+INSERT OR IGNORE INTO spec_groups (group_key,sg,kind,name,sample_plan,store) VALUES ('RD-RMS-006','SG-06','RMS','ข้อกำหนดวัตถุดิบ กลุ่มเครื่องปรุงรส ซอส น้ำตาล เกลือ และงา','','');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-006',1,'ฉลากและเลขสารบบ','มีเลขสารบบอาหาร ยี่ห้อ/สูตรตรงที่อนุมัติ','ตรวจฉลาก','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-006',2,'สภาพภาชนะ','ไม่บุบ ไม่รั่ว ไม่บวม ฝาปิดสนิท','ดูด้วยตา','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-006',3,'วันหมดอายุ','ไม่หมดอายุ และอายุคงเหลือตามเกณฑ์','ตรวจฉลาก','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-006',4,'มะขามเปียก (RM-026)','ไม่มีรา แมลง; เมล็ด/เปลือกปนตามตัวอย่างอ้างอิง','ดูด้วยตา','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-006',5,'น้ำตาลมะพร้าว (RM-045, 046)','ไม่เยิ้มละลาย ไม่มีรา ไม่มีกลิ่นบูด','ดูด้วยตา / ดม','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-006',6,'งาขาว (RM-050)','ไม่มีกลิ่นหืน มอด แมลง หรือสิ่งแปลกปลอม','ดูด้วยตา / ดม','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-006',7,'เกลือ น้ำตาลทราย ผงชูรส','แห้ง ไม่จับก้อน ไม่มีสิ่งแปลกปลอม','ดูด้วยตา','Major');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-023','RD-RMS-006');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-024','RD-RMS-006');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-025','RD-RMS-006');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-026','RD-RMS-006');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-030','RD-RMS-006');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-031','RD-RMS-006');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-032','RD-RMS-006');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-045','RD-RMS-006');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-046','RD-RMS-006');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-047','RD-RMS-006');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-048','RD-RMS-006');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-049','RD-RMS-006');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-050','RD-RMS-006');
+INSERT OR IGNORE INTO spec_groups (group_key,sg,kind,name,sample_plan,store) VALUES ('RD-RMS-007','SG-07','RMS','ข้อกำหนดวัตถุดิบ กลุ่มน้ำมันพืช','','');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-007',1,'ลักษณะ','ใส ไม่มีตะกอนแปลกปลอม (ปาล์มโอลีนอาจขุ่นเมื่ออากาศเย็น ให้วางที่อุณหภูมิห้องแล้วตรวจซ้ำ)','ดูด้วยตา','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-007',2,'กลิ่น','กลิ่นตามชนิดน้ำมัน ไม่มีกลิ่นหืน','ดม','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-007',3,'ภาชนะ','ปี๊บ/แกลลอนไม่บุบ ไม่รั่ว ฝาปิดสนิทมีซีล','ดูด้วยตา','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-007',4,'ฉลากและเลขสารบบ','ครบถ้วน ชนิด/ยี่ห้อตรงที่อนุมัติ','ตรวจฉลาก','Critical');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-036','RD-RMS-007');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-037','RD-RMS-007');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-038','RD-RMS-007');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-039','RD-RMS-007');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-040','RD-RMS-007');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-041','RD-RMS-007');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-042','RD-RMS-007');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-043','RD-RMS-007');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-044','RD-RMS-007');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-051','RD-RMS-007');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-052','RD-RMS-007');
+INSERT OR IGNORE INTO spec_groups (group_key,sg,kind,name,sample_plan,store) VALUES ('RD-RMS-008','SG-08','RMS','ข้อกำหนดวัตถุดิบ กลุ่มวัตถุเจือปนอาหาร','','');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-008',1,'ลักษณะ','ผงหรือเกล็ดสีขาว ไม่จับก้อน ไม่มีสีหรือจุดแปลกปลอม','ดูด้วยตา','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-008',2,'ภาชนะ','ปิดสนิท ไม่ชื้น ไม่ฉีกขาด','ดูด้วยตา','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-008',3,'ฉลาก Food Grade และเลขสารบบ','ครบถ้วน','ตรวจฉลาก','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-RMS-008',4,'COA','มีทุก Lot และตรงกับ Lot ที่ส่ง','ตรวจเอกสาร','Critical');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-033','RD-RMS-008');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-034','RD-RMS-008');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('RM-035','RD-RMS-008');
+INSERT OR IGNORE INTO spec_groups (group_key,sg,kind,name,sample_plan,store) VALUES ('RD-PMS-001','SG-09','PMS','ข้อกำหนดบรรจุภัณฑ์ ภาชนะบรรจุสัมผัสอาหาร (กระปุก PET และฝา)','','');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-001',1,'รอยแตก รู รั่ว','ไม่พบ','ดูด้วยตา ส่องไฟ','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-001',2,'สิ่งแปลกปลอมภายใน','ไม่พบจุดดำ ฝุ่น เศษพลาสติก แมลง','ดูด้วยตา','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-001',3,'ขอบปาก (Flange) กระปุก','เรียบ ไม่บิ่น ไม่บิดเบี้ยว (กระทบการปิดผนึก)','ดูด้วยตา / ทดลองปิดฝา','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-001',4,'ขนาด: เส้นผ่านศูนย์กลาง / ความสูง / ความจุ','ตาม Drawing ของผู้ขาย (เช่น ซีรี่ย์ 307 Ø 83 mm, TCK230R307 ความจุ 230 ml) ± ค่าเผื่อที่ตกลง','เวอร์เนียร์ / ตวงน้ำ','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-001',5,'ฝาอลูมิเนียม EOE/POE','ไม่บุบ ห่วงดึงสมบูรณ์ สารเคลือบด้านในไม่หลุด ยางขอบฝา (Compound) สม่ำเสมอ','ดูด้วยตา','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-001',6,'ฝาครอบ PE','สวมพอดี ไม่แตก ไม่เสียรูป; ช้อนครบ (PKG-003)','ทดลองสวม','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-001',7,'ความใส / รอยขีดข่วน','ใส ไม่มีรอยขีดข่วนหรือฝ้าเกินตัวอย่างอ้างอิง','ดูด้วยตา เทียบตัวอย่างอ้างอิง','Minor');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-001',8,'การทดลองปิดผนึก','ปิดด้วยเครื่องแล้วไม่รั่ว (คว่ำ/บีบ)','ทดลองปิด 3 ชุดต่อ Lot','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-001',9,'จำนวนต่อลัง / แพ็ค','ตรงตามที่ระบุ (เช่น LAZ60R202 504 ชิ้น/ลัง, POE 202 150 ชิ้น/แพ็ค, PE Cover 202 100 ชิ้น/แพ็ค)','นับ / ชั่ง','Minor');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-001','RD-PMS-001');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-002','RD-PMS-001');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-003','RD-PMS-001');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-004','RD-PMS-001');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-005','RD-PMS-001');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-006','RD-PMS-001');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-007','RD-PMS-001');
+INSERT OR IGNORE INTO spec_groups (group_key,sg,kind,name,sample_plan,store) VALUES ('RD-PMS-002','SG-10','PMS','ข้อกำหนดบรรจุภัณฑ์ ซองพิมพ์สัมผัสอาหาร','','');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-002',1,'รูเข็ม รอยรั่ว','ไม่พบ','ส่องไฟ / ทดสอบบีบลม','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-002',2,'ข้อความบนซอง','ตรงกับ Artwork ที่อนุมัติ ครบทุกข้อความ','เทียบปรู๊ฟ / Master Copy','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-002',3,'ขนาดซอง','ตาม Drawing ± ค่าเผื่อที่ตกลง','ไม้บรรทัด / เวอร์เนียร์','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-002',4,'ความแข็งแรงรอยซีล','ค่าตามผู้ขาย / ทดลองซีลด้วยเครื่องที่ใช้จริงแล้วไม่รั่ว','ทดลองซีลและบีบ','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-002',5,'คุณภาพงานพิมพ์','สีตรงมาตรฐาน ไม่เหลื่อม ไม่ซีด หมึกไม่หลุดเมื่อขูด','เทียบตัวอย่างอ้างอิง / ขูดด้วยนิ้ว','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-002',6,'กลิ่นตัวทำละลาย','ไม่มีกลิ่นหมึกหรือตัวทำละลายที่ด้านใน','ดม','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-002',7,'ความสะอาดด้านใน','ไม่มีฝุ่น เศษวัสดุ','ดูด้วยตา','Critical');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-046','RD-PMS-002');
+INSERT OR IGNORE INTO spec_groups (group_key,sg,kind,name,sample_plan,store) VALUES ('RD-PMS-003','SG-10','PMS','ข้อกำหนดบรรจุภัณฑ์ สติกเกอร์ฉลากผลิตภัณฑ์','','');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-003',1,'ข้อความบนฉลาก','ตรงกับ Artwork ที่อนุมัติทุกตัวอักษร (ชื่ออาหาร เลขสารบบ ส่วนประกอบ สารก่อภูมิแพ้ น้ำหนัก ผู้ผลิต)','เทียบ Master Copy','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-003',2,'รุ่น / ขนาดฉลากถูกต้อง','ตรงกับผลิตภัณฑ์และขนาดบรรจุ','ตรวจรหัส PKG กับฉลาก','Critical');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-003',3,'ขนาดดวง','ตามข้อ 3 ± 1 mm (ค่าเสนอ)','ไม้บรรทัด','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-003',4,'สีและความคมชัด','ตรงตัวอย่างอ้างอิง อ่านได้ชัด ไม่เลือน ไม่เหลื่อม','เทียบตัวอย่างอ้างอิง','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-003',5,'การยึดติด','ติดแน่นบนกระปุก PET ไม่ลอกเมื่อแช่เย็นหรือเปื้อนน้ำมัน','ทดลองติดและแช่เย็น 24 ชม.','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-003',6,'ความทนทานของหมึก','หมึกไม่หลุดเมื่อขูดหรือโดนน้ำมัน','ขูดด้วยนิ้ว / เช็ดน้ำมัน','Minor');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-003',7,'ดวงขาด / ม้วนต่อ','ไม่มีดวงขาดหรือรอยต่อเกินที่ตกลง','ดูด้วยตา','Minor');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-010','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-011','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-012','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-013','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-014','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-015','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-016','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-017','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-018','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-019','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-020','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-021','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-022','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-023','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-024','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-025','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-026','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-027','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-028','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-029','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-030','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-031','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-032','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-033','RD-PMS-003');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-034','RD-PMS-003');
+INSERT OR IGNORE INTO spec_groups (group_key,sg,kind,name,sample_plan,store) VALUES ('RD-PMS-004','SG-11','PMS','ข้อกำหนดบรรจุภัณฑ์ กล่องพัสดุและวัสดุขนส่ง','','');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-004',1,'ขนาดกล่อง / แผ่นล็อก','ตามข้อกำหนดของผู้ขาย ± ค่าเผื่อที่ตกลง','ตลับเมตร','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-004',2,'ความแข็งแรง','ไม่ยุบเมื่อซ้อน ลอนไม่แตก','ทดลองบรรจุและซ้อน','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-004',3,'ความสะอาดและความแห้ง','ไม่ชื้น ไม่ขึ้นรา ไม่มีแมลงหรือมูลสัตว์','ดูด้วยตา','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-004',4,'ความพอดีกับกระปุก','กระปุกไม่ขยับในแผ่นล็อก','ทดลองบรรจุ','Major');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-004',5,'จำนวน','ตรงตามใบส่งของ','นับ','Minor');
+INSERT OR IGNORE INTO spec_items (group_key,seq,title,criterion,method,level) VALUES ('RD-PMS-004',6,'เทป / ลาเบล / บับเบิ้ล','ติดแน่น พิมพ์ชัด ไม่ขาด','ดูด้วยตา','Minor');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-035','RD-PMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-036','RD-PMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-037','RD-PMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-038','RD-PMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-039','RD-PMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-040','RD-PMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-041','RD-PMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-042','RD-PMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-043','RD-PMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-044','RD-PMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-045','RD-PMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('SUP-024','RD-PMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('SUP-025','RD-PMS-004');
+INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('SUP-026','RD-PMS-004');

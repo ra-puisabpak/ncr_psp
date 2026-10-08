@@ -166,6 +166,10 @@ export default function QADashboardPage() {
           <BookOpen className="w-6 h-6 shrink-0 text-teal-700" />
           <div className="min-w-0"><div className="font-semibold text-sm text-gray-800">ทะเบียน Supplier กลาง</div><div className="text-[11px] text-gray-500">แม็คโคร · ตลาดสด · บริษัท — ตัวเลือกในแอปรับวัตถุดิบ</div></div>
         </Link>
+        <Link to="/qa/spec" className="col-span-2 bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
+          <BookOpen className="w-6 h-6 shrink-0 text-teal-700" />
+          <div className="min-w-0"><div className="font-semibold text-sm text-gray-800">ข้อกำหนดตรวจรับ (RD-RMS / RD-PMS)</div><div className="text-[11px] text-gray-500">รายการตรวจตามกลุ่มวัตถุดิบและบรรจุภัณฑ์ · เกณฑ์ · ระดับ Critical / Major / Minor — QA แก้ได้</div></div>
+        </Link>
       </div>
 
       <div className="flex items-center justify-between mb-2">

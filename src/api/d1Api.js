@@ -165,6 +165,11 @@ export const supplierListApi = {
   update: (body) => patch('/api/suppliers', body),
 }
 
+export const specApi = {
+  list: () => request('/api/recv/specs'),
+  update: (group, seq, body) => patch(`/api/recv/specs/${enc(group)}/${seq}`, body),
+}
+
 export const materialApi = {
   list: () => request('/api/materials'),
   create: (body) => post('/api/materials', body),

@@ -95,6 +95,7 @@ async function _syncRun(){
 async function pullAll(){
   await loadMaterials().catch(()=>{});
   await loadSuppliers().catch(()=>{});
+  await loadSpecs().catch(()=>{});
   if(isDemo())return;
   const d=await api('GET','/api/recv');
   const mem=new Map(records.filter(r=>r.synced).map(r=>[r.docNo,r]));
@@ -1103,7 +1104,7 @@ function porkSummary(m){
   const s=k=>m[k]==='PASS'?'ผ่าน':m[k]==='FAIL'?'ไม่ผ่าน':'-';
   return 'IQC-หมูบด Lot '+c.bags+' ถุง | สุ่ม '+c.n+' ถุง | pH '+j('ph')+' | ใจกลาง '+j('t')+' °C | สุทธิ '+j('w')+' kg | บรรจุภัณฑ์ '+s('pkSeal')+' ฉลาก '+s('pkLabel')+' สี '+s('pkColor')+' กลิ่น '+s('pkOdor')+' สิ่งเจือปน '+s('pkFm')+' | '+aqlVerdictTxt(c.verdict);
 }
-function inspSummary(m){return aqlSummary(m)||porkSummary(m);}
+function inspSummary(m){return aqlSummary(m)||porkSummary(m)||specSummary(m);}
 function porkCloud(m){
   if(!isPork(m))return{};const c=porkCalc(m);const v=f=>c.rows.map(r=>pkNum(r[f])).filter(x=>x!==null);
   const ph=v('ph');
@@ -1204,6 +1205,74 @@ function cPork(){
 //  PDF Generation — Browser Print (รองรับภาษาไทย 100%)
 //  ใช้ window.print() แทน jsPDF — ไม่มีปัญหาตัวอักษรเพี้ยน
 // ═══════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+//  ข้อกำหนดตรวจรับ RD-RMS (วัตถุดิบ) / RD-PMS (บรรจุภัณฑ์) — รายการตรวจต่อกลุ่ม พร้อมระดับ Critical / Major / Minor
+//  ค่ามาจากฐานข้อมูล (QA แก้ได้ที่หน้า "ข้อกำหนดตรวจรับ"); SPEC_BUILTIN ใช้เมื่อยังโหลดไม่ได้ (ออฟไลน์ครั้งแรก)
+//  ผลตัดสิน: ข้อ Critical ไม่ผ่าน = REJECT · ข้อ Major / Minor ไม่ผ่าน = HOLD (หรือรับแบบมีเงื่อนไขโดยผู้มีสิทธิ์)
+// ═══════════════════════════════════════════════════════════════
+const SPEC_KEY='psp_recv_specs';
+const SPEC_BUILTIN={"groups":[{"key":"RD-RMS-002","name":"ข้อกำหนดวัตถุดิบ กลุ่มพริกแห้งและพริกป่น","kind":"RMS","items":[{"seq":1,"title":"สี","criterion":"แดงตามธรรมชาติของพริกแห้ง ไม่ซีด ไม่ดำคล้ำ","method":"ดูด้วยตา เทียบตัวอย่างอ้างอิง","level":"Major"},{"seq":2,"title":"กลิ่น","criterion":"กลิ่นพริกแห้ง ไม่มีกลิ่นอับ กลิ่นหืน หรือกลิ่นแปลกปลอม","method":"ดม","level":"Major"},{"seq":3,"title":"รา","criterion":"ไม่พบราที่มองเห็น","method":"ดูด้วยตา","level":"Critical"},{"seq":4,"title":"แมลง มอด มูลสัตว์","criterion":"ไม่พบ","method":"ดูด้วยตา / ร่อน","level":"Critical"},{"seq":5,"title":"สิ่งแปลกปลอม","criterion":"ไม่พบหิน กรวด โลหะ แก้ว พลาสติก เศษไม้","method":"ดูด้วยตา / ร่อน","level":"Critical"},{"seq":6,"title":"ขั้วติด (RM-007)","criterion":"ค่าเสนอ: ไม่เกิน 2% โดยน้ำหนัก","method":"คัดแยกจากตัวอย่าง ชั่งน้ำหนัก","level":"Minor"},{"seq":7,"title":"ความละเอียด (พริกป่น)","criterion":"ตามตัวอย่างอ้างอิงที่อนุมัติ","method":"เทียบตัวอย่างอ้างอิง","level":"Minor"},{"seq":8,"title":"ความแห้ง","criterion":"แห้ง ไม่จับเป็นก้อน ไม่นิ่มชื้น","method":"บีบ / ดูด้วยตา","level":"Major"},{"seq":9,"title":"น้ำหนักสุทธิ","criterion":"ไม่น้อยกว่าที่ระบุต่อภาชนะ","method":"สุ่มชั่งตามจำนวนตัวอย่าง","level":"Major"}]},{"key":"RD-RMS-003","name":"ข้อกำหนดวัตถุดิบ กลุ่มอาหารทะเลแห้งและของแห้ง","kind":"RMS","items":[{"seq":1,"title":"สี","criterion":"ตามธรรมชาติ (กุ้งแห้ง: ส้มแดงธรรมชาติ ไม่สีจัดผิดปกติ; ปลาป่น: น้ำตาลตามชนิดปลา; เห็ดหอม: น้ำตาล ด้านใต้ครีม)","method":"ดูด้วยตา เทียบตัวอย่างอ้างอิง","level":"Major"},{"seq":2,"title":"กลิ่น","criterion":"กลิ่นตามธรรมชาติ ไม่มีกลิ่นเน่า กลิ่นแอมโมเนีย กลิ่นอับ หรือกลิ่นหืน","method":"ดม","level":"Critical"},{"seq":3,"title":"รา","criterion":"ไม่พบราที่มองเห็น","method":"ดูด้วยตา","level":"Critical"},{"seq":4,"title":"แมลง หนอน มอด","criterion":"ไม่พบ (เห็ดหอม: ไม่มีรูแมลงเจาะ)","method":"ดูด้วยตา / ร่อน","level":"Critical"},{"seq":5,"title":"สิ่งแปลกปลอม","criterion":"ไม่พบหิน กรวด โลหะ พลาสติก เส้นผม","method":"ดูด้วยตา / ร่อน","level":"Critical"},{"seq":6,"title":"ความแห้ง","criterion":"ไม่ชื้นแฉะ ไม่เกาะเป็นก้อน ไม่เหนียวมือ","method":"บีบ / ดูด้วยตา","level":"Major"},{"seq":7,"title":"เปลือก หัว ก้างปน","criterion":"ค่าเสนอ: ไม่เกิน 5% โดยน้ำหนัก (ยกเว้น RM-021 กุ้งติดเปลือก)","method":"คัดแยกจากตัวอย่าง ชั่งน้ำหนัก","level":"Minor"},{"seq":8,"title":"ขนาด / เกรด","criterion":"ตามที่ตกลง (เห็ดหอมเกรด B4; กุ้งแห้งจิ๋วตามตัวอย่างอ้างอิง)","method":"เทียบตัวอย่างอ้างอิง","level":"Minor"},{"seq":9,"title":"น้ำหนักสุทธิ","criterion":"ไม่น้อยกว่าที่ระบุต่อภาชนะ","method":"สุ่มชั่งตามจำนวนตัวอย่าง","level":"Major"}]},{"key":"RD-RMS-004","name":"ข้อกำหนดวัตถุดิบ กลุ่มผลิตภัณฑ์หมัก (ปลาร้า กะปิ)","kind":"RMS","items":[{"seq":1,"title":"ภาชนะบวม / รั่ว","criterion":"ไม่พบ (ภาชนะบวมแสดงการเสื่อมเสีย)","method":"ดูด้วยตา","level":"Critical"},{"seq":2,"title":"หนอน แมลง","criterion":"ไม่พบ","method":"ดูด้วยตา","level":"Critical"},{"seq":3,"title":"รา / ฝ้าผิดปกติ","criterion":"ไม่พบ","method":"ดูด้วยตา","level":"Critical"},{"seq":4,"title":"กลิ่น","criterion":"กลิ่นตามธรรมชาติของปลาร้า / กะปิ ไม่มีกลิ่นเน่าเหม็นผิดปกติ","method":"ดม","level":"Major"},{"seq":5,"title":"สี / เนื้อสัมผัส","criterion":"ตามธรรมชาติ (กะปิ: ม่วงอมน้ำตาล ไม่ชมพูจัดผิดปกติ)","method":"ดูด้วยตา","level":"Major"},{"seq":6,"title":"สิ่งแปลกปลอม","criterion":"ไม่พบเศษพลาสติก โลหะ หิน","method":"ดูด้วยตา","level":"Critical"},{"seq":7,"title":"ฉลากและเลขสารบบ","criterion":"ครบถ้วน ตรงกับที่อนุมัติ","method":"ตรวจฉลาก","level":"Critical"}]},{"key":"RD-RMS-005","name":"ข้อกำหนดวัตถุดิบ กลุ่มเนื้อสัตว์และปลาแช่เย็น / แช่แข็ง","kind":"RMS","items":[{"seq":1,"title":"อุณหภูมิใจกลาง (หมูบด)","criterion":"0–4°C","method":"เทอร์โมมิเตอร์เสียบใจกลางถุง (IQC หมูบด)","level":"Critical"},{"seq":2,"title":"อุณหภูมิ (ปลาแช่แข็ง)","criterion":"≤ -18°C","method":"เทอร์โมมิเตอร์","level":"Critical"},{"seq":3,"title":"pH (หมูบด)","criterion":"5.5–6.2 รับ | ต่ำกว่า 5.4 ไม่รับ (PSE) | 6.3–6.4 ไม่รับ (DFD) | 6.5 ขึ้นไป ไม่รับ (เริ่มเน่าเสีย) | 5.4–5.5 และ 6.2–6.3 HOLD ให้ QC Supervisor ตัดสิน","method":"pH meter แบบปลายแหลม เสียบกึ่งกลางถุง ทำความสะอาดหัววัดทุกถุง","level":"Critical"},{"seq":4,"title":"สี (หมูบด)","criterion":"แดงหรือชมพูตามธรรมชาติ ไม่คล้ำเขียว","method":"ดูด้วยตา","level":"Major"},{"seq":5,"title":"กลิ่น","criterion":"ไม่มีกลิ่นเหม็นเปรี้ยวหรือกลิ่นเน่า","method":"ดม","level":"Critical"},{"seq":6,"title":"สิ่งแปลกปลอม","criterion":"ไม่พบเศษกระดูก พลาสติก โลหะ","method":"ดูด้วยตา","level":"Critical"},{"seq":7,"title":"สภาพบรรจุภัณฑ์","criterion":"ซีลสนิท ไม่ฉีกขาด ไม่มีน้ำเลือดซึม","method":"ดูด้วยตา","level":"Major"},{"seq":8,"title":"ปลาแช่แข็ง: การละลายแล้วแช่ซ้ำ","criterion":"ไม่พบก้อนน้ำแข็งเกาะผิดปกติหรือปลาจับก้อนแข็ง","method":"ดูด้วยตา","level":"Major"},{"seq":9,"title":"น้ำหนักสุทธิ","criterion":"ไม่น้อยกว่าที่ระบุหน้าถุง (หักน้ำหนักถุง)","method":"ชั่งรายถุงที่สุ่ม","level":"Major"}]},{"key":"RD-RMS-006","name":"ข้อกำหนดวัตถุดิบ กลุ่มเครื่องปรุงรส ซอส น้ำตาล เกลือ และงา","kind":"RMS","items":[{"seq":1,"title":"ฉลากและเลขสารบบ","criterion":"มีเลขสารบบอาหาร ยี่ห้อ/สูตรตรงที่อนุมัติ","method":"ตรวจฉลาก","level":"Critical"},{"seq":2,"title":"สภาพภาชนะ","criterion":"ไม่บุบ ไม่รั่ว ไม่บวม ฝาปิดสนิท","method":"ดูด้วยตา","level":"Major"},{"seq":3,"title":"วันหมดอายุ","criterion":"ไม่หมดอายุ และอายุคงเหลือตามเกณฑ์","method":"ตรวจฉลาก","level":"Major"},{"seq":4,"title":"มะขามเปียก (RM-026)","criterion":"ไม่มีรา แมลง; เมล็ด/เปลือกปนตามตัวอย่างอ้างอิง","method":"ดูด้วยตา","level":"Critical"},{"seq":5,"title":"น้ำตาลมะพร้าว (RM-045, 046)","criterion":"ไม่เยิ้มละลาย ไม่มีรา ไม่มีกลิ่นบูด","method":"ดูด้วยตา / ดม","level":"Major"},{"seq":6,"title":"งาขาว (RM-050)","criterion":"ไม่มีกลิ่นหืน มอด แมลง หรือสิ่งแปลกปลอม","method":"ดูด้วยตา / ดม","level":"Critical"},{"seq":7,"title":"เกลือ น้ำตาลทราย ผงชูรส","criterion":"แห้ง ไม่จับก้อน ไม่มีสิ่งแปลกปลอม","method":"ดูด้วยตา","level":"Major"}]},{"key":"RD-RMS-007","name":"ข้อกำหนดวัตถุดิบ กลุ่มน้ำมันพืช","kind":"RMS","items":[{"seq":1,"title":"ลักษณะ","criterion":"ใส ไม่มีตะกอนแปลกปลอม (ปาล์มโอลีนอาจขุ่นเมื่ออากาศเย็น ให้วางที่อุณหภูมิห้องแล้วตรวจซ้ำ)","method":"ดูด้วยตา","level":"Major"},{"seq":2,"title":"กลิ่น","criterion":"กลิ่นตามชนิดน้ำมัน ไม่มีกลิ่นหืน","method":"ดม","level":"Major"},{"seq":3,"title":"ภาชนะ","criterion":"ปี๊บ/แกลลอนไม่บุบ ไม่รั่ว ฝาปิดสนิทมีซีล","method":"ดูด้วยตา","level":"Major"},{"seq":4,"title":"ฉลากและเลขสารบบ","criterion":"ครบถ้วน ชนิด/ยี่ห้อตรงที่อนุมัติ","method":"ตรวจฉลาก","level":"Critical"}]},{"key":"RD-RMS-008","name":"ข้อกำหนดวัตถุดิบ กลุ่มวัตถุเจือปนอาหาร","kind":"RMS","items":[{"seq":1,"title":"ลักษณะ","criterion":"ผงหรือเกล็ดสีขาว ไม่จับก้อน ไม่มีสีหรือจุดแปลกปลอม","method":"ดูด้วยตา","level":"Major"},{"seq":2,"title":"ภาชนะ","criterion":"ปิดสนิท ไม่ชื้น ไม่ฉีกขาด","method":"ดูด้วยตา","level":"Major"},{"seq":3,"title":"ฉลาก Food Grade และเลขสารบบ","criterion":"ครบถ้วน","method":"ตรวจฉลาก","level":"Critical"},{"seq":4,"title":"COA","criterion":"มีทุก Lot และตรงกับ Lot ที่ส่ง","method":"ตรวจเอกสาร","level":"Critical"}]},{"key":"RD-PMS-001","name":"ข้อกำหนดบรรจุภัณฑ์ ภาชนะบรรจุสัมผัสอาหาร (กระปุก PET และฝา)","kind":"PMS","items":[{"seq":1,"title":"รอยแตก รู รั่ว","criterion":"ไม่พบ","method":"ดูด้วยตา ส่องไฟ","level":"Critical"},{"seq":2,"title":"สิ่งแปลกปลอมภายใน","criterion":"ไม่พบจุดดำ ฝุ่น เศษพลาสติก แมลง","method":"ดูด้วยตา","level":"Critical"},{"seq":3,"title":"ขอบปาก (Flange) กระปุก","criterion":"เรียบ ไม่บิ่น ไม่บิดเบี้ยว (กระทบการปิดผนึก)","method":"ดูด้วยตา / ทดลองปิดฝา","level":"Critical"},{"seq":4,"title":"ขนาด: เส้นผ่านศูนย์กลาง / ความสูง / ความจุ","criterion":"ตาม Drawing ของผู้ขาย (เช่น ซีรี่ย์ 307 Ø 83 mm, TCK230R307 ความจุ 230 ml) ± ค่าเผื่อที่ตกลง","method":"เวอร์เนียร์ / ตวงน้ำ","level":"Major"},{"seq":5,"title":"ฝาอลูมิเนียม EOE/POE","criterion":"ไม่บุบ ห่วงดึงสมบูรณ์ สารเคลือบด้านในไม่หลุด ยางขอบฝา (Compound) สม่ำเสมอ","method":"ดูด้วยตา","level":"Critical"},{"seq":6,"title":"ฝาครอบ PE","criterion":"สวมพอดี ไม่แตก ไม่เสียรูป; ช้อนครบ (PKG-003)","method":"ทดลองสวม","level":"Major"},{"seq":7,"title":"ความใส / รอยขีดข่วน","criterion":"ใส ไม่มีรอยขีดข่วนหรือฝ้าเกินตัวอย่างอ้างอิง","method":"ดูด้วยตา เทียบตัวอย่างอ้างอิง","level":"Minor"},{"seq":8,"title":"การทดลองปิดผนึก","criterion":"ปิดด้วยเครื่องแล้วไม่รั่ว (คว่ำ/บีบ)","method":"ทดลองปิด 3 ชุดต่อ Lot","level":"Critical"},{"seq":9,"title":"จำนวนต่อลัง / แพ็ค","criterion":"ตรงตามที่ระบุ (เช่น LAZ60R202 504 ชิ้น/ลัง, POE 202 150 ชิ้น/แพ็ค, PE Cover 202 100 ชิ้น/แพ็ค)","method":"นับ / ชั่ง","level":"Minor"}]},{"key":"RD-PMS-002","name":"ข้อกำหนดบรรจุภัณฑ์ ซองพิมพ์สัมผัสอาหาร","kind":"PMS","items":[{"seq":1,"title":"รูเข็ม รอยรั่ว","criterion":"ไม่พบ","method":"ส่องไฟ / ทดสอบบีบลม","level":"Critical"},{"seq":2,"title":"ข้อความบนซอง","criterion":"ตรงกับ Artwork ที่อนุมัติ ครบทุกข้อความ","method":"เทียบปรู๊ฟ / Master Copy","level":"Critical"},{"seq":3,"title":"ขนาดซอง","criterion":"ตาม Drawing ± ค่าเผื่อที่ตกลง","method":"ไม้บรรทัด / เวอร์เนียร์","level":"Major"},{"seq":4,"title":"ความแข็งแรงรอยซีล","criterion":"ค่าตามผู้ขาย / ทดลองซีลด้วยเครื่องที่ใช้จริงแล้วไม่รั่ว","method":"ทดลองซีลและบีบ","level":"Critical"},{"seq":5,"title":"คุณภาพงานพิมพ์","criterion":"สีตรงมาตรฐาน ไม่เหลื่อม ไม่ซีด หมึกไม่หลุดเมื่อขูด","method":"เทียบตัวอย่างอ้างอิง / ขูดด้วยนิ้ว","level":"Major"},{"seq":6,"title":"กลิ่นตัวทำละลาย","criterion":"ไม่มีกลิ่นหมึกหรือตัวทำละลายที่ด้านใน","method":"ดม","level":"Major"},{"seq":7,"title":"ความสะอาดด้านใน","criterion":"ไม่มีฝุ่น เศษวัสดุ","method":"ดูด้วยตา","level":"Critical"}]},{"key":"RD-PMS-003","name":"ข้อกำหนดบรรจุภัณฑ์ สติกเกอร์ฉลากผลิตภัณฑ์","kind":"PMS","items":[{"seq":1,"title":"ข้อความบนฉลาก","criterion":"ตรงกับ Artwork ที่อนุมัติทุกตัวอักษร (ชื่ออาหาร เลขสารบบ ส่วนประกอบ สารก่อภูมิแพ้ น้ำหนัก ผู้ผลิต)","method":"เทียบ Master Copy","level":"Critical"},{"seq":2,"title":"รุ่น / ขนาดฉลากถูกต้อง","criterion":"ตรงกับผลิตภัณฑ์และขนาดบรรจุ","method":"ตรวจรหัส PKG กับฉลาก","level":"Critical"},{"seq":3,"title":"ขนาดดวง","criterion":"ตามข้อ 3 ± 1 mm (ค่าเสนอ)","method":"ไม้บรรทัด","level":"Major"},{"seq":4,"title":"สีและความคมชัด","criterion":"ตรงตัวอย่างอ้างอิง อ่านได้ชัด ไม่เลือน ไม่เหลื่อม","method":"เทียบตัวอย่างอ้างอิง","level":"Major"},{"seq":5,"title":"การยึดติด","criterion":"ติดแน่นบนกระปุก PET ไม่ลอกเมื่อแช่เย็นหรือเปื้อนน้ำมัน","method":"ทดลองติดและแช่เย็น 24 ชม.","level":"Major"},{"seq":6,"title":"ความทนทานของหมึก","criterion":"หมึกไม่หลุดเมื่อขูดหรือโดนน้ำมัน","method":"ขูดด้วยนิ้ว / เช็ดน้ำมัน","level":"Minor"},{"seq":7,"title":"ดวงขาด / ม้วนต่อ","criterion":"ไม่มีดวงขาดหรือรอยต่อเกินที่ตกลง","method":"ดูด้วยตา","level":"Minor"}]},{"key":"RD-PMS-004","name":"ข้อกำหนดบรรจุภัณฑ์ กล่องพัสดุและวัสดุขนส่ง","kind":"PMS","items":[{"seq":1,"title":"ขนาดกล่อง / แผ่นล็อก","criterion":"ตามข้อกำหนดของผู้ขาย ± ค่าเผื่อที่ตกลง","method":"ตลับเมตร","level":"Major"},{"seq":2,"title":"ความแข็งแรง","criterion":"ไม่ยุบเมื่อซ้อน ลอนไม่แตก","method":"ทดลองบรรจุและซ้อน","level":"Major"},{"seq":3,"title":"ความสะอาดและความแห้ง","criterion":"ไม่ชื้น ไม่ขึ้นรา ไม่มีแมลงหรือมูลสัตว์","method":"ดูด้วยตา","level":"Major"},{"seq":4,"title":"ความพอดีกับกระปุก","criterion":"กระปุกไม่ขยับในแผ่นล็อก","method":"ทดลองบรรจุ","level":"Major"},{"seq":5,"title":"จำนวน","criterion":"ตรงตามใบส่งของ","method":"นับ","level":"Minor"},{"seq":6,"title":"เทป / ลาเบล / บับเบิ้ล","criterion":"ติดแน่น พิมพ์ชัด ไม่ขาด","method":"ดูด้วยตา","level":"Minor"}]}],"mats":{"RM-007":"RD-RMS-002","RM-008":"RD-RMS-002","RM-028":"RD-RMS-002","RM-029":"RD-RMS-002","RM-011":"RD-RMS-003","RM-012":"RD-RMS-003","RM-013":"RD-RMS-003","RM-016":"RD-RMS-003","RM-017":"RD-RMS-003","RM-018":"RD-RMS-003","RM-019":"RD-RMS-003","RM-020":"RD-RMS-003","RM-021":"RD-RMS-003","RM-022":"RD-RMS-003","RM-014":"RD-RMS-004","RM-015":"RD-RMS-004","RM-027":"RD-RMS-004","RM-009":"RD-RMS-005","RM-010":"RD-RMS-005","RM-023":"RD-RMS-006","RM-024":"RD-RMS-006","RM-025":"RD-RMS-006","RM-026":"RD-RMS-006","RM-030":"RD-RMS-006","RM-031":"RD-RMS-006","RM-032":"RD-RMS-006","RM-045":"RD-RMS-006","RM-046":"RD-RMS-006","RM-047":"RD-RMS-006","RM-048":"RD-RMS-006","RM-049":"RD-RMS-006","RM-050":"RD-RMS-006","RM-036":"RD-RMS-007","RM-037":"RD-RMS-007","RM-038":"RD-RMS-007","RM-039":"RD-RMS-007","RM-040":"RD-RMS-007","RM-041":"RD-RMS-007","RM-042":"RD-RMS-007","RM-043":"RD-RMS-007","RM-044":"RD-RMS-007","RM-051":"RD-RMS-007","RM-052":"RD-RMS-007","RM-033":"RD-RMS-008","RM-034":"RD-RMS-008","RM-035":"RD-RMS-008","PKG-001":"RD-PMS-001","PKG-002":"RD-PMS-001","PKG-003":"RD-PMS-001","PKG-004":"RD-PMS-001","PKG-005":"RD-PMS-001","PKG-006":"RD-PMS-001","PKG-007":"RD-PMS-001","PKG-046":"RD-PMS-002","PKG-010":"RD-PMS-003","PKG-011":"RD-PMS-003","PKG-012":"RD-PMS-003","PKG-013":"RD-PMS-003","PKG-014":"RD-PMS-003","PKG-015":"RD-PMS-003","PKG-016":"RD-PMS-003","PKG-017":"RD-PMS-003","PKG-018":"RD-PMS-003","PKG-019":"RD-PMS-003","PKG-020":"RD-PMS-003","PKG-021":"RD-PMS-003","PKG-022":"RD-PMS-003","PKG-023":"RD-PMS-003","PKG-024":"RD-PMS-003","PKG-025":"RD-PMS-003","PKG-026":"RD-PMS-003","PKG-027":"RD-PMS-003","PKG-028":"RD-PMS-003","PKG-029":"RD-PMS-003","PKG-030":"RD-PMS-003","PKG-031":"RD-PMS-003","PKG-032":"RD-PMS-003","PKG-033":"RD-PMS-003","PKG-034":"RD-PMS-003","PKG-035":"RD-PMS-004","PKG-036":"RD-PMS-004","PKG-037":"RD-PMS-004","PKG-038":"RD-PMS-004","PKG-039":"RD-PMS-004","PKG-040":"RD-PMS-004","PKG-041":"RD-PMS-004","PKG-042":"RD-PMS-004","PKG-043":"RD-PMS-004","PKG-044":"RD-PMS-004","PKG-045":"RD-PMS-004","SUP-024":"RD-PMS-004","SUP-025":"RD-PMS-004","SUP-026":"RD-PMS-004"}};
+let SPEC=(()=>{try{const v=JSON.parse(localStorage.getItem(SPEC_KEY)||'null');return v&&Array.isArray(v.groups)&&v.mats?v:SPEC_BUILTIN;}catch(e){return SPEC_BUILTIN;}})();
+async function loadSpecs(){
+  const d=await api('GET','/api/recv/specs');
+  if(!d||!Array.isArray(d.groups)||!d.mats)return;
+  SPEC={groups:d.groups.map(g=>({key:g.key,name:g.name,kind:g.kind,items:g.items.filter(i=>i.active!==false)})),mats:d.mats};
+  try{localStorage.setItem(SPEC_KEY,JSON.stringify(SPEC));}catch(e){}
+}
+const SPEC_LV={Critical:{c:'#c62828',t:'Critical'},Major:{c:'#b35c00',t:'Major'},Minor:{c:'#5f6b7a',t:'Minor'}};
+function specGroup(m){            // กลุ่มข้อกำหนดของวัตถุดิบนี้ — ไม่ใช้กับหมูบดที่มีแผนตรวจของตัวเอง (พริกแห้งที่เปิด AQL อยู่ใช้ทั้งสองอย่าง)
+  if(!m||!m.code||isPork(m))return null;
+  const k=SPEC.mats[m.code];return SPEC.groups.find(g=>g.key===k&&g.items.length)||null;
+}
+function specOn(m){return !!specGroup(m);}
+function specInit(m){m.spec=null;m.specFail=[];m.specV='';const g=specGroup(m);if(g){m.spec={g:g.key,r:{}};m.visual='PASS';}}
+function specCalc(m){
+  const g=specGroup(m);if(!g||!m.spec||m.spec.g!==g.key)return{on:false,verdict:'',failed:[],done:0,total:g?g.items.length:0,group:g};
+  const r=m.spec.r||{};const failed=g.items.filter(i=>r[i.seq]==='F');
+  const done=g.items.filter(i=>r[i.seq]==='P'||r[i.seq]==='F'||r[i.seq]==='N').length;
+  const verdict=failed.some(i=>i.level==='Critical')?'REJECT':failed.length?'HOLD':'PASS';
+  return{on:true,verdict,failed,done,total:g.items.length,group:g};
+}
+function specApply(m){            // ผลการตรวจรับต้องไม่ดีกว่าผลตามข้อกำหนด
+  const c=specCalc(m);if(!c.on)return c;
+  const prev=m.specV;m.specV=c.verdict;m.specFail=c.failed.map(i=>({seq:i.seq,title:i.title,level:i.level}));
+  if(c.done===c.total){m.visual=c.failed.length?'FAIL':'PASS';}
+  if(m.result===prev||RES_RANK[m.result]<RES_RANK[c.verdict])m.result=c.verdict;
+  enforceMin(m);return c;
+}
+function setSpec(idx,seq,v){const m=curMats.find(x=>x.idx===idx);if(!m||!m.spec)return;m.spec.r[seq]=v;specApply(m);renderMats();}
+function specAllPass(idx){const m=curMats.find(x=>x.idx===idx);const g=m&&specGroup(m);if(!g||!m.spec)return;g.items.forEach(i=>{if(!m.spec.r[i.seq])m.spec.r[i.seq]='P';});specApply(m);renderMats();}
+function specCheck(m,no){
+  const c=specCalc(m);if(!c.on)return'';const p='รายการที่ '+no+': ';
+  if(c.done<c.total)return p+'ตรวจตามข้อกำหนดยังไม่ครบ ('+c.done+'/'+c.total+' ข้อ)';
+  if(RES_RANK[m.result]<RES_RANK[c.verdict])return p+'ไม่ผ่านข้อกำหนดตรวจรับ — ผลต้องไม่ดีกว่า '+RES_TXT[c.verdict];
+  return'';
+}
+function specFailTxt(m){return m.specFail&&m.specFail.length?'ไม่ผ่านข้อกำหนด '+(m.spec&&m.spec.g||'')+': '+m.specFail.map(f=>f.title+' ['+f.level+']').join('; '):'';}
+function specSummary(m){
+  if(!m.spec||!m.spec.g)return'';const r=m.spec.r||{};const n=k=>Object.values(r).filter(v=>v===k).length;
+  return 'ตามข้อกำหนด '+m.spec.g+' ผ่าน '+n('P')+' | ไม่ผ่าน '+n('F')+' | N/A '+n('N')+(m.specFail&&m.specFail.length?' | ไม่ผ่าน: '+m.specFail.map(f=>f.title+' ['+f.level+']').join('; '):'');
+}
+function specHtml(m){
+  const c=specCalc(m);if(!c.on)return'';
+  const g=c.group;const r=m.spec.r;
+  const pillS=(i,v,l,cls)=>`<button type="button" class="tp ${cls}${r[i.seq]===v?' sel':''}" style="flex:1;padding:8px 4px;font-size:13px" onclick="setSpec(${m.idx},${i.seq},'${v}')">${l}</button>`;
+  const vcol=c.verdict==='REJECT'?'#c62828':c.verdict==='HOLD'?'#b35c00':'#1b7f3b';
+  return `<div style="margin-bottom:14px;border:1px solid var(--border);border-radius:12px;padding:12px;background:#fbfcfd">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">
+      <div style="font-size:13px;font-weight:700;color:var(--navy)">&#x1F4CB; ตรวจรับตามข้อกำหนด ${escH(g.key)}</div>
+      <button type="button" class="bm" style="padding:6px 10px;font-size:12px" onclick="specAllPass(${m.idx})">ผ่านทั้งหมดที่ยังไม่ได้ตอบ</button></div>
+    <div style="font-size:12px;color:var(--gray3);margin-bottom:10px">${escH(g.name)} · ตอบ ${c.done}/${c.total} ข้อ · Critical ไม่ผ่าน = REJECT · Major / Minor ไม่ผ่าน = HOLD</div>
+    ${g.items.map(i=>{const lv=SPEC_LV[i.level]||SPEC_LV.Minor;const v=r[i.seq];
+      return `<div style="padding:9px 0;border-top:1px solid #eef0f3${v==='F'?';background:#fff4f2;margin:0 -6px;padding-left:6px;padding-right:6px':''}">
+        <div style="font-size:13px;font-weight:600;color:var(--gray5,#222)">${i.seq}. ${escH(i.title)} <span style="font-size:10px;font-weight:700;color:#fff;background:${lv.c};border-radius:6px;padding:1px 6px;vertical-align:1px">${lv.t}</span></div>
+        <div style="font-size:12px;color:var(--gray4);margin:2px 0">เกณฑ์: ${escH(i.criterion||'-')}</div>
+        ${i.method?`<div style="font-size:11px;color:var(--gray3);margin-bottom:6px">วิธีตรวจ: ${escH(i.method)}</div>`:''}
+        <div class="trow" style="display:flex;gap:6px">${pillS(i,'P','✓ ผ่าน','pass')}${pillS(i,'F','✗ ไม่ผ่าน','fail')}${pillS(i,'N','N/A','')}</div></div>`;}).join('')}
+    ${c.done===c.total?`<div style="margin-top:8px;font-size:13px;font-weight:700;color:${vcol}">ผลตามข้อกำหนด: ${c.verdict==='PASS'?'ผ่านทุกข้อ':c.verdict==='REJECT'?'REJECT — มีข้อ Critical ไม่ผ่าน':'HOLD — มีข้อ Major / Minor ไม่ผ่าน'}</div>`:''}
+  </div>`;
+}
 
 function generatePDF(rec){
   // พิมพ์ตามแบบฟอร์มควบคุม FM-QC-001: หน้า 1 บันทึกการตรวจรับ, หน้า 2 บันทึกการสุ่มตรวจ (เมื่อมี), แนบรูปถ่าย (เมื่อมี)
@@ -1441,7 +1510,7 @@ function negTemp(idx,n){   // แป้นตัวเลขของมือ�
   el.value=el.value.startsWith('-')?el.value.slice(1):'-'+el.value;setTemp(idx,n,el);
 }
 function setMat(idx,f,v){const m=curMats.find(m=>m.idx===idx);if(m)m[f]=v;if(['t1','t2','t3'].includes(f))renderMats();if(f==='qty'){porkRefresh(idx);wtRefresh(idx,true);}}
-function onMC(idx,code){const m=curMats.find(m=>m.idx===idx);const mi=MATERIALS.find(x=>x.code===code)||{};if(m){m.code=code;if(mi.unit)m.unit=mi.unit;aqlInit(m,code);if(m.aql)aqlApply(m);if(isPork(m)){porkDefaults(m);porkApply(m);}m.wt=[];m.wtN='';m.wtLab=undefined;wtApply(m);}renderMats();}
+function onMC(idx,code){const m=curMats.find(m=>m.idx===idx);const mi=MATERIALS.find(x=>x.code===code)||{};if(m){m.code=code;if(mi.unit)m.unit=mi.unit;aqlInit(m,code);if(m.aql)aqlApply(m);if(isPork(m)){porkDefaults(m);porkApply(m);}specInit(m);m.wt=[];m.wtN='';m.wtLab=undefined;wtApply(m);}renderMats();}
 function getSamp(code,qty){
   const mi=MATERIALS.find(m=>m.code===code);
   if(!mi||!qty||isNaN(qty))return null;
@@ -1497,8 +1566,9 @@ function renderMats(){
       </div>
       ${mi.store?`<div style="font-size:12px;color:var(--gray4);background:var(--gray1);border-radius:8px;padding:8px 10px;margin-bottom:12px">&#x1F4E6; การเก็บรักษา: ${mi.store}</div>`:''}
       ${pork||!showT?'':tHtml}
-      <div style="margin-bottom:12px;${pork?'display:none':''}"><label style="font-size:12px;font-weight:600;color:var(--gray4);margin-bottom:6px;display:block">Visual Check</label><div class="trow">${pill(m.idx,'visual',[{v:'PASS',c:'pass',l:'✓ PASS'},{v:'FAIL',c:'fail',l:'✗ FAIL'}])}</div></div>
-      <div style="margin-bottom:12px;${pork?'display:none':''}"><label style="font-size:12px;font-weight:600;color:var(--gray4);margin-bottom:6px;display:block">Leak Check</label><div class="trow">${pill(m.idx,'leak',[{v:'PASS',c:'pass',l:'PASS'},{v:'FAIL',c:'fail',l:'FAIL'},{v:'N/A',c:'na',l:'N/A'}])}</div></div>
+      <div style="margin-bottom:12px;${pork||specOn(m)?'display:none':''}"><label style="font-size:12px;font-weight:600;color:var(--gray4);margin-bottom:6px;display:block">Visual Check</label><div class="trow">${pill(m.idx,'visual',[{v:'PASS',c:'pass',l:'✓ PASS'},{v:'FAIL',c:'fail',l:'✗ FAIL'}])}</div></div>
+      <div style="margin-bottom:12px;${pork||specOn(m)?'display:none':''}"><label style="font-size:12px;font-weight:600;color:var(--gray4);margin-bottom:6px;display:block">Leak Check</label><div class="trow">${pill(m.idx,'leak',[{v:'PASS',c:'pass',l:'PASS'},{v:'FAIL',c:'fail',l:'FAIL'},{v:'N/A',c:'na',l:'N/A'}])}</div></div>
+      ${specHtml(m)}
       ${docHtml(m)}
       ${sampHtml}
       ${aqTog}${aqHtml}${wtHtml(m)}
@@ -1607,7 +1677,7 @@ function saveRecord(){
   const insp=document.getElementById('f-inspector').value;
   if(!date||!sup||!insp){showToast('กรอกข้อมูลให้ครบ','err');return;}
   if(!curMats.length){showToast('เพิ่มรายการวัตถุดิบก่อน','err');return;}
-  for(let i=0;i<curMats.length;i++){const er=docCheck(curMats[i],i+1)||aqlCheck(curMats[i],i+1)||porkCheck(curMats[i],i+1)||wtCheck(curMats[i],i+1);if(er){goFP(2);showToast(er,'err');return;}}
+  for(let i=0;i<curMats.length;i++){const er=docCheck(curMats[i],i+1)||aqlCheck(curMats[i],i+1)||porkCheck(curMats[i],i+1)||specCheck(curMats[i],i+1)||wtCheck(curMats[i],i+1);if(er){goFP(2);showToast(er,'err');return;}}
   if(curMats.some(m=>m.result==='COND')&&!canCond()){goFP(2);showToast('บัญชีนี้ไม่มีสิทธิ์รับแบบมีเงื่อนไข','err');return;}
   for(let i=0;i<curMats.length;i++){if(curMats[i].result==='COND'&&!String(curMats[i].note||'').trim()){goFP(2);showToast('รายการที่ '+(i+1)+': รับแบบมีเงื่อนไข ต้องระบุเงื่อนไขในช่องหมายเหตุ','err');return;}}
   if(sigState.empty){showToast('กรุณาเซ็นชื่อก่อนบันทึก','err');return;}
@@ -1626,11 +1696,11 @@ function saveRecord(){
   let ncCreated=false;
   rec.mats.forEach(m=>{
     if(m.result==='HOLD'||m.result==='REJECT'||m.result==='COND'){
-      const wtOnly=m.result==='COND'&&(m.wtV==='COND'||m.pkV==='COND'||m.docV==='COND')&&docVerdict(m)!=='HOLD'&&(!m.aql||aqlCalc(m).verdict==='PASS')&&(!isPork(m)||['PASS','COND'].includes(porkCalc(m).verdict))&&(!wtOn(m)||['PASS','COND'].includes(wtCalc(m).verdict));
+      const wtOnly=m.result==='COND'&&(m.wtV==='COND'||m.pkV==='COND'||m.docV==='COND')&&docVerdict(m)!=='HOLD'&&(!m.aql||aqlCalc(m).verdict==='PASS')&&(!isPork(m)||['PASS','COND'].includes(porkCalc(m).verdict))&&(!specOn(m)||specCalc(m).verdict==='PASS')&&(!wtOn(m)||['PASS','COND'].includes(wtCalc(m).verdict));
       const closeNote=[m.docV==='COND'?'แจ้ง Supplier นำส่ง COA ภายหลัง':'',(m.wtV==='COND'||m.pkV==='COND')?'แจ้ง Supplier / สุ่มชั่งซ้ำ':''].filter(Boolean).join(' · ');
       const _nc={id:nextNcId(),uid:newUid(),recUid:rec.uid,synced:false,docNo,supplier:sup,
         failType:m.result==='REJECT'?'Rejected Material':m.result==='COND'?'Conditional Acceptance — รับแบบมีเงื่อนไข':'Hold — Pending Investigation',
-        corrective:wtOnly?(closeNote||'แจ้ง Supplier')+' — รับแบบมีเงื่อนไข (ปิดอัตโนมัติ)':'—',qa:insp,status:wtOnly?'Closed':'Open',closedDate:wtOnly?date:'',ncrId:'',date,result:m.result,matIdx:m.idx,brief:m.note||'',mat:{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit},note:[m.note||m.code,inspSummary(m),m.doc==='FAIL'?'เอกสาร: '+docSummary(m):'',m.wtV==='COND'?wtSummary(m):''].filter(Boolean).join(' | ')};
+        corrective:wtOnly?(closeNote||'แจ้ง Supplier')+' — รับแบบมีเงื่อนไข (ปิดอัตโนมัติ)':'—',qa:insp,status:wtOnly?'Closed':'Open',closedDate:wtOnly?date:'',ncrId:'',date,result:m.result,matIdx:m.idx,brief:[specFailTxt(m),m.note].filter(Boolean).join(' | '),mat:{code:m.code,name:matName(m.code),lot:m.lot,qty:m.qty,unit:m.unit},note:[m.note||m.code,inspSummary(m),m.doc==='FAIL'?'เอกสาร: '+docSummary(m):'',m.wtV==='COND'?wtSummary(m):''].filter(Boolean).join(' | ')};
       ncLogs.unshift(_nc);cloudSaveNC(_nc).catch(()=>{});ncCreated=true;
     }
   });
@@ -2149,6 +2219,7 @@ function enforceMin(m){          // ผลการตรวจรับต้�
   up(docVerdict(m));
   if(m.aql)up(aqlCalc(m).verdict);
   if(isPork(m))up(porkCalc(m).verdict);
+  if(specOn(m))up(specCalc(m).verdict);
   const w=wtCalc(m);if(w)up(w.verdict);
   if(RES_RANK[m.result]<r)m.result=['PASS',hard?'HOLD':'COND','REJECT'][r];
 }
