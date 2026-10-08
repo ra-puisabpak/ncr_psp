@@ -1,36 +1,39 @@
 import { useEffect, useState } from 'react'
 import A4Sheet from '../components/A4Sheet'
-import Nw from '../components/Nw'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { weighApi } from '../api/d1Api'
 import { FORMS } from '../config'
-import { FormHeader, FormInfo, FormStats } from '../components/FormHeader'
+import { FormHeader } from '../components/FormHeader'
 import { bkkToday } from '../qa/shared'
 import { thaiDate, kg } from './WeighPrintPage'
 
 const td = 'border border-black px-1 py-[1px]'
-const total = (r) => r.lines.reduce((a, l) => a + l.weights.reduce((x, w) => x + (Number(w) || 0), 0), 0)
 const uniq = (a) => [...new Set(a.filter(Boolean))]
 
-// One product (formula) of the day: a row per raw material, a column per batch weighed, with the batch results underneath.
-function ProductBlock({ recs, no }) {
+// One product (formula) of the day, laid out like the per-product form: info line, a row per raw material, a column per batch, own signature.
+function ProductBlock({ recs, sigs }) {
   const first = recs[0]
   const cols = recs.flatMap((r) => Array.from({ length: r.sets }, (_, s) => ({ r, s, head: r.sets > 1 ? `${r.batch_no} ชุด ${s + 1}` : r.batch_no })))
   const names = uniq(recs.flatMap((r) => r.lines.map((l) => l.name)))
   const lineOf = (r, name) => r.lines.find((l) => l.name === name)
+  const weigherOf = (r, l) => l?.weigher || r.weigher_name || r.weigher
   const devKey = new Set(recs.flatMap((r) => (r.deviations || []).filter((d) => d.kind === 'TOL').map((d) => `${r.wr_id}|${d.name}#${d.set}`)))
   const notes = recs.filter((r) => (r.deviations || []).length || r.note)
+  const recorder = uniq(recs.map((r) => r.weigher)).join(', ')
   return (
-    <div className="avoid-break" style={{ marginBottom: 10 }}>
-      <div className="flex justify-between items-end bg-[#e9eef4] border border-black border-b-0 px-2 py-0.5">
-        <div><b className="text-[12px]">{no}. <Nw>{first.product_name}</Nw></b> <span className="text-[9px] text-gray-600">({first.product_code})</span></div>
-        <div className="text-[10px]">{recs.length} Batch · รวม <b>{kg(recs.reduce((a, r) => a + total(r), 0))}</b> กก.</div>
+    <div className="avoid-break" style={{ marginBottom: 14 }}>
+      <div className="flex flex-wrap gap-x-8 mb-1">
+        <div><b>ชื่อผลิตภัณฑ์:</b> {first.product_name} ({first.product_code})</div>
+        <div><b>วันที่ผลิต:</b> {thaiDate(first.prod_date)}</div>
+        <div><b>Batch:</b> {recs.map((r) => r.batch_no).join(', ')}</div>
+        <div><b>เครื่องชั่ง:</b> {uniq(recs.map((r) => r.scale_id)).join(', ') || '-'}</div>
       </div>
       <table className="w-full border-collapse text-center table-fixed">
-        <colgroup><col style={{ width: '8mm' }} /><col /><col style={{ width: '22mm' }} />{cols.map((_, i) => <col key={i} style={{ width: cols.length > 5 ? `${Math.floor(78 / cols.length)}mm` : '17mm' }} />)}</colgroup>
+        <colgroup><col style={{ width: '9mm' }} /><col /><col style={{ width: '24mm' }} /><col style={{ width: '24mm' }} />{cols.map((_, i) => <col key={i} style={{ width: cols.length > 4 ? `${Math.floor(64 / cols.length)}mm` : '22mm' }} />)}</colgroup>
         <thead className="bg-[#0f2744] text-white">
-          <tr><th className={td}>ลำดับ</th><th className={td}>รายการวัตถุดิบ</th><th className={td}>กำหนด (กก./ชุด)</th>{cols.map((c, i) => <th key={i} className={td}>{c.head}</th>)}</tr>
+          <tr><th className={td} rowSpan={2}>ลำดับ</th><th className={td} rowSpan={2}>รายการวัตถุดิบ</th><th className={td} rowSpan={2}>น้ำหนักที่กำหนด (กก./ชุด)</th><th className={td} rowSpan={2}>ผู้ชั่ง</th><th className={td} colSpan={cols.length}>น้ำหนักวัตถุดิบ (กก.)</th></tr>
+          <tr>{cols.map((c, i) => <th key={i} className={td}>{c.head}</th>)}</tr>
         </thead>
         <tbody>
           {names.map((name, i) => {
@@ -40,6 +43,7 @@ function ProductBlock({ recs, no }) {
                 <td className={td}>{i + 1}</td>
                 <td className={`${td} text-left`}>{name}{ls.some((l) => l.extra) ? ' (นอกสูตร)' : ''}</td>
                 <td className={td}>{kg(ls.find((l) => l.target != null)?.target)}</td>
+                <td className={td}>{uniq(recs.filter((r) => lineOf(r, name)).map((r) => weigherOf(r, lineOf(r, name)))).join(', ')}</td>
                 {cols.map((c, ci) => {
                   const l = lineOf(c.r, name)
                   return <td key={ci} className={`${td} ${devKey.has(`${c.r.wr_id}|${name}#${c.s + 1}`) ? 'font-bold text-red-700' : ''}`}>{l ? kg(l.weights[c.s]) : ''}</td>
@@ -49,11 +53,13 @@ function ProductBlock({ recs, no }) {
           })}
         </tbody>
       </table>
-      <div className="text-[9.5px] mt-0.5">
-        {recs.map((r) => (
-          <div key={r.wr_id}><b>{r.batch_no}</b> · {r.wr_id} · <span className={r.result === 'PASS' ? '' : 'font-bold text-amber-800'}>{r.result === 'PASS' ? 'ตามสูตร' : 'นอกเกณฑ์ (ประเมินแล้ว)'}</span>
-            {notes.includes(r) && <> — {[...(r.deviations || []).map((d) => d.text), r.note ? `${r.result === 'DEVIATION' ? `ผลการประเมิน (${r.assessed_by})` : 'หมายเหตุ'}: ${r.note}` : ''].filter(Boolean).join(' · ')}</>}</div>
-        ))}
+      {notes.length > 0 && (
+        <div className="mt-1 text-[9.5px]">
+          {notes.map((r) => <div key={r.wr_id}><b>Batch {r.batch_no}:</b> {[...(r.deviations || []).map((d) => d.text), r.note ? `${r.result === 'DEVIATION' ? `ผลการประเมิน (${r.assessed_by})` : 'หมายเหตุ'}: ${r.note}` : ''].filter(Boolean).join(' · ')}</div>)}
+        </div>
+      )}
+      <div className="mt-2 flex justify-end text-center">
+        <div><div className="h-10 flex items-end justify-center">{sigs[recorder] && <img src={sigs[recorder]} alt="" className="max-h-10 max-w-56" />}</div><div className="border-t border-dotted border-black w-56 mx-auto mb-0.5" />ผู้บันทึก ({recorder})<br />(QC)</div>
       </div>
     </div>
   )
@@ -79,9 +85,7 @@ export default function WeighDayPage() {
     }).catch((e) => setError(e.message))
   }, [date])
   const products = uniq((rows || []).map((r) => r.product_code))
-  const dev = (rows || []).filter((r) => r.result === 'DEVIATION').length
-  const recorders = uniq((rows || []).map((r) => r.weigher))
-
+  
   return (
     <div className="min-h-screen bg-gray-200 print:min-h-0 print:bg-white">
       <style>{'@media print { @page { size: A4 portrait; margin: 8mm; } }'}</style>
@@ -94,13 +98,8 @@ export default function WeighDayPage() {
       {rows && rows.length === 0 && <div className="no-print text-center text-gray-500 py-16">ไม่มีบันทึกการชั่งวันที่ {thaiDate(date)}</div>}
       {rows && rows.length > 0 && (
         <A4Sheet landscape={false} margin={8} className="text-[10.5px]">
-          <FormHeader form={FORMS.WEIGH} title="บันทึกการชั่งวัตถุดิบประจำวัน" en="Daily Raw Material Weighing Record" dept="Production QC" type="รายวัน" />
-          <FormInfo items={[['วันที่ผลิต', thaiDate(date)]]} />
-          <FormStats items={[[products.length, 'ผลิตภัณฑ์ (สูตร)'], [rows.length, 'Batch'], [kg(rows.reduce((a, r) => a + total(r), 0)), 'น้ำหนักวัตถุดิบรวม (กก.)'], [dev, 'นอกเกณฑ์ (ประเมินแล้ว)', dev ? '#b45309' : undefined]]} />
-          {products.map((p, i) => <ProductBlock key={p} no={i + 1} recs={rows.filter((r) => r.product_code === p)} />)}
-          <div className="mt-6 flex justify-end text-center avoid-break">
-            <div><div className="h-12 flex items-end justify-center">{recorders.length === 1 && sigs[recorders[0]] && <img src={sigs[recorders[0]]} alt="" className="max-h-12 max-w-56" />}</div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้บันทึก ({recorders.join(', ')})<br />(QC)</div>
-          </div>
+          <FormHeader form={FORMS.WEIGH} title="บันทึกการชั่งวัตถุดิบ" en="Raw Material Weighing Record" dept="Production QC" type="รายวัน" />
+          {products.map((p) => <ProductBlock key={p} recs={rows.filter((r) => r.product_code === p)} sigs={sigs} />)}
         </A4Sheet>
       )}
     </div>
