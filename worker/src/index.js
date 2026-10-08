@@ -1358,8 +1358,9 @@ export default {
         for (const k of ['product_code', 'batch_no']) if (sp.get(k)) { where.push(`${k}=?`); p.push(sp.get(k)); }
         const { results } = await DB.prepare(`SELECT * FROM fg_checks WHERE ${FG_LIVE} AND ${where.join(' AND ')} ORDER BY check_date DESC, fc_id DESC LIMIT 500`).bind(...p).all();
         const ids = results.map((r) => r.fc_id);
-        const phs = ids.length ? (await DB.prepare(`SELECT fc_id, slot FROM fg_check_photos WHERE fc_id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results : [];
-        const rc = ids.length ? (await DB.prepare(`SELECT * FROM fg_check_rechecks WHERE fc_id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results : [];
+        // A subquery instead of an id list: D1 allows only 100 bound parameters per statement.
+        const phs = ids.length ? (await DB.prepare(`SELECT fc_id, slot FROM fg_check_photos WHERE fc_id IN (SELECT fc_id FROM fg_checks WHERE ${FG_LIVE} AND ${where.join(' AND ')})`).bind(...p).all()).results : [];
+        const rc = ids.length ? (await DB.prepare(`SELECT * FROM fg_check_rechecks WHERE fc_id IN (SELECT fc_id FROM fg_checks WHERE ${FG_LIVE} AND ${where.join(' AND ')})`).bind(...p).all()).results : [];
         return json(results.map((r) => {
           const row = fgRow(r);
           row.photos = phs.filter((x) => x.fc_id === r.fc_id).map((x) => x.slot);
@@ -2343,9 +2344,9 @@ export default {
         if (sp.get('unit_id')) { where.push('unit_id=?'); p.push(sp.get('unit_id')); }
         if (isDate(sp.get('from'))) { where.push('read_date>=?'); p.push(sp.get('from')); }
         if (isDate(sp.get('to'))) { where.push('read_date<=?'); p.push(sp.get('to')); }
-        const { results } = await DB.prepare(`SELECT * FROM cold_readings WHERE ${where.join(' AND ')} ORDER BY read_date DESC, rd_id DESC LIMIT 2000`).bind(...p).all();
-        const causes = results.length ? (await DB.prepare(`SELECT rd_id, cause FROM cold_reading_causes WHERE rd_id IN (${results.map(() => '?').join(',')})`).bind(...results.map((r) => r.rd_id)).all()).results : [];
-        return json(results.map((r) => ({ ...r, cause: causes.find((c) => c.rd_id === r.rd_id)?.cause || null, limits: JSON.parse(r.limits), condition: r.condition ? JSON.parse(r.condition) : null, actions: r.actions ? JSON.parse(r.actions) : [] })));
+        // One join, not an IN list: D1 allows only 100 bound parameters per statement and a month holds far more readings.
+        const { results } = await DB.prepare(`SELECT c.*, k.cause AS cause FROM cold_readings c LEFT JOIN cold_reading_causes k ON k.rd_id = c.rd_id WHERE ${where.join(' AND ').replace(/\b(unit_id|read_date)\b/g, 'c.$1')} ORDER BY c.read_date DESC, c.rd_id DESC LIMIT 2000`).bind(...p).all();
+        return json(results.map((r) => ({ ...r, cause: r.cause || null, limits: JSON.parse(r.limits), condition: r.condition ? JSON.parse(r.condition) : null, actions: r.actions ? JSON.parse(r.actions) : [] })));
       }
       if (path === '/api/cold/readings' && method === 'POST') {
         need(user, WRITERS);
