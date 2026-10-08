@@ -866,3 +866,9 @@ CREATE TABLE IF NOT EXISTS weigh_signatures (
   signed_at     TEXT NOT NULL,
   PRIMARY KEY (wr_id, weigher_name)
 );
+
+-- Frying oil: minutes the oil took to reach 160 C (recorded with the check; reference 3 min).
+CREATE TABLE IF NOT EXISTS oil_reach (
+  chk_id  TEXT PRIMARY KEY,
+  minutes REAL NOT NULL
+);

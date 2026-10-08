@@ -42,7 +42,7 @@ export default function OilReportPage() {
             <thead className="bg-[#0f2744] text-white text-center">
               <tr>
                 <th className={td} rowSpan={2}>วันที่ / เวลา</th><th className={td} rowSpan={2}>ช่วง</th><th className={td} rowSpan={2}>ผลิตภัณฑ์ / ไลน์</th>
-                <th className={td} colSpan={3}>อุณหภูมิ (°C)<br />วัดก่อน TPM</th><th className={td} colSpan={3}>TPM (%)<br />วัดหลัง 3 นาที</th>
+                <th className={td} colSpan={3}>อุณหภูมิ (°C)<br />วัดก่อน TPM</th><th className={td} rowSpan={2}>เวลาถึง<br />160 °C (นาที)</th><th className={td} colSpan={3}>TPM (%)</th>
                 <th className={td} rowSpan={2}>ผลอุณหภูมิ</th><th className={td} rowSpan={2}>ผล TPM</th>
                 <th className={td} rowSpan={2}>Lot / ถัง</th><th className={td} rowSpan={2}>ผู้ตรวจ</th>
                 <th className={td} rowSpan={2}>ผู้ทวนสอบ / ผล</th><th className={td} rowSpan={2}>สิ่งที่ทำทันที / หมายเหตุ / NCR</th>
@@ -56,6 +56,7 @@ export default function OilReportPage() {
                   <td className={td}>{STAGE_TH[r.stage]}</td>
                   <td className={td}>{r.line || ''}</td>
                   {[0, 1, 2].map((i) => <td key={`c${i}`} className={`${td} text-center ${r.temps[i] != null && (r.temps[i] < OIL_TEMP_MIN || r.temps[i] > OIL_TEMP_MAX) ? 'text-red-700 font-bold' : ''}`}>{r.temps[i] ?? ''}</td>)}
+                  <td className={`${td} text-center ${r.reach_min > 3 ? 'text-amber-700 font-bold' : ''}`}>{r.reach_min ?? ''}</td>
                   {[0, 1, 2].map((i) => <td key={`t${i}`} className={`${td} text-center ${r.tpm[i] >= 25 ? 'text-red-700 font-bold' : ''}`}>{r.tpm[i] ?? ''}</td>)}
                   <td className={`${td} text-center`}>{RES_TXT[r.temp_result]}</td>
                   <td className={`${td} text-center font-bold`}>{OIL_RESULT[r.result].label}</td>
@@ -69,7 +70,7 @@ export default function OilReportPage() {
           </table>
           <div className="mt-1.5 avoid-break">
             <b>สรุป:</b> ตรวจ {rows.length} ครั้ง · ปกติ {count('PASS')} · เฝ้าระวัง {count('WATCH')} · ห้ามใช้/ไม่ผ่าน {count('FAIL')} · ทวนสอบแล้ว {rows.filter((r) => r.verified_by).length}
-            <div className="mt-1"><b>เกณฑ์:</b> TPM ไม่เกิน 25% ตามประกาศ สธ. · ภายในบริษัท &lt; 20% ปกติ, 20–&lt;25% เฝ้าระวัง/ประเมิน, ≥ 25% ห้ามใช้ต่อและกักกัน · อุณหภูมิน้ำมันที่ใช้ได้ 150–180 °C (นอกช่วงถือเป็น Deviation) · วัดอุณหภูมิก่อน แล้วรอ 3 นาทีจึงวัด %TPM</div>
+            <div className="mt-1"><b>เกณฑ์:</b> TPM ไม่เกิน 25% ตามประกาศ สธ. · ภายในบริษัท &lt; 20% ปกติ, 20–&lt;25% เฝ้าระวัง/ประเมิน, ≥ 25% ห้ามใช้ต่อและกักกัน · อุณหภูมิน้ำมันที่ใช้ได้ 150–180 °C (นอกช่วงถือเป็น Deviation) · น้ำมันควรขึ้นถึง 160 °C ภายใน 3 นาที (บันทึกเวลาไว้เพื่อติดตาม)</div>
           </div>
           <div className="mt-8 flex justify-around text-center avoid-break">
             {['ผู้ตรวจ', 'ผู้ทวนสอบ (QA/QC)', 'หัวหน้างาน'].map((s) => <div key={s}><div className="border-t border-dotted border-black w-48 mx-auto mb-1" />{s}<br />วันที่ ................</div>)}
