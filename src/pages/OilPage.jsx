@@ -14,7 +14,7 @@ export const OIL_RESULT = {
   WATCH: { label: 'เฝ้าระวัง', cls: 'bg-amber-100 text-amber-800' },
   FAIL: { label: 'ห้ามใช้ / ไม่ผ่าน', cls: 'bg-red-100 text-red-700' },
 }
-const TEMP_RESULT = [['PASS', 'ผ่าน'], ['FAIL', 'ไม่ผ่าน'], ['NA', 'N/A']]
+export const OIL_TEMP_MIN = 150, OIL_TEMP_MAX = 180
 const tpmState = (v) => (v === '' || v == null || !Number.isFinite(Number(v)) ? null : Number(v) >= 25 ? 'FAIL' : Number(v) >= 20 ? 'WATCH' : 'PASS')
 
 function VerifyBox({ row, onDone }) {
@@ -45,11 +45,22 @@ export default function OilPage() {
   const [saved, setSaved] = useState(null)
   const [rows, setRows] = useState([])
 
+  const [left, setLeft] = useState(null)
+  useEffect(() => {
+    if (left === null || left <= 0) return undefined
+    const id = setTimeout(() => setLeft((x) => (x === null ? x : x - 1)), 1000)
+    return () => clearTimeout(id)
+  }, [left])
+  const startTimer = () => setLeft(180)
   const month = monthOf(bkkToday())
   const load = () => oilApi.list(monthRange(month)).then(setRows).catch(() => {})
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }))
+  // The usable range is a fixed criterion, so the temperature result follows the readings.
+  const tempNums = temps.filter((v) => v !== '').map(Number)
+  const autoTemp = !tempNums.length ? '' : tempNums.some((t) => t < OIL_TEMP_MIN || t > OIL_TEMP_MAX) ? 'FAIL' : 'PASS'
+  useEffect(() => { setTempResult((x) => (x === 'NA' ? x : autoTemp)) }, [autoTemp])
   const tpmVals = tpm.filter((v) => v !== '').map(Number)
   const worst = tpmVals.length ? Math.max(...tpmVals) : null
   const preview = worst === null ? null : worst >= 25 || tempResult === 'FAIL' ? 'FAIL' : worst >= 20 ? 'WATCH' : 'PASS'
@@ -59,7 +70,7 @@ export default function OilPage() {
     try {
       const res = await oilApi.save({ uid, ...f, tpm, temps, temp_result: tempResult, action, note })
       setSaved(res); setUid(newUid())
-      setTpm(['', '', '']); setTemps(['', '', '']); setTempResult(''); setAction(''); setNote('')
+      setTpm(['', '', '']); setTemps(['', '', '']); setTempResult(''); setLeft(null); setAction(''); setNote('')
       setF((x) => ({ ...x, check_time: bkkTime(), stage: x.stage === 'BEFORE' ? 'AFTER' : x.stage }))
       load(); window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e) { setError(e.message) }
@@ -107,7 +118,22 @@ export default function OilPage() {
         </div>
 
         <div>
-          <div className="text-xs text-gray-600 mb-1">TPM (%) — ค่าที่วัดจริง 1–3 ครั้ง *</div>
+          <div className="text-xs text-gray-600 mb-1">1. อุณหภูมิน้ำมัน (°C) — วัดก่อน แล้วจับเวลา 3 นาทีก่อนวัด %TPM · ช่วงที่ใช้ได้ 150–180 °C</div>
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            {temps.map((v, i) => <input key={i} type="number" inputMode="decimal" step="0.1" value={v} placeholder={`ครั้งที่ ${i + 1}`}
+              onChange={(e) => setTemps((t) => t.map((x, j) => (j === i ? e.target.value : x)))} className={input} />)}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {tempResult && tempResult !== 'NA' && <span className={`text-sm font-semibold rounded-lg px-3 py-1.5 ${tempResult === 'FAIL' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>ผลอุณหภูมิ: {tempResult === 'FAIL' ? 'ไม่ผ่าน' : 'ผ่าน'} (ช่วงที่ใช้ได้ {OIL_TEMP_MIN}–{OIL_TEMP_MAX} °C)</span>}
+            <button type="button" onClick={() => setTempResult((x) => (x === 'NA' ? autoTemp : 'NA'))} className={`text-xs rounded-lg border px-2.5 py-1.5 ${tempResult === 'NA' ? 'bg-gray-600 text-white border-gray-600' : 'bg-white text-gray-600 border-gray-300'}`}>{tempResult === 'NA' ? 'N/A (ต้องระบุเหตุผลในหมายเหตุ)' : 'ไม่ได้วัดอุณหภูมิ (N/A)'}</button>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-sm">
+          <button type="button" onClick={startTimer} className="shrink-0 bg-amber-600 text-white font-semibold rounded-lg px-3 py-1.5">{left === null ? 'เริ่มจับเวลา 3 นาที' : left > 0 ? 'เริ่มใหม่' : 'จับเวลาอีกครั้ง'}</button>
+          <div className={left === 0 ? 'font-bold text-green-700' : 'text-amber-900'}>{left === null ? 'หลังวัดอุณหภูมิ รอ 3 นาที แล้วจึงวัด %TPM' : left > 0 ? `เหลือ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} นาที` : 'ครบ 3 นาที — วัด %TPM ได้'}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-600 mb-1">2. TPM (%) — ค่าที่วัดจริง 1–3 ครั้ง *</div>
           <div className="grid grid-cols-3 gap-2">
             {tpm.map((v, i) => {
               const s = tpmState(v)
@@ -117,22 +143,6 @@ export default function OilPage() {
             })}
           </div>
         </div>
-        <div>
-          <div className="text-xs text-gray-600 mb-1">อุณหภูมิน้ำมัน (°C) — ตาม Spec / WI ของผลิตภัณฑ์</div>
-          <div className="grid grid-cols-3 gap-2 mb-2">
-            {temps.map((v, i) => <input key={i} type="number" inputMode="decimal" step="0.1" value={v} placeholder={`ครั้งที่ ${i + 1}`}
-              onChange={(e) => setTemps((t) => t.map((x, j) => (j === i ? e.target.value : x)))} className={input} />)}
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {TEMP_RESULT.map(([k, v]) => (
-              <button type="button" key={k} onClick={() => setTempResult(k)}
-                className={`py-2 rounded-lg text-sm font-semibold border ${tempResult === k ? (k === 'FAIL' ? 'bg-red-600 text-white border-red-600' : k === 'PASS' ? 'bg-green-600 text-white border-green-600' : 'bg-gray-600 text-white border-gray-600') : 'bg-white text-gray-600 border-gray-300'}`}>
-                ผลอุณหภูมิ: {v}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {preview && (
           <div className={`rounded-lg p-2.5 text-sm font-semibold ${OIL_RESULT[preview].cls}`}>
             ผลเบื้องต้น: {OIL_RESULT[preview].label}{worst !== null ? ` (TPM สูงสุด ${worst}%)` : ''}

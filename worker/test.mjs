@@ -638,6 +638,10 @@ check('an oil check needs a TPM reading', r.status === 400, r);
 r = await call('POST', '/api/oil', { token: qc, body: oilBody() });
 check('oil under 20% TPM passes', r.status === 201 && r.j.result === 'PASS' && r.j.chk_id === 'OIL-260921-001' && !r.j.ncr_id, r);
 const oilId = r.j.chk_id;
+r = await call('POST', '/api/oil', { token: qc, body: oilBody({ temps: [144.5, 160, 158], action: 'เปลี่ยนน้ำมัน' }) });
+check('a temperature outside 150-180 fails even if the operator chose PASS', r.status === 201 && r.j.result === 'FAIL' && !!r.j.chk_id, r);
+r = await call('POST', '/api/oil', { token: qc, body: oilBody({ temps: [150, 180, 165] }) });
+check('150 and 180 themselves are inside the range', r.status === 201 && r.j.result === 'PASS', r);
 r = await call('POST', '/api/oil', { token: qc, body: oilBody({ tpm: [21.5] }) });
 check('20–25% TPM needs an assessment note', r.status === 400, r);
 r = await call('POST', '/api/oil', { token: qc, body: oilBody({ tpm: [21.5], note: 'เฝ้าระวัง ตรวจซ้ำหลังทอด 2 Batch' }) });
@@ -668,7 +672,7 @@ env.AUTO_NCR_PRODUCTION = 'on';
 r = await call('POST', `/api/oil/${oilId}/verify`, { token: qa, body: { decision: 'REJECT', note: 'x' } });
 check('an oil check is verified once', r.status === 409, r);
 r = await call('GET', '/api/oil?from=2026-09-21&to=2026-09-21', { token: qc });
-check('oil checks are listed with readings and verification', r.status === 200 && r.j.length === 3 && r.j.find((x) => x.chk_id === oilId).verify_decision === 'APPROVE'
+check('oil checks are listed with readings and verification', r.status === 200 && r.j.length === 5 && r.j.find((x) => x.chk_id === oilId).verify_decision === 'APPROVE'
   && r.j.find((x) => x.chk_id === oilId).tpm[1] === 13, r.j.map((x) => x.chk_id));
 
 // ----- FM-QC-05 refrigerator / freezer -----

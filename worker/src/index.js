@@ -491,6 +491,7 @@ const DERIVED_CPS = ['CCP-01', 'CCP-02', 'OPRP-05'];
 
 // ---------- cold storage: causes of an out-of-range reading and the alerts built from them ----------
 const COLD_CAUSES = { DOOR_LOAD: 'เปิดตู้นำสินค้าเข้า/ออก', HOT_PRODUCT: 'นำสินค้าที่ยังร้อนเข้าแช่', DOOR_OPEN: 'เปิดประตูค้าง', FAULT: 'ตู้ขัดข้อง / อุณหภูมิไม่คงที่', OTHER: 'อื่นๆ' };
+const OIL_TEMP_MIN = 150, OIL_TEMP_MAX = 180
 const COLD_RECHECK_MIN = 30; // measure again this long after the cause has gone (door closed, product in)
 // Actions each cause brings with it, so the person recording does not have to tick the obvious ones.
 const COLD_AUTO_ACTIONS = { DOOR_LOAD: ['RECHECK'], DOOR_OPEN: ['RECHECK'], HOT_PRODUCT: ['RECHECK', 'NOTIFY'], FAULT: ['NOTIFY', 'ENGINEERING'], OTHER: ['RECHECK'] };
@@ -2202,15 +2203,17 @@ export default {
         const temps = nums(b.temps, 'อุณหภูมิน้ำมัน', -10, 300);
         if (!['PASS', 'FAIL', 'NA'].includes(b.temp_result)) fail(400, 'กรุณาเลือกผลอุณหภูมิ (ผ่าน / ไม่ผ่าน / N/A)');
         if (b.temp_result !== 'NA' && !temps.length) fail(400, 'กรุณากรอกอุณหภูมิน้ำมัน หรือเลือก N/A พร้อมเหตุผล');
+        // The usable oil temperature range is a fixed criterion (150–180 °C): the result follows the readings, not the operator's choice.
+        const tempRes = b.temp_result !== 'NA' && temps.length ? (temps.some((t) => t < OIL_TEMP_MIN || t > OIL_TEMP_MAX) ? 'FAIL' : 'PASS') : b.temp_result;
         const tpmMax = Math.max(...tpm);
-        const result = tpmMax >= 25 || b.temp_result === 'FAIL' ? 'FAIL' : tpmMax >= 20 ? 'WATCH' : 'PASS';
+        const result = tpmMax >= 25 || tempRes === 'FAIL' ? 'FAIL' : tpmMax >= 20 ? 'WATCH' : 'PASS';
         const note = txt(b.note, 500), action = txt(b.action, 500);
-        if (b.temp_result === 'NA' && !note) fail(400, 'เลือก N/A ต้องระบุเหตุผลในหมายเหตุ');
+        if (tempRes === 'NA' && !note) fail(400, 'เลือก N/A ต้องระบุเหตุผลในหมายเหตุ');
         if (result === 'WATCH' && !note) fail(400, 'TPM 20–25% อยู่ในช่วงเฝ้าระวัง กรุณาบันทึกการประเมิน');
         if (result === 'FAIL' && !action) fail(400, 'กรุณาบันทึกสิ่งที่ทำทันที (หยุดใช้ / กักกัน / เปลี่ยนน้ำมัน)');
         const rec = {
           check_date: b.check_date, check_time: nz(b.check_time), stage: b.stage, line: txt(b.line, 100), oil_type: txt(b.oil_type, 60),
-          tank: txt(b.tank, 60), tpm: JSON.stringify(tpm), tpm_max: tpmMax, temps: JSON.stringify(temps), temp_result: b.temp_result,
+          tank: txt(b.tank, 60), tpm: JSON.stringify(tpm), tpm_max: tpmMax, temps: JSON.stringify(temps), temp_result: tempRes,
           tpm_meter: txt(b.tpm_meter, 40), thermometer: txt(b.thermometer, 40), result, action, note, inspector: user.display_name,
         };
         const STAGE_TH = { BEFORE: 'ก่อนการผลิต', DURING: 'ระหว่างการผลิต', AFTER: 'หลังการผลิต' };
@@ -2219,7 +2222,7 @@ export default {
           const ncrId = result === 'FAIL' && AUTO_NCR ? await nextId(DB, 'ncr_records', 'ncr_id', 'NCR') : null;
           const stmts = [];
           if (ncrId) {
-            const why = [tpmMax >= 25 ? `TPM ${tpmMax}% (เกณฑ์ < 25%)` : '', b.temp_result === 'FAIL' ? `อุณหภูมิน้ำมัน ${temps.join(' / ')} °C ไม่ตรง Spec` : ''].filter(Boolean);
+            const why = [tpmMax >= 25 ? `TPM ${tpmMax}% (เกณฑ์ < 25%)` : '', tempRes === 'FAIL' ? `อุณหภูมิน้ำมัน ${temps.join(' / ')} °C อยู่นอกช่วงที่ใช้ได้ 150–180 °C` : ''].filter(Boolean);
             stmts.push(autoNcrStmt(DB, user, ncrId, {
               source_type: 'IN_PROCESS', source_ref: chkId, process_ref: 'PC0006', severity: 'Major',
               found_date: rec.check_date, found_time: rec.check_time, lot_no: rec.tank,
