@@ -759,7 +759,8 @@ CREATE TABLE IF NOT EXISTS pack_sizes (
 INSERT OR IGNORE INTO pack_sizes (pack_key,label,label_net_g,tare_g,sort) VALUES
  ('J210','กระปุกใหญ่ 210 g (กระปุก + ฝาอลู + ฝาพลาสติก + สติ๊กเกอร์ 40 g)',210,40,1),
  ('J60','กระปุกเล็ก 60 g (กระปุก + ฝา + สติ๊กเกอร์ 15 g)',60,15,2),
- ('J160','กระปุก 160 g (กระปุก + ฝา + สติ๊กเกอร์ 40 g)',160,40,3);
+ ('J160','กระปุก 160 g (กระปุก + ฝา + สติ๊กเกอร์ 40 g)',160,40,3),
+ ('J120','กระปุก 120 g (กระปุก + ฝา + สติ๊กเกอร์ 40 g)',120,40,4);
 -- Central supplier list shared by the receiving app: companies, retail stores (Makro) and the fresh market.
 CREATE TABLE IF NOT EXISTS suppliers (
   name       TEXT PRIMARY KEY,
