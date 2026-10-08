@@ -2425,7 +2425,7 @@ export default {
     } catch (e) {
       if (e instanceof HttpError) return json({ error: e.message }, e.status);
       console.error(`[ERR] ${method} ${path}:`, e.message);
-      return json({ error: 'เกิดข้อผิดพลาดภายในระบบ' }, 500);
+      return json({ error: `เกิดข้อผิดพลาดภายในระบบ (${method} ${path})` }, 500);
     }
   },
 };
