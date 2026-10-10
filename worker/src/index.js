@@ -1110,6 +1110,21 @@ export default {
         await audit(DB, user.username, 'user', 'void', 'recv_record', row.doc_no, { reason: txt(b.reason, 300), supplier: row.supplier, recv_date: row.recv_date });
         return json({ doc_no: row.doc_no, voided: true });
       }
+      // The reviewer's signature that is stamped on the review line of the printed daily summaries. Anyone signed in may read it
+      // (they print the reports); only the QA Manager sets it.
+      if (path === '/api/report-signature' && method === 'GET') {
+        const r = await DB.prepare("SELECT name, content_type, data FROM report_signatures WHERE slot='REVIEWER'").first();
+        return json(r ? { name: r.name, data: `data:${r.content_type};base64,${r.data}` } : null);
+      }
+      if (path === '/api/report-signature' && method === 'PUT') {
+        need(user, QAM, 'เฉพาะ QA Manager เท่านั้นที่ตั้งค่าลายเซ็นผู้ทวนสอบได้');
+        const b = await body();
+        const ph = decodePhoto({ content_type: (/^data:([^;,]+)/.exec(String(b.data || '')) || [])[1], data: b.data });
+        await DB.prepare("INSERT INTO report_signatures (slot,name,content_type,size,data,updated_by,updated_at) VALUES ('REVIEWER',?,?,?,?,?,?) ON CONFLICT(slot) DO UPDATE SET name=excluded.name,content_type=excluded.content_type,size=excluded.size,data=excluded.data,updated_by=excluded.updated_by,updated_at=excluded.updated_at")
+          .bind(txt(b.name, 100), ph.type, ph.size, ph.b64, user.display_name, nowIso()).run();
+        await audit(DB, user.username, 'user', 'update', 'report_signature', 'REVIEWER', { name: txt(b.name, 100), size: ph.size });
+        return json({ ok: true });
+      }
       // Receiving specifications (RD-RMS / RD-PMS): the checklist per material group. Anyone signed in may read; QA edits the items.
       if (path === '/api/recv/specs' && method === 'GET') {
         const groups = (await DB.prepare('SELECT group_key, sg, kind, name, sample_plan, store FROM spec_groups ORDER BY group_key').all()).results;

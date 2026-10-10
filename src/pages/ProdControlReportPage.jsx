@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { prodctlApi, oilApi, qaApi } from '../api/d1Api'
 import { FORMS } from '../config'
+import ReviewSig from '../components/ReviewSig'
 import { FormHeader, FormInfo, FormStats } from '../components/FormHeader'
 import { bkkToday } from '../qa/shared'
 
@@ -106,8 +107,8 @@ export default function ProdControlReportPage() {
           </table>
           <div className="mt-1 text-[9px]">ตัวหนาสีแดง = ไม่ผ่านเกณฑ์ (อุณหภูมิบรรจุและปิดฝาต้องต่ำกว่า 60°C) · ช่องหมายเหตุระบุสาเหตุและสิ่งที่ทำเมื่อค่าไม่ผ่าน</div>
           <div className="mt-8 flex justify-around text-center avoid-break text-[10.5px]">
-            <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้บันทึก ({[...new Set(rows.map((r) => r.inspector))].join(', ')})<br />(เจ้าหน้าที่ฝ่ายควบคุมคุณภาพ)</div>
-            <div><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้รับทราบ<br />(หัวหน้าฝ่ายควบคุมคุณภาพ)</div>
+            <div><div style={{ height: 40 }} /><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้บันทึก ({[...new Set(rows.map((r) => r.inspector))].join(', ')})<br />(เจ้าหน้าที่ฝ่ายควบคุมคุณภาพ)</div>
+            <div><ReviewSig /><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้รับทราบ<br />(หัวหน้าฝ่ายควบคุมคุณภาพ)</div>
           </div>
         </A4Sheet>
       )}

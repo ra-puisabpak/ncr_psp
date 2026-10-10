@@ -1075,3 +1075,14 @@ INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('PKG-045','RD-PMS-
 INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('SUP-024','RD-PMS-004');
 INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('SUP-025','RD-PMS-004');
 INSERT OR IGNORE INTO spec_materials (code,group_key) VALUES ('SUP-026','RD-PMS-004');
+
+-- Signature of the reviewer (QA Manager) stamped automatically on the review / acknowledge line of the printed daily summaries.
+CREATE TABLE IF NOT EXISTS report_signatures (
+  slot         TEXT PRIMARY KEY,
+  name         TEXT,
+  content_type TEXT NOT NULL,
+  size         INTEGER NOT NULL,
+  data         TEXT NOT NULL,
+  updated_by   TEXT,
+  updated_at   TEXT
+);

@@ -49,6 +49,7 @@ async function requestBlob(path, { auth = true } = {}) {
 }
 
 const post = (path, body, opt) => request(path, { method: 'POST', body: JSON.stringify(body ?? {}) }, opt)
+const put = (path, body) => request(path, { method: 'PUT', body: JSON.stringify(body) })
 const patch = (path, body) => request(path, { method: 'PATCH', body: JSON.stringify(body) })
 const enc = encodeURIComponent
 
@@ -163,6 +164,11 @@ export const supplierListApi = {
   list: () => request('/api/suppliers'),
   create: (body) => post('/api/suppliers', body),
   update: (body) => patch('/api/suppliers', body),
+}
+
+export const reportSigApi = {
+  get: () => request('/api/report-signature'),
+  set: (body) => put('/api/report-signature', body),
 }
 
 export const specApi = {

@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { oilApi } from '../api/d1Api'
 import { FORMS } from '../config'
+import ReviewSig from '../components/ReviewSig'
 import { FormHeader, FormInfo, FormStats } from '../components/FormHeader'
 import { bkkToday, monthOf, monthRange, thaiMonth } from '../qa/shared'
 import { STAGE_TH, OIL_RESULT, OIL_TEMP_MIN, OIL_TEMP_MAX } from './OilPage'
@@ -73,7 +74,7 @@ export default function OilReportPage() {
             <div className="mt-1"><b>หมายเหตุ:</b> น้ำมันขึ้นถึง 160 °C ใช้เวลา 3 นาที ตามผล Validation แล้วว่าอุณหภูมิจะไม่ต่ำกว่า 150 °C</div>
           </div>
           <div className="mt-8 flex justify-around text-center avoid-break">
-            {['ผู้ตรวจ', 'ผู้ทวนสอบ (QA/QC)', 'หัวหน้างาน'].map((s) => <div key={s}><div className="border-t border-dotted border-black w-48 mx-auto mb-1" />{s}<br />วันที่ ................</div>)}
+            {['ผู้ตรวจ', 'ผู้ทวนสอบ (QA/QC)', 'หัวหน้างาน'].map((s, i) => <div key={s}>{i === 1 ? <ReviewSig /> : <div style={{ height: 40 }} />}<div className="border-t border-dotted border-black w-48 mx-auto mb-1" />{s}<br />วันที่ ................</div>)}
           </div>
         </A4Sheet>
       )}

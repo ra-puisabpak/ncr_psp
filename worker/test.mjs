@@ -258,6 +258,18 @@ r = await call('POST', '/api/recv', { token: qc, body: { uid: 'uid-cccc-0003', r
 check('receiving record without supplier is refused', r.status === 400, r);
 r = await call('POST', '/api/recv', { token: qc, body: { ...recvBody('uid-dddd-0004', ''), record: { ...recvBody('x', '').record, mats: [{ idx: 1, result: 'PASS', photo1: 'data:image/jpeg;base64,' + Buffer.from('<script>').toString('base64') }] } } });
 check('a file that is not a picture is refused', r.status === 400, r);
+// ----- reviewer signature on the printed summaries -----
+r = await call('GET', '/api/report-signature', { token: qc });
+check('signature: none before it is set', r.status === 200 && r.j === null, r);
+r = await call('PUT', '/api/report-signature', { token: qc, body: { name: 'x', data: jpg } });
+check('signature: only the QA Manager sets it', r.status === 403, r);
+r = await call('PUT', '/api/report-signature', { token: qa, body: { name: 'Sookapat', data: 'data:text/plain;base64,aGVsbG8=' } });
+check('signature: a non-image is refused', r.status === 400, r);
+r = await call('PUT', '/api/report-signature', { token: qa, body: { name: 'Sookapat', data: jpg } });
+check('signature: the QA Manager sets it', r.status === 200, r);
+r = await call('GET', '/api/report-signature', { token: qc });
+check('signature: anyone signed in can read it for printing', r.status === 200 && r.j.name === 'Sookapat' && r.j.data.startsWith('data:image/jpeg;base64,'), r);
+
 // ----- receiving specification (RD-RMS / RD-PMS) -----
 r = await call('GET', '/api/recv/specs', { token: qc });
 check('specs: groups, items and the material map are served', r.status === 200 && r.j.groups.length === 11 && r.j.mats['RM-007'] === 'RD-RMS-002' && r.j.mats['PKG-001'] === 'RD-PMS-001'
