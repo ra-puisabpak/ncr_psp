@@ -24,6 +24,17 @@ export default function FGCheckReportPage() {
   const [error, setError] = useState(null)
   useEffect(() => { setRows(null); fgCheckApi.list({ from: date, to: date }).then((r) => setRows([...r].reverse())).catch((e) => setError(e.message)) }, [date])
   useEffect(() => { fgCheckApi.packSizes().then(setSizes).catch(() => {}) }, [])
+  // Photos of each check (lid with MFG / EXP, label side) are attached after the summary.
+  const [photos, setPhotos] = useState({})
+  useEffect(() => {
+    if (!rows) return
+    let stop = false
+    Promise.all(rows.filter((r) => r.photos?.length).map((r) => fgCheckApi.photos(r.fc_id).then((p) => [r.fc_id, p]).catch(() => [r.fc_id, []]))).then((got) => { if (!stop) setPhotos(Object.fromEntries(got)) })
+    return () => { stop = true }
+  }, [rows])
+  const withPhotos = (rows || []).filter((r) => photos[r.fc_id]?.length)
+  const pages = []
+  for (let i = 0; i < withPhotos.length; i += 4) pages.push(withPhotos.slice(i, i + 4))
   const cols = Math.max(2, ...(rows || []).map((r) => r.gross.length))
 
   return (
@@ -93,6 +104,32 @@ export default function FGCheckReportPage() {
           </div>
         </A4Sheet>
       )}
+      {pages.map((pg, pi) => (
+        <A4Sheet key={pi} landscape={true} margin={8} className="a4-break text-[10px]">
+          <div className="flex justify-between items-end border-b-2 border-[#0f2744] pb-1 mb-2">
+            <div className="font-bold text-[13px] text-[#0f2744]">เอกสารแนบท้าย: รูปถ่ายประกอบการตรวจสอบผลิตภัณฑ์สุดท้าย</div>
+            <div className="text-[10px] text-gray-600">{FORMS.FG_CHECK.code} · วันที่ {thai(date)} · แนบ {pi + 1}/{pages.length}</div>
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+            {pg.map((r) => (
+              <div key={r.fc_id} className="avoid-break border border-gray-400">
+                <div className="bg-[#0f2744] text-white px-2 py-0.5 font-semibold flex justify-between"><span><Nw>{r.product_name || r.product_code}</Nw> · {r.batch_no}</span><span>{r.label_net_g} g · {r.result === 'PASS' ? 'ผ่าน' : 'ไม่ผ่าน'}</span></div>
+                <div className="grid grid-cols-2 gap-1 p-1">
+                  {[1, 2].map((slot) => {
+                    const ph = photos[r.fc_id]?.find((x) => x.slot === slot)
+                    return (
+                      <div key={slot} className="text-center">
+                        <div className="h-[62mm] bg-gray-100 flex items-center justify-center">{ph ? <img src={ph.data} alt="" className="max-h-full max-w-full object-contain" /> : <span className="text-gray-400">ไม่มีรูป</span>}</div>
+                        <div className="text-[9.5px] mt-0.5">{slot === 1 ? 'ฝาสินค้า (MFG / EXP)' : 'ด้านฉลาก (ปริมาณสุทธิ)'}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </A4Sheet>
+      ))}
     </div>
   )
 }

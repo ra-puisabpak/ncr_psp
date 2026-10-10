@@ -2039,10 +2039,13 @@ function repCount(){
   const rs=repRecs();const n=rs.reduce((a,r)=>a+(r.mats||r.materials||[]).length,0);
   document.getElementById('rp-cnt').innerHTML='<div class="crn">'+rs.length+'</div><div class="cru">ใบรับ ('+n+' รายการวัตถุดิบ)</div>';
 }
-function printReport(){
+async function printReport(){
   const rs=repRecs();
   if(repMode==='sup'&&!document.getElementById('rp-sup').value){showToast('เลือก Supplier ก่อน','err');return;}
   if(!rs.length){showToast('ไม่พบข้อมูลตามเงื่อนไข','err');return;}
+  // รูปถ่ายของใบที่เลือกต้องโหลดก่อน เพื่อแนบท้ายรายงาน
+  if(rs.some(r=>photoCount(r)))showToast('กำลังโหลดรูปแนบท้าย…');
+  await Promise.all(rs.map(r=>ensurePhotos(r).catch(()=>{})));
   const day=repMode==='day';
   const now=new Date();const stamp=fmtD(todayStr())+' '+now.toTimeString().slice(0,5);
   const dates=rs.map(r=>r.date).sort();
@@ -2077,6 +2080,18 @@ function printReport(){
   const ncHtml=ncs.length?'<div class="sec">รายการ NCR ที่เกี่ยวข้อง ('+ncs.length+' รายการ)</div><table class="nc"><thead><tr><th style="width:15%">NCR No.</th><th style="width:28%">วัตถุดิบ / Lot</th><th style="width:15%">ผลการตรวจ</th><th>ปัญหาที่พบ / เงื่อนไข</th><th style="width:12%">สถานะ</th></tr></thead><tbody>'+
     ncs.map(n=>{const br=ncBrief(n);const mt=n.mat&&n.mat.name?escH(n.mat.name)+(n.mat.lot?'<br><span class="sm2">Lot '+escH(n.mat.lot)+'</span>':''):'<span class="sm2">ใบตรวจรับ '+escH(n.docNo)+'</span>';
       return '<tr><td class="mono c">'+escH(ncNo(n))+'</td><td>'+mt+'</td><td class="c">'+escH(br.type)+'</td><td>'+escH(br.detail||'—')+'</td><td class="c">'+(n.status==='Closed'?'ปิดแล้ว'+(n.closedDate?'<br><span class="sm2">'+fmtD(n.closedDate)+'</span>':''):'เปิดอยู่')+'</td></tr>';}).join('')+'</tbody></table>':'';
+  // เอกสารแนบท้าย: รูปถ่ายของทุกใบในรายงาน (รถขนส่ง + รูปวัตถุดิบ) ต่อท้ายสรุป
+  let axN=0;
+  const axDocs=rs.map(r=>{
+    const items=[];
+    if(r.carPhoto)items.push({u:r.carPhoto,cap:'รถขนส่ง'+(r.carReg?' · ทะเบียน '+r.carReg:'')});
+    (r.mats||r.materials||[]).forEach((m,i)=>{[1,2].forEach(k=>{const u=m['photo'+k];if(u)items.push({u,cap:(i+1)+'. '+(m.code||'')+' '+(m.name||matName(m.code)||'')+(m.lot?' · Lot '+m.lot:'')+' (รูปที่ '+k+')'});});});
+    if(!items.length)return'';
+    axN+=items.length;
+    return '<div class="axd"><div class="axh"><span class="mono">'+escH(r.docNo)+'</span><span>'+escH(r.supplier)+' · '+fmtD(r.date)+'</span></div><div class="axg">'+
+      items.map(x=>'<figure class="axf"><img src="'+x.u+'"><figcaption>'+escH(x.cap)+'</figcaption></figure>').join('')+'</div></div>';
+  }).join('');
+  const axSec=axN?'<div class="ax"><div class="axt">เอกสารแนบท้าย: รูปถ่ายประกอบการตรวจรับ ('+axN+' รูป)</div>'+axDocs+'</div>':'';
   const html=`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>FM-QC-001 รายงาน${day?'รายวัน':'ราย Supplier'}</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -2121,6 +2136,14 @@ td{padding:4px 5px;border:1px solid #9aa5b1;vertical-align:middle;overflow-wrap:
 .sg b{display:block;font-size:10.5px;color:#0f2744}
 .sg .ln{border-bottom:1px dotted #5c6470;height:32px;margin:0 18px 4px}
 .ft{margin-top:8px;font-size:9px;color:#5c6470;display:flex;justify-content:space-between;border-top:1px solid #0f2744;padding-top:4px}
+.ax{page-break-before:always;break-before:page}
+.axt{font-size:13px;font-weight:700;color:#0f2744;border-bottom:1.5px solid #0f2744;padding-bottom:3px;margin-bottom:8px}
+.axd{margin-bottom:12px}
+.axh{display:flex;justify-content:space-between;background:#0f2744;color:#fff;padding:4px 8px;font-size:10.5px;font-weight:700;margin-bottom:6px;break-after:avoid}
+.axg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.axf{break-inside:avoid;page-break-inside:avoid;border:1px solid #9aa5b1;padding:4px;margin:0;text-align:center}
+.axf img{width:100%;height:250px;object-fit:contain;background:#f4f6f8;display:block}
+.axf figcaption{font-size:9.5px;margin-top:3px;color:#1a2130}
 </style></head><body>
 <div class="hd">
   <div class="hd-co"><img src="${LOGO_B64}"><div class="co">บริษัท พระจันทร์ ๕๐ จำกัด<small>Puisabpak — Quality Control (QC)</small></div></div>
@@ -2135,6 +2158,7 @@ ${ncHtml}
 <div class="sg"><div><b>จัดทำโดย (QC Officer)</b><div class="ln"></div>(................................................)<br>วันที่ ........ / ........ / ............</div><div><b>ทบทวนโดย (QC Supervisor)</b><div class="ln"></div>(................................................)<br>วันที่ ........ / ........ / ............</div></div>
 <div class="ft"><span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) · FM-QC-001 · รายงาน${day?'รายวัน':'ราย Supplier'}</span><span>พิมพ์เมื่อ ${stamp}</span></div>
 </div>
+${axSec}
 </body></html>`;
   showPrint(html);
 }

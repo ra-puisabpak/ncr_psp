@@ -146,6 +146,7 @@
 .a4-stage { display: flex; justify-content: center; padding: 16px 8px; }
 .a4-sheet { background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.18); box-sizing: border-box; flex: none; }
 @media print {
+  .a4-break { break-before: page; page-break-before: always; }
   .a4-stage { display: block; padding: 0; }
   .a4-sheet { width: auto !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; zoom: 1 !important; }
 }
