@@ -157,10 +157,10 @@ export default function FGCheckPage() {
           </div>
         )}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <label className="text-xs text-gray-600">วันที่ตรวจ<input type="date" max={bkkToday()} value={date} onChange={(e) => setDate(e.target.value || bkkToday())} className={input} /></label>
-          <label className="text-xs text-gray-600 col-span-2">ผลิตภัณฑ์ *<select value={f.product_code} onChange={(e) => set('product_code', e.target.value)} className={input}>
+          <label className="text-xs text-gray-600 min-w-0">วันที่ตรวจ<input type="date" max={bkkToday()} value={date} onChange={(e) => setDate(e.target.value || bkkToday())} className={input} /></label>
+          <label className="text-xs text-gray-600 col-span-2 min-w-0">ผลิตภัณฑ์ *<select value={f.product_code} onChange={(e) => set('product_code', e.target.value)} className={input}>
             <option value="">-- เลือกผลิตภัณฑ์ --</option>{PRODUCTS.map((p) => <option key={p.code} value={p.code}>{p.code} · {p.label}</option>)}</select></label>
-          <label className="text-xs text-gray-600">เลขล็อต / Batch *<input list="fg-batches" value={f.batch_no} onChange={(e) => set('batch_no', e.target.value)} className={input} /></label>
+          <label className="text-xs text-gray-600 min-w-0">เลขล็อต / Batch *<input list="fg-batches" value={f.batch_no} onChange={(e) => set('batch_no', e.target.value)} className={input} /></label>
           <datalist id="fg-batches">{batches.map((b) => <option key={b} value={b} />)}</datalist>
         </div>
 

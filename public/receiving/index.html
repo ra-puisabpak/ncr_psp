@@ -2136,7 +2136,9 @@ td{padding:4px 5px;border:1px solid #9aa5b1;vertical-align:middle;overflow-wrap:
 .sg b{display:block;font-size:10.5px;color:#0f2744}
 .sg .ln{border-bottom:1px dotted #5c6470;height:32px;margin:0 18px 4px}
 .ft{margin-top:8px;font-size:9px;color:#5c6470;display:flex;justify-content:space-between;border-top:1px solid #0f2744;padding-top:4px}
-.ax{page-break-before:always;break-before:page}
+.ax{margin-top:26px;padding-top:12px;border-top:3px dashed #9aa5b1}
+@media screen{.ax::before{content:'— ตัดหน้า: เอกสารแนบท้ายขึ้นหน้าใหม่เมื่อพิมพ์ —';display:block;text-align:center;font-size:9px;color:#6b7684;background:#eef1f5;padding:3px 0;margin:-12px 0 10px}}
+@media print{.ax{margin-top:0;padding-top:0;border-top:0;page-break-before:always;break-before:page}}
 .axt{font-size:13px;font-weight:700;color:#0f2744;border-bottom:1.5px solid #0f2744;padding-bottom:3px;margin-bottom:8px}
 .axd{margin-bottom:12px}
 .axh{display:flex;justify-content:space-between;background:#0f2744;color:#fff;padding:4px 8px;font-size:10.5px;font-weight:700;margin-bottom:6px;break-after:avoid}
