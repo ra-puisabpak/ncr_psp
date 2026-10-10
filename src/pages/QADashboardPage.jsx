@@ -52,11 +52,22 @@ function Prog({ k, prog }) {
   }
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1.5">
-      <Badge cls={PROG_CLS[cls]}>{k === 'fgcheck' ? (d.produced_on ? `FG ผลิต ${d.produced_on.slice(8)}/${d.produced_on.slice(5, 7)}` : 'FG ผลิตล่าสุด') : prog.date === bkkToday() ? 'วันนี้' : prog.date.slice(5)} {text}</Badge>
+      <Badge cls={`${PROG_CLS[cls]} whitespace-normal max-w-full`}>{k === 'fgcheck' ? (d.produced_on ? `FG ผลิต ${d.produced_on.slice(8)}/${d.produced_on.slice(5, 7)}` : 'FG ผลิตล่าสุด') : prog.date === bkkToday() ? 'วันนี้' : prog.date.slice(5)} {text}</Badge>
       {miss && <span className="text-[10.5px] text-red-700 truncate max-w-full">{miss}</span>}
     </div>
   )
 }
+
+// The daily forms in form-number order. The card shows what the form is, today's progress and a report button.
+const FORM_CARDS = [
+  { form: 'RECEIVING', title: 'ตรวจรับวัตถุดิบ', prog: 'receiving', icon: PackageCheck, tone: 'bg-orange-50 text-orange-600', external: true, to: RECEIVING_URL, report: (d) => `${RECEIVING_URL}?report=${d}` },
+  { form: 'PRODCTL', title: 'แบบฟอร์มควบคุมการผลิต', prog: 'prodctl', icon: Flame, tone: 'bg-orange-50 text-orange-600', to: '/qa/prodctl', report: (d) => `/qa/prodctl/report?date=${d}` },
+  { form: 'WEIGH', title: 'บันทึกการชั่งวัตถุดิบ', prog: 'weigh', icon: Scale, tone: 'bg-violet-50 text-violet-600', to: '/qa/weigh', report: (d) => `/qa/weigh/day?date=${d}` },
+  { form: 'OIL', title: 'คุณภาพน้ำมันทอด', prog: 'oil', icon: Droplets, tone: 'bg-amber-50 text-amber-600', to: '/qa/oil', report: (d) => `/qa/oil/report?month=${d.slice(0, 7)}` },
+  { form: 'COLD', title: 'อุณหภูมิตู้เย็น / ตู้แช่แข็ง', prog: 'cold', icon: Thermometer, tone: 'bg-sky-50 text-sky-600', to: '/qa/cold', report: (d) => `/qa/cold/report?month=${d.slice(0, 7)}` },
+  { form: 'FG_CHECK', title: 'ตรวจสอบผลิตภัณฑ์สุดท้าย', prog: 'fgcheck', icon: PackageSearch, tone: 'bg-emerald-50 text-emerald-600', to: '/qa/fgcheck', report: (d) => `/qa/fgcheck/report?date=${d}` },
+  { form: 'HYGIENE', title: 'สุขลักษณะส่วนบุคคล', prog: 'hygiene', icon: HandHeart, tone: 'bg-blue-50 text-blue-700', to: '/qa/hygiene', report: (d) => `/qa/hygiene/report?date=${d}` },
+]
 
 export default function QADashboardPage() {
   const navigate = useNavigate()
@@ -176,91 +187,29 @@ export default function QADashboardPage() {
         <h2 className="text-sm font-bold text-gray-700">บันทึกตรวจ</h2>
         {prog && <span className="text-[11px] text-gray-500 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />สด · ข้อมูล{date === bkkToday() ? 'วันนี้' : ` ${date}`} · อัปเดต {prog.at}</span>}
       </div>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-        <div className="relative">
-          <Link to="/qa/weigh" className="bg-white rounded-xl shadow p-4 pb-9 flex items-center gap-3 hover:shadow-md transition">
-          <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center shrink-0"><Scale className="w-5 h-5" /></div>
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold text-sm text-gray-800">บันทึกการชั่งวัตถุดิบ</div>
-            <div className="text-[11px] text-gray-500">{FORMS.WEIGH.code} · น้ำหนักวัตถุดิบต่อ Batch</div>
-            {user?.role === 'QA_MANAGER' && <Prog k="weigh" prog={prog} />}
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-300" />
-        </Link>
-          <Link to={`/qa/weigh/day?date=${date}`} className="absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3" />รายงาน</Link>
-        </div>
-        <div className="relative">
-          <Link to="/qa/prodctl" className="bg-white rounded-xl shadow p-4 pb-9 flex items-center gap-3 hover:shadow-md transition">
-          <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0"><Flame className="w-5 h-5" /></div>
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold text-sm text-gray-800">แบบฟอร์มควบคุมการผลิต</div>
-            <div className="text-[11px] text-gray-500">{FORMS.PRODCTL.code} · ทอด/เจียว พักเย็น บรรจุ ปิดฝา</div>
-            {user?.role === 'QA_MANAGER' && <Prog k="prodctl" prog={prog} />}
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-300" />
-        </Link>
-          <Link to={`/qa/prodctl/report?date=${date}`} className="absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3" />รายงาน</Link>
-        </div>
-        <div className="relative">
-          <Link to="/qa/oil" className="bg-white rounded-xl shadow p-4 pb-9 flex items-center gap-3 hover:shadow-md transition">
-          <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0"><Droplets className="w-5 h-5" /></div>
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold text-sm text-gray-800">คุณภาพน้ำมันทอด</div>
-            <div className="text-[11px] text-gray-500">{FORMS.OIL.code} · TPM และอุณหภูมิ</div>
-            {user?.role === 'QA_MANAGER' && <Prog k="oil" prog={prog} />}
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-300" />
-        </Link>
-          <Link to={`/qa/oil/report?month=${date.slice(0, 7)}`} className="absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3" />รายงาน</Link>
-        </div>
-        <div className="relative">
-          <Link to="/qa/cold" className="bg-white rounded-xl shadow p-4 pb-9 flex items-center gap-3 hover:shadow-md transition">
-          <div className="w-10 h-10 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center shrink-0"><Thermometer className="w-5 h-5" /></div>
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold text-sm text-gray-800">อุณหภูมิตู้เย็น / ตู้แช่แข็ง</div>
-            <div className="text-[11px] text-gray-500">{FORMS.COLD.code} · 08:00 · 11:00 · 15:00 · 17:00</div>
-            {user?.role === 'QA_MANAGER' && <Prog k="cold" prog={prog} />}
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-300" />
-        </Link>
-          <Link to={`/qa/cold/report?month=${date.slice(0, 7)}`} className="absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3" />รายงาน</Link>
-        </div>
-        <div className="relative">
-          <Link to="/qa/fgcheck" className="bg-white rounded-xl shadow p-4 pb-9 flex items-center gap-3 hover:shadow-md transition">
-          <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0"><PackageSearch className="w-5 h-5" /></div>
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold text-sm text-gray-800">ตรวจสอบผลิตภัณฑ์สุดท้าย</div>
-            <div className="text-[11px] text-gray-500">{FORMS.FG_CHECK.code} · น้ำหนักสุทธิหลังหักกระปุก aw pH บรรจุภัณฑ์</div>
-            {user?.role === 'QA_MANAGER' && <Prog k="fgcheck" prog={prog} />}
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-300" />
-        </Link>
-          <Link to={`/qa/fgcheck/report?date=${date}`} className="absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3" />รายงาน</Link>
-        </div>
-        <div className="relative">
-          <Link to="/qa/hygiene" className="bg-white rounded-xl shadow p-4 pb-9 flex items-center gap-3 hover:shadow-md transition">
-          <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center shrink-0"><HandHeart className="w-5 h-5" /></div>
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold text-sm text-gray-800">สุขลักษณะส่วนบุคคล</div>
-            <div className="text-[11px] text-gray-500">{FORMS.HYGIENE.code} · ตรวจก่อนเข้างาน{summary ? ` · ${date === bkkToday() ? 'วันนี้' : date} ${summary.hygTotal} คน${summary.hygFail ? ` · ไม่ผ่าน ${summary.hygFail}` : ''}` : ''}</div>
-            {user?.role === 'QA_MANAGER' && <Prog k="hygiene" prog={prog} />}
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-300" />
-        </Link>
-          <Link to={`/qa/hygiene/report?date=${date}`} className="absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3" />รายงาน</Link>
-        </div>
-        <div className="relative">
-          <a href={RECEIVING_URL} className="bg-white rounded-xl shadow p-4 pb-9 flex items-center gap-3 hover:shadow-md transition">
-          <div className="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center shrink-0"><PackageCheck className="w-5 h-5" /></div>
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold text-sm text-gray-800">ตรวจรับวัตถุดิบ</div>
-            <div className="text-[11px] text-gray-500">{FORMS.RECEIVING.code} · บันทึกการตรวจรับ</div>
-            {user?.role === 'QA_MANAGER' && <Prog k="receiving" prog={prog} />}
-          </div>
-          <ChevronRight className="w-4 h-4 text-gray-300" />
-        </a>
-          <a href={`${RECEIVING_URL}?report=${date}`} className="absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3" />รายงาน</a>
-        </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+        {FORM_CARDS.map((c) => {
+          const Icon = c.icon
+          const report = typeof c.report === 'function' ? c.report(date) : c.report
+          const inner = (
+            <>
+              <div className="flex items-center justify-between mb-2">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${c.tone}`}><Icon className="w-6 h-6" /></div>
+                <span className="font-mono text-[10.5px] text-gray-400">{FORMS[c.form].code}</span>
+              </div>
+              <div className="font-semibold text-sm text-gray-800 leading-snug">{c.title}</div>
+              {user?.role === 'QA_MANAGER' && <Prog k={c.prog} prog={prog} />}
+            </>
+          )
+          const cls = 'block bg-white rounded-xl shadow p-3 pb-10 hover:shadow-md transition'
+          const rcls = 'absolute right-3 bottom-2 text-[11px] font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-2 py-0.5 flex items-center gap-1'
+          return (
+            <div key={c.form} className="relative">
+              {c.external ? <a href={c.to} className={cls}>{inner}</a> : <Link to={c.to} className={cls}>{inner}</Link>}
+              {c.external ? <a href={report} className={rcls}><FileText className="w-3 h-3" />รายงาน</a> : <Link to={report} className={rcls}><FileText className="w-3 h-3" />รายงาน</Link>}
+            </div>
+          )
+        })}
       </div>
 
       {active.length > 0 && (
