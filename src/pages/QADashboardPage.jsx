@@ -58,6 +58,15 @@ function Prog({ k, prog }) {
   )
 }
 
+// Shortcuts to the QA tools and registers: icon and name only.
+const TOOL_CARDS = [
+  { to: '/qa/release', title: 'FG Release', icon: Boxes, tone: 'bg-teal-600 text-white', managerOnly: true },
+  { to: '/qa/trace', title: 'สอบย้อนกลับ', icon: Route, tone: 'bg-teal-50 text-teal-700' },
+  { to: '/qa/materials', title: 'ทะเบียนวัตถุดิบกลาง', icon: BookOpen, tone: 'bg-teal-50 text-teal-700' },
+  { to: '/qa/suppliers', title: 'ทะเบียน Supplier กลาง', icon: BookOpen, tone: 'bg-teal-50 text-teal-700' },
+  { to: '/qa/spec', title: 'ข้อกำหนดตรวจรับ', icon: ListChecks, tone: 'bg-teal-50 text-teal-700' },
+]
+
 // The daily forms in form-number order. The card shows what the form is, today's progress and a report button.
 const FORM_CARDS = [
   { form: 'RECEIVING', title: 'ตรวจรับวัตถุดิบ', prog: 'receiving', icon: PackageCheck, tone: 'bg-orange-50 text-orange-600', external: true, to: RECEIVING_URL, report: (d) => `${RECEIVING_URL}?report=${d}` },
@@ -158,29 +167,16 @@ export default function QADashboardPage() {
         {user?.role === 'QA_MANAGER' && <Tile icon={ListChecks} label="จุดควบคุมที่อนุมัติแล้ว" sub="ที่เหลือรอ validate" value={`${approved}/${active.length}`} tone={approved === active.length && active.length ? 'green' : 'orange'} to="/qa/control-points" />}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-6">
-        {user?.role === 'QA_MANAGER' && (
-        <Link to="/qa/release" className="bg-teal-600 text-white rounded-xl shadow p-4 flex items-center gap-3 hover:bg-teal-700 transition">
-          <Boxes className="w-6 h-6 shrink-0" />
-          <div className="min-w-0"><div className="font-semibold text-sm">FG Release</div><div className="text-[11px] opacity-80">ตรวจและตัดสินปล่อย Batch</div></div>
-        </Link>
-        )}
-        <Link to="/qa/trace" className="bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
-          <Route className="w-6 h-6 shrink-0 text-teal-700" />
-          <div className="min-w-0"><div className="font-semibold text-sm text-gray-800">สอบย้อนกลับ</div><div className="text-[11px] text-gray-500">ค้นด้วยล็อตหรือ Batch</div></div>
-        </Link>
-        <Link to="/qa/materials" className="col-span-2 bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
-          <BookOpen className="w-6 h-6 shrink-0 text-teal-700" />
-          <div className="min-w-0"><div className="font-semibold text-sm text-gray-800">ทะเบียนวัตถุดิบกลาง</div><div className="text-[11px] text-gray-500">วัตถุดิบ บรรจุภัณฑ์ วัสดุสิ้นเปลือง · ใช้ร่วมกันทั้งตรวจรับ ชั่ง สอบย้อนกลับ</div></div>
-        </Link>
-        <Link to="/qa/suppliers" className="col-span-2 bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
-          <BookOpen className="w-6 h-6 shrink-0 text-teal-700" />
-          <div className="min-w-0"><div className="font-semibold text-sm text-gray-800">ทะเบียน Supplier กลาง</div><div className="text-[11px] text-gray-500">แม็คโคร · ตลาดสด · บริษัท — ตัวเลือกในแอปรับวัตถุดิบ</div></div>
-        </Link>
-        <Link to="/qa/spec" className="col-span-2 bg-white rounded-xl shadow p-4 flex items-center gap-3 hover:shadow-md transition">
-          <BookOpen className="w-6 h-6 shrink-0 text-teal-700" />
-          <div className="min-w-0"><div className="font-semibold text-sm text-gray-800">ข้อกำหนดตรวจรับ (RD-RMS / RD-PMS)</div><div className="text-[11px] text-gray-500">รายการตรวจตามกลุ่มวัตถุดิบและบรรจุภัณฑ์ · เกณฑ์ · ระดับ Critical / Major / Minor — QA แก้ได้</div></div>
-        </Link>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+        {TOOL_CARDS.filter((c) => !c.managerOnly || user?.role === 'QA_MANAGER').map((c) => {
+          const Icon = c.icon
+          return (
+            <Link key={c.to} to={c.to} className="bg-white rounded-xl shadow p-3 flex items-center gap-3 hover:shadow-md transition">
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${c.tone}`}><Icon className="w-6 h-6" /></div>
+              <div className="font-semibold text-sm text-gray-800 leading-snug min-w-0">{c.title}</div>
+            </Link>
+          )
+        })}
       </div>
 
       <div className="flex items-center justify-between mb-2">
