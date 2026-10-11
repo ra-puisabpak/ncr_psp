@@ -260,7 +260,7 @@ r = await call('POST', '/api/recv', { token: qc, body: { ...recvBody('uid-dddd-0
 check('a file that is not a picture is refused', r.status === 400, r);
 // ----- reviewer signature on the printed summaries -----
 r = await call('GET', '/api/report-signature', { token: qc });
-check('signature: none before it is set', r.status === 200 && r.j === null, r);
+check('signature: the starting signature is served from the first deploy', r.status === 200 && r.j.name === 'Sookapat Palittapan' && r.j.data.startsWith('data:image/png;base64,iVBOR'), r);
 r = await call('PUT', '/api/report-signature', { token: qc, body: { name: 'x', data: jpg } });
 check('signature: only the QA Manager sets it', r.status === 403, r);
 r = await call('PUT', '/api/report-signature', { token: qa, body: { name: 'Sookapat', data: 'data:text/plain;base64,aGVsbG8=' } });
