@@ -171,6 +171,8 @@ export const reportSigApi = {
   set: (body) => put('/api/report-signature', body),
 }
 
+export const userSigApi = { list: () => request('/api/user-signatures') }
+
 export const specApi = {
   list: () => request('/api/recv/specs'),
   update: (group, seq, body) => patch(`/api/recv/specs/${enc(group)}/${seq}`, body),

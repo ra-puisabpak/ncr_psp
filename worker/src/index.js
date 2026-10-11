@@ -1112,6 +1112,12 @@ export default {
       }
       // The reviewer's signature that is stamped on the review line of the printed daily summaries. Anyone signed in may read it
       // (they print the reports); only the QA Manager sets it.
+      // The QC officers' signatures for the "recorded by" line of the printed summaries (not for the read-only demo account).
+      if (path === '/api/user-signatures' && method === 'GET') {
+        need(user, WRITERS);
+        const { results } = await DB.prepare('SELECT display_name, content_type, data FROM user_signatures ORDER BY display_name').all();
+        return json(results.map((r) => ({ name: r.display_name, data: `data:${r.content_type};base64,${r.data}` })));
+      }
       if (path === '/api/report-signature' && method === 'GET') {
         const r = await DB.prepare("SELECT name, content_type, data FROM report_signatures WHERE slot='REVIEWER'").first();
         return json(r ? { name: r.name, data: `data:${r.content_type};base64,${r.data}` } : null);

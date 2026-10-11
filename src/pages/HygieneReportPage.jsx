@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { hygApi } from '../api/d1Api'
 import { FORMS } from '../config'
-import ReviewSig from '../components/ReviewSig'
+import ReviewSig, { RecorderSig } from '../components/ReviewSig'
 import { FormHeader, FormInfo, FormStats } from '../components/FormHeader'
 import { bkkToday } from '../qa/shared'
 import { ACTION_TH } from './HygienePage'
@@ -94,7 +94,7 @@ export default function HygieneReportPage() {
           )}
           <div className="mt-2 text-[12px]"><b>สรุปผล:</b> ผ่าน {rows.length - fails.length} คน / ไม่ผ่าน {fails.length} คน · ✓ = ผ่าน, ✗ = ไม่ผ่าน · พนักงานที่ไม่ผ่านห้ามเข้าพื้นที่ผลิตจนกว่าจะแก้ไขเรียบร้อย</div>
           <div className="mt-10 flex justify-around text-center text-[12px] avoid-break">
-            <div><div style={{ height: 40 }} /><div className="border-t border-dotted border-black w-52 mx-auto mb-1" />ผู้ตรวจ ({inspectors.join(', ')})<br />วันที่ {thaiDate(date)}</div>
+            <div><RecorderSig names={inspectors} /><div className="border-t border-dotted border-black w-52 mx-auto mb-1" />ผู้ตรวจ ({inspectors.join(', ')})<br />วันที่ {thaiDate(date)}</div>
             <div><ReviewSig /><div className="border-t border-dotted border-black w-52 mx-auto mb-1" />ผู้ทวนสอบ (QA)<br />วันที่ ......................</div>
           </div>
           <div className="mt-4 text-[10px] text-gray-500">พิมพ์จากระบบ QA eForm · เลขที่บันทึก {rows[0].rec_id} ถึง {rows[rows.length - 1].rec_id}</div>

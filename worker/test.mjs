@@ -270,6 +270,8 @@ check('signature: the QA Manager sets it', r.status === 200, r);
 r = await call('GET', '/api/report-signature', { token: qc });
 check('signature: anyone signed in can read it for printing', r.status === 200 && r.j.name === 'Sookapat' && r.j.data.startsWith('data:image/jpeg;base64,'), r);
 
+r = await call('GET', '/api/user-signatures', { token: qc });
+check('user signatures: a QC user can read the list (empty when no officer has signed yet)', r.status === 200 && Array.isArray(r.j), r);
 // ----- receiving specification (RD-RMS / RD-PMS) -----
 r = await call('GET', '/api/recv/specs', { token: qc });
 check('specs: groups, items and the material map are served', r.status === 200 && r.j.groups.length === 11 && r.j.mats['RM-007'] === 'RD-RMS-002' && r.j.mats['PKG-001'] === 'RD-PMS-001'

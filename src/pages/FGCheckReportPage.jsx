@@ -5,7 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { fgCheckApi } from '../api/d1Api'
 import { FORMS } from '../config'
-import ReviewSig from '../components/ReviewSig'
+import ReviewSig, { RecorderSig } from '../components/ReviewSig'
 import { FormHeader, FormInfo, FormStats } from '../components/FormHeader'
 import { bkkToday } from '../qa/shared'
 import { FG_SENSORY, FG_PACK } from './FGCheckPage'
@@ -100,7 +100,7 @@ export default function FGCheckReportPage() {
           )}
           <div className="mt-1 text-[9px] text-gray-700">วิธีอ่าน: "รวม" = ชั่งทั้งกระปุก (กระปุก + ฝา + สติ๊กเกอร์ + น้ำพริก) · "สุทธิ" = น้ำพริกอย่างเดียว (รวม − น้ำหนักกระปุก) · เกณฑ์: สุทธิต้องไม่ต่ำกว่าน้ำหนักบนฉลาก ถ้าต่ำกว่าให้ชั่งซ้ำ และใช้ผลชั่งซ้ำตัดสิน · ✓ = ผ่าน ✗ = ไม่ผ่าน</div>
           <div className="mt-8 flex justify-around text-center avoid-break">
-            <div><div style={{ height: 40 }} /><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้บันทึก ({[...new Set(rows.map((r) => r.inspector))].join(', ')})<br />(เจ้าหน้าที่ฝ่ายควบคุมคุณภาพ)</div>
+            <div><RecorderSig names={rows.map((r) => r.inspector)} /><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้บันทึก ({[...new Set(rows.map((r) => r.inspector))].join(', ')})<br />(เจ้าหน้าที่ฝ่ายควบคุมคุณภาพ)</div>
             <div><ReviewSig /><div className="border-t border-dotted border-black w-56 mx-auto mb-1" />ผู้รับทราบ<br />(หัวหน้าฝ่ายควบคุมคุณภาพ)</div>
           </div>
         </A4Sheet>

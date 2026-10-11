@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Printer } from 'lucide-react'
 import { coldApi } from '../api/d1Api'
 import { FORMS } from '../config'
-import ReviewSig from '../components/ReviewSig'
+import ReviewSig, { RecorderSig } from '../components/ReviewSig'
 import { FormHeader, FormInfo, FormStats } from '../components/FormHeader'
 import { bkkToday, monthOf, monthRange, thaiMonth } from '../qa/shared'
 import { SLOTS, CONDITION, ACTIONS, AREA_TH, specText, COLD_CAUSES } from './ColdPage'
@@ -79,7 +79,7 @@ function UnitSheet({ unit, rows, month, first }) {
       </div>
       <div className="mt-1 text-[9.5px]">P = ผ่าน · F = นอกเกณฑ์ · F! = เกิน Escalation Limit (เปิด NCR) · ค่าตัวหนาสีแดง = นอกเกณฑ์ · กรณี OOS ปฏิบัติตาม SOP-QC-XX และ Temperature Deviation / Product Disposition</div>
       <div className="mt-6 flex justify-around text-center avoid-break">
-        {['ผู้บันทึก (QC)', 'ผู้ทบทวน (QC Supervisor)'].map((s, i) => <div key={s}>{i === 1 ? <ReviewSig /> : <div style={{ height: 40 }} />}<div className="border-t border-dotted border-black w-52 mx-auto mb-1" />{s}<br />วันที่ ................</div>)}
+        {['ผู้บันทึก (QC)', 'ผู้ทบทวน (QC Supervisor)'].map((s, i) => <div key={s}>{i === 1 ? <ReviewSig /> : <RecorderSig names={(rows || []).map((r) => r.inspector)} />}<div className="border-t border-dotted border-black w-52 mx-auto mb-1" />{s}<br />วันที่ ................</div>)}
       </div>
     </A4Sheet>
   )

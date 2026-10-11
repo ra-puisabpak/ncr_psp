@@ -1217,11 +1217,15 @@ const SPEC_BUILTIN={"groups":[{"key":"RD-RMS-002","name":"ข้อกำหน�
 let SPEC=(()=>{try{const v=JSON.parse(localStorage.getItem(SPEC_KEY)||'null');return v&&Array.isArray(v.groups)&&v.mats?v:SPEC_BUILTIN;}catch(e){return SPEC_BUILTIN;}})();
 // ลายเซ็นผู้ทวนสอบ (QA Manager) ที่ประทับอัตโนมัติในช่องทบทวนของรายงานสรุป
 const RSIG_KEY='psp_recv_rsig';
+const RUSIG_KEY='psp_recv_usig';
+let RUSIG=(()=>{try{const v=JSON.parse(localStorage.getItem(RUSIG_KEY)||'[]');return Array.isArray(v)?v:[];}catch(e){return [];}})();
 let RSIG=(()=>{try{return localStorage.getItem(RSIG_KEY)||'';}catch(e){return '';}})();
 async function loadReviewSig(){
   const d=await api('GET','/api/report-signature');
   RSIG=d&&d.data?d.data:'';
   try{if(RSIG)localStorage.setItem(RSIG_KEY,RSIG);else localStorage.removeItem(RSIG_KEY);}catch(e){}
+  // ลายเซ็นเจ้าหน้าที่ QC แต่ละคน (ช่อง "จัดทำโดย")
+  try{const l=await api('GET','/api/user-signatures');if(Array.isArray(l)){RUSIG=l;try{localStorage.setItem(RUSIG_KEY,JSON.stringify(l));}catch(e){}}}catch(e){}
 }
 async function loadSpecs(){
   const d=await api('GET','/api/recv/specs');
@@ -2101,6 +2105,7 @@ async function printReport(){
       items.map(x=>'<figure class="axf"><img src="'+x.u+'"><figcaption>'+escH(x.cap)+'</figcaption></figure>').join('')+'</div></div>';
   }).join('');
   const axSec=axN?'<div class="ax"><div class="axt">เอกสารแนบท้าย: รูปถ่ายประกอบการตรวจรับ ('+axN+' รูป)</div>'+axDocs+'</div>':'';
+  const officerSigs=[...new Set(rs.map(r=>r.inspector))].map(n=>RUSIG.find(x=>x.name===n)).filter(Boolean).map(x=>'<img class="rsg" style="max-width:'+(rs.length&&new Set(rs.map(r=>r.inspector)).size>1?'90':'140')+'px" src="'+x.data+'">').join('');
   const html=`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>FM-QC-001 รายงาน${day?'รายวัน':'ราย Supplier'}</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -2144,6 +2149,8 @@ td{padding:4px 5px;border:1px solid #9aa5b1;vertical-align:middle;overflow-wrap:
 .sg>div+div{border-left:1px solid #9aa5b1}
 .sg b{display:block;font-size:10.5px;color:#0f2744}
 .sg .ln{border-bottom:1px dotted #5c6470;height:32px;margin:0 18px 4px;position:relative}
+.sg .ln.off{display:flex;justify-content:center;align-items:flex-end;gap:6px}
+.sg .ln.off .rsg{position:static;transform:none}
 .rsg{position:absolute;left:50%;bottom:1px;transform:translateX(-50%);max-height:34px;max-width:140px;object-fit:contain}
 .ft{margin-top:8px;font-size:9px;color:#5c6470;display:flex;justify-content:space-between;border-top:1px solid #0f2744;padding-top:4px}
 .ax{margin-top:26px;padding-top:12px;border-top:3px dashed #9aa5b1}
@@ -2167,7 +2174,7 @@ td{padding:4px 5px;border:1px solid #9aa5b1;vertical-align:middle;overflow-wrap:
 ${body}
 ${ncHtml}
 <div class="keep">
-<div class="sg"><div><b>จัดทำโดย (QC Officer)</b><div class="ln"></div>(................................................)<br>วันที่ ........ / ........ / ............</div><div><b>ทบทวนโดย (QC Supervisor)</b><div class="ln">${RSIG?'<img class="rsg" src="'+RSIG+'">':''}</div>(................................................)<br>วันที่ ........ / ........ / ............</div></div>
+<div class="sg"><div><b>จัดทำโดย (QC Officer)</b><div class="ln off">${officerSigs}</div>(................................................)<br>วันที่ ........ / ........ / ............</div><div><b>ทบทวนโดย (QC Supervisor)</b><div class="ln">${RSIG?'<img class="rsg" src="'+RSIG+'">':''}</div>(................................................)<br>วันที่ ........ / ........ / ............</div></div>
 <div class="ft"><span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) · FM-QC-001 · รายงาน${day?'รายวัน':'ราย Supplier'}</span><span>พิมพ์เมื่อ ${stamp}</span></div>
 </div>
 ${axSec}
