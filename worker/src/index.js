@@ -1418,7 +1418,7 @@ export default {
         const sp = url.searchParams, where = ['(aw IS NOT NULL OR ph IS NOT NULL)'], p = [];
         if (isDate(sp.get('from'))) { where.push('check_date>=?'); p.push(sp.get('from')); }
         if (isDate(sp.get('to'))) { where.push('check_date<=?'); p.push(sp.get('to')); }
-        const { results } = await DB.prepare(`SELECT fc_id, check_date, product_code, product_name, batch_no, label_net_g, aw, aw_temp, ph, inspector FROM fg_checks WHERE ${FG_LIVE} AND ${where.join(' AND ')} ORDER BY check_date, fc_id LIMIT 2000`).bind(...p).all();
+        const { results } = await DB.prepare(`SELECT fc_id, check_date, product_code, product_name, batch_no, label_net_g, aw, aw_temp, ph, (SELECT t.temp FROM fg_ph_temp t WHERE t.fc_id = fg_checks.fc_id) AS ph_temp, inspector FROM fg_checks WHERE ${FG_LIVE} AND ${where.join(' AND ')} ORDER BY check_date, fc_id LIMIT 2000`).bind(...p).all();
         return json(results);
       }
       if (path === '/api/fgcheck' && method === 'GET') {
@@ -1431,8 +1431,10 @@ export default {
         // A subquery instead of an id list: D1 allows only 100 bound parameters per statement.
         const phs = ids.length ? (await DB.prepare(`SELECT fc_id, slot FROM fg_check_photos WHERE fc_id IN (SELECT fc_id FROM fg_checks WHERE ${FG_LIVE} AND ${where.join(' AND ')})`).bind(...p).all()).results : [];
         const rc = ids.length ? (await DB.prepare(`SELECT * FROM fg_check_rechecks WHERE fc_id IN (SELECT fc_id FROM fg_checks WHERE ${FG_LIVE} AND ${where.join(' AND ')})`).bind(...p).all()).results : [];
+        const pts = ids.length ? (await DB.prepare(`SELECT fc_id, temp FROM fg_ph_temp WHERE fc_id IN (SELECT fc_id FROM fg_checks WHERE ${FG_LIVE} AND ${where.join(' AND ')})`).bind(...p).all()).results : [];
         return json(results.map((r) => {
           const row = fgRow(r);
+          row.ph_temp = pts.find((x) => x.fc_id === r.fc_id)?.temp ?? null;
           row.photos = phs.filter((x) => x.fc_id === r.fc_id).map((x) => x.slot);
           row.recheck = row.gross.map((_, i) => { const x = rc.find((y) => y.fc_id === r.fc_id && y.jar === i + 1); return x ? { gross: x.gross, net: x.net } : null; });
           return row;
@@ -1509,6 +1511,7 @@ export default {
         const result = failed.length ? 'FAIL' : 'PASS';
         const note = txt(b.note, 1000);
         if (result === 'FAIL' && !note) fail(400, 'ผลไม่ผ่าน กรุณาระบุสิ่งที่ทำ (เช่น กักสินค้า แจ้งหัวหน้างาน/QA)');
+        const phTemp = numOpt(b.ph_temp, 'อุณหภูมิขณะวัด pH', 0, 60);
         const rec = [b.check_date, product, txt(b.product_name, 200), batch, pk.pack_key, pk.label, pk.label_net_g, pk.tare_g, JSON.stringify(gross), JSON.stringify(net), JSON.stringify(sensory),
           numOpt(b.aw, 'ค่า aw', 0, 1), numOpt(b.aw_temp, 'อุณหภูมิขณะวัด aw', 0, 60), numOpt(b.ph, 'ค่า pH', 0, 14), JSON.stringify(pack),
           numOpt(b.store_temp, 'อุณหภูมิสถานที่จัดเก็บ', -40, 60), txt(b.store_area, 40), result, failed.length ? JSON.stringify(failed) : null, note, user.display_name, user.username, nowIso()];
@@ -1520,6 +1523,7 @@ export default {
               VALUES (?,?,${rec.map(() => '?').join(',')})`).bind(fcId, uid, ...rec),
               DB.prepare('INSERT INTO fg_batch_packs (product_code,batch_no,pack_keys,updated_by,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(product_code,batch_no) DO UPDATE SET pack_keys=excluded.pack_keys, updated_by=excluded.updated_by, updated_at=excluded.updated_at')
                 .bind(product, batch, JSON.stringify(packPlan), user.display_name, nowIso()),
+              ...(phTemp !== null ? [DB.prepare('INSERT INTO fg_ph_temp (fc_id,temp) VALUES (?,?)').bind(fcId, phTemp)] : []),
               ...recheck.map((x, i) => (x ? DB.prepare('INSERT INTO fg_check_rechecks (fc_id,jar,gross,net) VALUES (?,?,?,?)').bind(fcId, i + 1, x.gross, x.net) : null)).filter(Boolean),
               ...fgPhotos.map((p) => DB.prepare('INSERT INTO fg_check_photos (fc_id,slot,content_type,size,data,created_at) VALUES (?,?,?,?,?,?)').bind(fcId, p.slot, p.ph.type, p.ph.size, p.ph.b64, nowIso()))]);
           } catch (e) {

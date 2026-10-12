@@ -59,19 +59,19 @@ export default function FGCheckReportPage() {
             <thead className="bg-[#0f2744] text-white">
               <tr>
                 <th className={td} rowSpan={3}>ชื่อผลิตภัณฑ์</th><th className={td} rowSpan={3}>เลขล็อต</th><th className={td} rowSpan={3}>น้ำหนักสุทธิ<br />บนบรรจุภัณฑ์ (g)</th>
-                <th className={td} colSpan={7}>การตรวจสอบคุณภาพผลิตภัณฑ์</th>
+                <th className={td} colSpan={8}>การตรวจสอบคุณภาพผลิตภัณฑ์</th>
                 <th className={td} colSpan={cols + 4}>การตรวจสอบบรรจุภัณฑ์ / ความปลอดภัย</th>
                 <th className={td} rowSpan={3}>ผล<br />(Pass/Fail)</th>
               </tr>
               <tr>
                 {FG_SENSORY.map(([k, l]) => <th key={k} className={td} rowSpan={2}>{l}</th>)}
-                <th className={td} colSpan={2}>aw</th><th className={td} rowSpan={2}>pH</th>
+                <th className={td} colSpan={2}>aw</th><th className={td} colSpan={2}>pH</th>
                 <th className={td} colSpan={cols}>น้ำหนักที่ชั่ง (g)<br /><span className="font-normal text-[9px]">รวม = ทั้งกระปุก · สุทธิ = เนื้อน้ำพริก</span></th>
                 {FG_PACK.map(([k, l]) => <th key={k} className={td} rowSpan={2}>{l}</th>)}
                 <th className={td} rowSpan={2}>อุณหภูมิที่จัดเก็บ (°C)</th>
               </tr>
               <tr>
-                <th className={td}>aw</th><th className={td}>temp</th>
+                <th className={td}>aw</th><th className={td}>temp</th><th className={td}>pH</th><th className={td}>temp</th>
                 {Array.from({ length: cols }, (_, i) => <th key={i} className={td}>ตัว {i + 1}</th>)}
               </tr>
             </thead>
@@ -82,7 +82,7 @@ export default function FGCheckReportPage() {
                   <td className={`${td} whitespace-nowrap`}>{r.batch_no}</td>
                   <td className={td}>{r.label_net_g}</td>
                   {FG_SENSORY.map(([k]) => <td key={k} className={`${td} ${r.sensory[k] ? '' : 'text-red-700 font-bold'}`}>{mark(r.sensory[k])}</td>)}
-                  <td className={td}>{r.aw ?? '-'}</td><td className={td}>{r.aw_temp ?? '-'}</td><td className={td}>{r.ph ?? '-'}</td>
+                  <td className={td}>{r.aw ?? '-'}</td><td className={td}>{r.aw_temp ?? '-'}</td><td className={td}>{r.ph ?? '-'}</td><td className={td}>{r.ph_temp ?? '-'}</td>
                   {Array.from({ length: cols }, (_, i) => (
                     <td key={i} className={`${td} ${(r.recheck?.[i] ? r.recheck[i].net : r.net[i]) < r.label_net_g ? 'text-red-700 font-bold' : ''}`}>{r.gross[i] != null ? <><span className="text-[8.5px] text-gray-600">รวม {r.gross[i]}</span><br /><b>สุทธิ {r.net[i]}</b>{r.recheck?.[i] && <><br /><span className="text-[8.5px]">ชั่งซ้ำ: รวม {r.recheck[i].gross} → <b>สุทธิ {r.recheck[i].net}</b></span></>}</> : ''}</td>
                   ))}

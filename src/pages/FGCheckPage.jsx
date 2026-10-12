@@ -43,7 +43,7 @@ function PhotoSlot({ title, hint, value, onChange }) {
     </div>
   )
 }
-const blankForm = () => ({ product_code: '', batch_no: '', pack_key: '', packs: [], gross: ['', ''], recheck: [], photos: { cap: null, label: null }, sensory: {}, pack: {}, aw: '', aw_temp: '', ph: '', store_temp: '', store_area: '', note: '' })
+const blankForm = () => ({ product_code: '', batch_no: '', pack_key: '', packs: [], gross: ['', ''], recheck: [], photos: { cap: null, label: null }, sensory: {}, pack: {}, aw: '', aw_temp: '', ph: '', ph_temp: '', store_temp: '', store_area: '', note: '' })
 
 function PassFail({ value, onChange }) {
   return (
@@ -229,10 +229,11 @@ export default function FGCheckPage() {
               <div key={k} className="flex items-center justify-between gap-2 border border-gray-200 rounded-lg px-2.5 py-1.5"><span className="text-sm text-gray-700">{l}</span><PassFail value={f.sensory[k]} onChange={(v) => set('sensory', { ...f.sensory, [k]: v })} /></div>
             ))}
           </div>
-          <div className="grid grid-cols-3 gap-2 mt-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
             <label className="text-xs text-gray-600">aw<input type="number" step="0.001" min="0" max="1" value={f.aw} onChange={(e) => set('aw', e.target.value)} placeholder="ไม่วัด" className={input} /></label>
             <label className="text-xs text-gray-600">อุณหภูมิขณะวัด aw (°C)<input type="number" step="0.1" value={f.aw_temp} onChange={(e) => set('aw_temp', e.target.value)} placeholder="ไม่วัด" className={input} /></label>
             <label className="text-xs text-gray-600">pH<input type="number" step="0.01" min="0" max="14" value={f.ph} onChange={(e) => set('ph', e.target.value)} placeholder="ไม่วัด" className={input} /></label>
+            <label className="text-xs text-gray-600">อุณหภูมิขณะวัด pH (°C)<input type="number" step="0.1" value={f.ph_temp} onChange={(e) => set('ph_temp', e.target.value)} placeholder="ไม่วัด" className={input} /></label>
           </div>
         </div>
 
@@ -275,7 +276,7 @@ export default function FGCheckPage() {
           <div key={r.fc_id} className="p-3 text-sm flex items-start gap-2">
             <div className="min-w-0 flex-1">
               <div className="font-semibold text-gray-800">{r.product_name || r.product_code} · {r.batch_no}</div>
-              <div className="text-[11px] text-gray-500">{r.fc_id} · {r.label_net_g} g (หัก {r.tare_g} g) · สุทธิ {r.net.map((n, i) => (r.recheck?.[i] ? `${n} (ชั่งซ้ำ ${r.recheck[i].net})` : n)).join(' / ')} g{r.aw != null ? ` · aw ${r.aw}` : ''}{r.ph != null ? ` · pH ${r.ph}` : ''} · {r.inspector}</div>
+              <div className="text-[11px] text-gray-500">{r.fc_id} · {r.label_net_g} g (หัก {r.tare_g} g) · สุทธิ {r.net.map((n, i) => (r.recheck?.[i] ? `${n} (ชั่งซ้ำ ${r.recheck[i].net})` : n)).join(' / ')} g{r.aw != null ? ` · aw ${r.aw}` : ''}{r.ph != null ? ` · pH ${r.ph}${r.ph_temp != null ? ` (${r.ph_temp} °C)` : ''}` : ''} · {r.inspector}</div>
               {r.failed.length > 0 && <div className="text-[11px] text-red-700">{r.failed.join(' · ')}</div>}
             </div>
             {r.photos?.length > 0 && <button onClick={() => openPhotos(r)} className="text-[11px] text-teal-700 border border-teal-300 bg-teal-50 rounded-lg px-2 py-1 flex items-center gap-1"><Camera className="w-3 h-3" />{r.photos.length} รูป</button>}

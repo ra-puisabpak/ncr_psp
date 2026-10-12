@@ -369,8 +369,10 @@ check('register changes are in the audit log', r.j.some((x) => x.action === 'upd
 r = await call('GET', '/api/pack-sizes', { token: qc });
 check('pack sizes carry the jar weight to deduct', r.status === 200 && r.j.find((x) => x.pack_key === 'J210').tare_g === 40 && r.j.find((x) => x.pack_key === 'J60').tare_g === 15 && r.j.find((x) => x.pack_key === 'J160')?.tare_g === 40 && r.j.find((x) => x.pack_key === 'J120')?.tare_g === 40 && r.j.find((x) => x.pack_key === 'J120')?.label_net_g === 120, r.j);
 const fgBody = (o = {}) => ({ uid: 'fgc-' + Math.random().toString(36).slice(2, 10), check_date: '2026-10-05', product_code: 'FG0007', product_name: 'พริกผัดน้ำมันมะกอก สูตรออริจินัล', batch_no: 'B261005-01',
-  pack_key: 'J210', gross: [251, 252], sensory: { appearance: true, color: true, odor: true, taste: true }, aw: 0.48, aw_temp: 31.1, ph: 5.54,
+  pack_key: 'J210', gross: [251, 252], sensory: { appearance: true, color: true, odor: true, taste: true }, aw: 0.48, aw_temp: 31.1, ph: 5.54, ph_temp: 27.5,
   pack: { pack_ok: true, seal_ok: true, label_ok: true }, store_temp: 30.6, ...o });
+r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ ph_temp: 99 }) });
+check('the temperature the pH was measured at is bounded', r.status === 400, r);
 r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ pack_key: '' }) });
 check('the pack size must be chosen before weighing', r.status === 400, r);
 r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ gross: [251] }) });
@@ -391,6 +393,9 @@ r = await call('POST', '/api/fgcheck', { token: qc, body: fgBody({ sensory: { ap
 check('every sensory check needs a result', r.status === 400, r);
 r = await call('GET', '/api/fgcheck?from=2026-10-05&to=2026-10-05', { token: qc });
 check('the day lists every product checked with weights, re-checks and results', r.status === 200 && r.j.length === 4 && r.j.some((x) => x.pack_key === 'J60' && x.aw === null) && r.j.some((x) => x.recheck[1]?.net === 211.5), r.j.length);
+check('the pH temperature is saved with the check and listed', r.j.some((x) => x.ph_temp === 27.5), r.j.map((x) => x.ph_temp));
+r = await call('GET', '/api/fgcheck/awph?from=2026-10-05&to=2026-10-05', { token: qa });
+check('the aw/pH summary rows carry the pH temperature', r.status === 200 && r.j.some((x) => x.ph_temp === 27.5), r.j);
 // Daily progress for the QA Manager
 r = await call('GET', '/api/daily-progress?date=2026-10-05', { token: qc });
 check('daily progress is for the QA Manager only', r.status === 403, r);

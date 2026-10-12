@@ -1106,3 +1106,9 @@ FROM recv_records r JOIN recv_photos p ON p.doc_no = r.doc_no AND p.slot = 0
 WHERE r.inspector IN ('TAK (QC)', 'PLOY (QC)')
   AND p.id = (SELECT p2.id FROM recv_photos p2 JOIN recv_records r2 ON r2.doc_no = p2.doc_no
               WHERE p2.slot = 0 AND r2.inspector = r.inspector ORDER BY r2.created_at DESC, p2.id DESC LIMIT 1);
+
+-- FM-QC-008: temperature at which the pH was measured (kept beside the check; optional).
+CREATE TABLE IF NOT EXISTS fg_ph_temp (
+  fc_id TEXT PRIMARY KEY,
+  temp  REAL NOT NULL
+);

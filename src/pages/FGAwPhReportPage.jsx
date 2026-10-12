@@ -86,12 +86,12 @@ export default function FGAwPhReportPage() {
             <div key={g.code} className="avoid-break mb-2">
               <div className="bg-[#e9eef4] border border-black border-b-0 px-2 py-0.5 font-semibold"><Nw>{g.name}</Nw> <span className="font-normal text-[9px] text-gray-600">({g.code})</span></div>
               <table className="w-full border-collapse text-center">
-                <thead className="bg-[#f4f6f8]"><tr>{['วันที่', 'เลขล็อต', 'ขนาด (g)', 'aw', 'อุณหภูมิวัด aw (°C)', 'pH', 'ผู้ตรวจ'].map((h) => <th key={h} className={td}>{h}</th>)}</tr></thead>
+                <thead className="bg-[#f4f6f8]"><tr>{['วันที่', 'เลขล็อต', 'ขนาด (g)', 'aw', 'อุณหภูมิวัด aw (°C)', 'pH', 'อุณหภูมิวัด pH (°C)', 'ผู้ตรวจ'].map((h) => <th key={h} className={td}>{h}</th>)}</tr></thead>
                 <tbody>
                   {g.rows.map((r) => (
                     <tr key={r.fc_id}>
                       <td className={td}>{short(r.check_date)}</td><td className={td}>{r.batch_no}</td><td className={td}>{r.label_net_g}</td>
-                      <td className={td}>{r.aw ?? '-'}</td><td className={td}>{r.aw_temp ?? '-'}</td><td className={td}>{r.ph ?? '-'}</td><td className={td}>{r.inspector}</td>
+                      <td className={td}>{r.aw ?? '-'}</td><td className={td}>{r.aw_temp ?? '-'}</td><td className={td}>{r.ph ?? '-'}</td><td className={td}>{r.ph_temp ?? '-'}</td><td className={td}>{r.inspector}</td>
                     </tr>
                   ))}
                 </tbody>
