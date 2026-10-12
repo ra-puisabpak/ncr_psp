@@ -65,7 +65,7 @@ export default function FGAwPhReportPage() {
           <table className="w-full border-collapse text-center mb-3">
             <thead className="bg-[#0f2744] text-white">
               <tr><th className={td} rowSpan={2}>ผลิตภัณฑ์</th><th className={td} colSpan={4}>aw</th><th className={td} colSpan={4}>pH</th></tr>
-              <tr>{['ครั้ง', 'ต่ำสุด', 'เฉลี่ย', 'สูงสุด', 'ครั้ง', 'ต่ำสุด', 'เฉลี่ย', 'สูงสุด'].map((h, i) => <th key={i} className={td}>{h}</th>)}</tr>
+              <tr>{['ครั้ง', 'ต่ำสุด', 'สูงสุด', 'เฉลี่ย', 'ครั้ง', 'ต่ำสุด', 'สูงสุด', 'เฉลี่ย'].map((h, i) => <th key={i} className={td}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {byProduct.map((g) => {
@@ -74,8 +74,8 @@ export default function FGAwPhReportPage() {
                 return (
                   <tr key={g.code} className="avoid-break">
                     <td className={`${td} text-left`}><Nw>{g.name}</Nw> <span className="text-[9px] text-gray-600">({g.code})</span></td>
-                    <td className={td}>{aw?.n ?? 0}</td><td className={td}>{f(aw?.min, 3)}</td><td className={td}>{f(aw?.avg, 3)}</td><td className={td}>{f(aw?.max, 3)}</td>
-                    <td className={td}>{ph?.n ?? 0}</td><td className={td}>{f(ph?.min, 2)}</td><td className={td}>{f(ph?.avg, 2)}</td><td className={td}>{f(ph?.max, 2)}</td>
+                    <td className={td}>{aw?.n ?? 0}</td><td className={td}>{f(aw?.min, 3)}</td><td className={td}>{f(aw?.max, 3)}</td><td className={td}>{f(aw?.avg, 3)}</td>
+                    <td className={td}>{ph?.n ?? 0}</td><td className={td}>{f(ph?.min, 2)}</td><td className={td}>{f(ph?.max, 2)}</td><td className={td}>{f(ph?.avg, 2)}</td>
                   </tr>
                 )
               })}
