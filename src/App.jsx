@@ -15,6 +15,7 @@ import UsersPage from './pages/UsersPage'
 import MaterialsPage from './pages/MaterialsPage'
 import SuppliersPage from './pages/SuppliersPage'
 import SpecPage from './pages/SpecPage'
+import FGAwPhReportPage from './pages/FGAwPhReportPage'
 import FGCheckPage from './pages/FGCheckPage'
 import FGCheckReportPage from './pages/FGCheckReportPage'
 import AccountPage from './pages/AccountPage'
@@ -80,6 +81,7 @@ export default function App() {
           <Route path="/qa/weigh/day" element={<Private><WeighDayPage /></Private>} />
           <Route path="/qa/weigh/:id/print" element={<Private><WeighPrintPage /></Private>} />
           <Route path="/qa/fgcheck" element={<Private><FGCheckPage /></Private>} />
+          <Route path="/qa/fgcheck/awph" element={<Private><FGAwPhReportPage /></Private>} />
           <Route path="/qa/fgcheck/report" element={<Private><FGCheckReportPage /></Private>} />
           <Route path="/qa/materials" element={<Private><MaterialsPage /></Private>} />
           <Route path="/qa/suppliers" element={<Private><SuppliersPage /></Private>} />

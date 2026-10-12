@@ -128,7 +128,10 @@ export default function FGCheckPage() {
           <h1 className="text-lg font-bold text-gray-800 flex items-center gap-2"><PackageSearch className="w-5 h-5 text-emerald-600" />ตรวจสอบผลิตภัณฑ์สุดท้าย</h1>
           <div className="text-xs text-gray-500">{FORMS.FG_CHECK.code} Rev.{FORMS.FG_CHECK.rev} · ต่อ Batch · เลือกขนาดบรรจุก่อน ระบบหักน้ำหนักกระปุกให้</div>
         </div>
-        <Link to={`/qa/fgcheck/report?date=${date}`} className="flex items-center gap-1.5 text-sm bg-white border border-gray-300 rounded-lg px-3 py-1.5"><Printer className="w-4 h-4" />รายงาน A4</Link>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/qa/fgcheck/awph" className="flex items-center gap-1.5 text-sm bg-white border border-gray-300 rounded-lg px-3 py-1.5"><Printer className="w-4 h-4" />สรุป aw / pH</Link>
+  <Link to={`/qa/fgcheck/report?date=${date}`} className="flex items-center gap-1.5 text-sm bg-white border border-gray-300 rounded-lg px-3 py-1.5"><Printer className="w-4 h-4" />รายงาน A4</Link>
+        </div>
       </div>
 
       {saved && (
