@@ -2089,10 +2089,6 @@ async function printReport(){
       '<span>ทะเบียนรถ <b>'+escH(r.carReg||'—')+'</b></span><span>อุณหภูมิรถ <b>'+(r.carTemp!=null?r.carTemp+' °C':'—')+'</b></span><span>PO/DO <b>'+escH(r.poNo||'—')+'</b></span><span>ผู้ตรวจรับ <b>'+escH(r.inspector||'—')+'</b></span></div></td></tr>'+
       '<tr><th>#</th><th>รหัส</th><th>วัตถุดิบ</th><th>Lot No</th><th>จำนวน</th><th>วันผลิต</th><th>วันหมดอายุ</th><th>อุณหภูมิ (°C)</th><th>ผล</th></tr></thead>'+rows+'</table>';
   }).join('');
-  const docs=new Set(rs.map(r=>r.docNo));const ncs=ncLogs.filter(n=>docs.has(n.docNo));
-  const ncHtml=ncs.length?'<div class="sec">รายการ NCR ที่เกี่ยวข้อง ('+ncs.length+' รายการ)</div><table class="nc"><thead><tr><th style="width:15%">NCR No.</th><th style="width:28%">วัตถุดิบ / Lot</th><th style="width:15%">ผลการตรวจ</th><th>ปัญหาที่พบ / เงื่อนไข</th><th style="width:12%">สถานะ</th></tr></thead><tbody>'+
-    ncs.map(n=>{const br=ncBrief(n);const mt=n.mat&&n.mat.name?escH(n.mat.name)+(n.mat.lot?'<br><span class="sm2">Lot '+escH(n.mat.lot)+'</span>':''):'<span class="sm2">ใบตรวจรับ '+escH(n.docNo)+'</span>';
-      return '<tr><td class="mono c">'+escH(ncNo(n))+'</td><td>'+mt+'</td><td class="c">'+escH(br.type)+'</td><td>'+escH(br.detail||'—')+'</td><td class="c">'+(n.status==='Closed'?'ปิดแล้ว'+(n.closedDate?'<br><span class="sm2">'+fmtD(n.closedDate)+'</span>':''):'เปิดอยู่')+'</td></tr>';}).join('')+'</tbody></table>':'';
   // เอกสารแนบท้าย: รูปถ่ายของทุกใบในรายงาน (รถขนส่ง + รูปวัตถุดิบ) ต่อท้ายสรุป
   let axN=0;
   const axDocs=rs.map(r=>{
@@ -2126,7 +2122,7 @@ body{font-family:'Sarabun',sans-serif;font-size:11px;line-height:1.35;color:#1a2
 .hd-ref div+div{border-top:1px solid #c5ccd6}
 .hd-ref b{color:#0f2744;font-weight:700;text-align:right}
 .scope{border:1px solid #9aa5b1;padding:5px 10px;font-size:11.5px;margin-bottom:6px}
-.sum{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid #9aa5b1;margin-bottom:10px}
+.sum{display:grid;grid-template-columns:repeat(6,1fr);border:1px solid #9aa5b1;margin-bottom:10px}
 .sum div{padding:4px 6px 5px;text-align:center;font-size:9.5px;color:#5c6470}
 .sum div+div{border-left:1px solid #9aa5b1}
 .sum b{display:block;font-size:16px;line-height:1.2;color:#0f2744}
@@ -2170,9 +2166,8 @@ td{padding:4px 5px;border:1px solid #9aa5b1;vertical-align:middle;overflow-wrap:
   <div class="hd-ref"><div>รหัสแบบฟอร์ม <b>FM-QC-001</b></div><div>เอกสารอ้างอิง <b>SD-QC-001</b></div><div>ประเภทรายงาน <b>${day?'รายวัน':'ราย Supplier'}</b></div></div>
 </div>
 <div class="scope">${scope}</div>
-<div class="sum"><div><b>${rs.length}</b>ใบตรวจรับ</div><div><b>${no}</b>รายการวัตถุดิบ</div><div><b style="color:#2e7d32">${cP}</b>PASS</div><div><b style="color:#b35c00">${cC}</b>รับมีเงื่อนไข</div><div><b style="color:#b35c00">${cH}</b>HOLD</div><div><b style="color:#c0392b">${cR}</b>REJECT</div><div><b>${ncs.filter(n=>n.status==='Open').length}</b>NC ที่ยังเปิด</div></div>
+<div class="sum"><div><b>${rs.length}</b>ใบตรวจรับ</div><div><b>${no}</b>รายการวัตถุดิบ</div><div><b style="color:#2e7d32">${cP}</b>PASS</div><div><b style="color:#b35c00">${cC}</b>รับมีเงื่อนไข</div><div><b style="color:#b35c00">${cH}</b>HOLD</div><div><b style="color:#c0392b">${cR}</b>REJECT</div></div>
 ${body}
-${ncHtml}
 <div class="keep">
 <div class="sg"><div><b>จัดทำโดย (QC Officer)</b><div class="ln off">${officerSigs}</div>(................................................)<br>วันที่ ........ / ........ / ............</div><div><b>ทบทวนโดย (QC Supervisor)</b><div class="ln">${RSIG?'<img class="rsg" src="'+RSIG+'">':''}</div>(................................................)<br>วันที่ ........ / ........ / ............</div></div>
 <div class="ft"><span>บริษัท พระจันทร์ ๕๐ จำกัด (Puisabpak) · FM-QC-001 · รายงาน${day?'รายวัน':'ราย Supplier'}</span><span>พิมพ์เมื่อ ${stamp}</span></div>
