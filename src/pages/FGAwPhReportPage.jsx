@@ -8,6 +8,7 @@ import { fgCheckApi } from '../api/d1Api'
 import { FORMS } from '../config'
 import { FormHeader, FormInfo, FormStats } from '../components/FormHeader'
 import { bkkToday } from '../qa/shared'
+import { useAuth } from '../auth'
 
 const td = 'border border-black px-1 py-0.5'
 const TH_M = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
@@ -20,12 +21,14 @@ const monthStart = (d) => `${d.slice(0, 8)}01`
 // aw and pH of the finished-product checks, summarised per product: how many readings, lowest / average / highest, then every reading.
 export default function FGAwPhReportPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const allowed = user?.role === 'QA_MANAGER'
   const [params, setParams] = useSearchParams()
   const to = params.get('to') || bkkToday()
   const from = params.get('from') || monthStart(to)
   const [rows, setRows] = useState(null)
   const [error, setError] = useState(null)
-  useEffect(() => { setRows(null); setError(null); fgCheckApi.list({ from, to }).then(setRows).catch((e) => setError(e.message)) }, [from, to])
+  useEffect(() => { if (!allowed) return; setRows(null); setError(null); fgCheckApi.awph({ from, to }).then(setRows).catch((e) => setError(e.message)) }, [from, to, allowed])
 
   const measured = (rows || []).filter((r) => r.aw != null || r.ph != null)
   const byProduct = []
@@ -50,6 +53,7 @@ export default function FGAwPhReportPage() {
         </div>
         <button onClick={() => window.print()} disabled={!byProduct.length} className="flex items-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-semibold"><Printer className="w-4 h-4" />พิมพ์ A4</button>
       </div>
+      {!allowed && <div className="no-print max-w-lg mx-auto mt-6 bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-900 text-sm">รายงานสรุป aw / pH เปิดได้เฉพาะ QA Manager</div>}
       {error && <div className="no-print max-w-lg mx-auto mt-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>}
       {rows && !byProduct.length && <div className="no-print text-center text-gray-500 py-16">ไม่มีการวัด aw / pH ระหว่าง {thai(from)} – {thai(to)}</div>}
       {byProduct.length > 0 && (

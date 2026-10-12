@@ -1412,6 +1412,15 @@ export default {
         const { producedOn, made, pending } = await pendingFg(day);
         return json({ date: day, produced_on: producedOn, made: made.length, pending });
       }
+      // The aw / pH summary report is for the QA Manager only: its own endpoint, which returns only what the summary needs.
+      if (path === '/api/fgcheck/awph' && method === 'GET') {
+        need(user, QAM, 'รายงานสรุป aw / pH เปิดได้เฉพาะ QA Manager');
+        const sp = url.searchParams, where = ['(aw IS NOT NULL OR ph IS NOT NULL)'], p = [];
+        if (isDate(sp.get('from'))) { where.push('check_date>=?'); p.push(sp.get('from')); }
+        if (isDate(sp.get('to'))) { where.push('check_date<=?'); p.push(sp.get('to')); }
+        const { results } = await DB.prepare(`SELECT fc_id, check_date, product_code, product_name, batch_no, label_net_g, aw, aw_temp, ph, inspector FROM fg_checks WHERE ${FG_LIVE} AND ${where.join(' AND ')} ORDER BY check_date, fc_id LIMIT 2000`).bind(...p).all();
+        return json(results);
+      }
       if (path === '/api/fgcheck' && method === 'GET') {
         const sp = url.searchParams, where = ['1=1'], p = [];
         if (isDate(sp.get('from'))) { where.push('check_date>=?'); p.push(sp.get('from')); }

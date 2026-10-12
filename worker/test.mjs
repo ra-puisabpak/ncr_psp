@@ -272,6 +272,10 @@ check('signature: anyone signed in can read it for printing', r.status === 200 &
 
 r = await call('GET', '/api/user-signatures', { token: qc });
 check('user signatures: a QC user can read the list (empty when no officer has signed yet)', r.status === 200 && Array.isArray(r.j), r);
+r = await call('GET', '/api/fgcheck/awph?from=2026-01-01&to=2026-12-31', { token: qc });
+check('aw/pH summary: a QC user is refused', r.status === 403, r);
+r = await call('GET', '/api/fgcheck/awph?from=2026-01-01&to=2026-12-31', { token: qa });
+check('aw/pH summary: the QA Manager gets only the measured rows', r.status === 200 && Array.isArray(r.j) && r.j.every((x) => x.aw != null || x.ph != null) && !('sensory' in (r.j[0] || {})), r);
 // ----- receiving specification (RD-RMS / RD-PMS) -----
 r = await call('GET', '/api/recv/specs', { token: qc });
 check('specs: groups, items and the material map are served', r.status === 200 && r.j.groups.length === 11 && r.j.mats['RM-007'] === 'RD-RMS-002' && r.j.mats['PKG-001'] === 'RD-PMS-001'
