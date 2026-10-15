@@ -17,10 +17,18 @@
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- Non-blocking: if the font host is slow or blocked on a network, the page still draws with the fallback font. -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div id="boot" style="font-family:sans-serif;text-align:center;padding:48px 16px;color:#1e3a8a">กำลังโหลด PSP Quality…</div></div>
+    <script>
+      // If the app has not drawn after 10 s, say why instead of leaving a blank page.
+      setTimeout(function () {
+        var b = document.getElementById('boot');
+        if (b) b.innerHTML = 'โหลดแอปไม่สำเร็จ — เครือข่ายอาจบล็อกไฟล์ของเว็บ<br>ลองสลับเป็น Wi-Fi หรือปิด/เปิดสัญญาณแล้วโหลดใหม่<br><small>(' + location.host + ')</small>';
+      }, 10000);
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
