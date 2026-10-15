@@ -28,6 +28,8 @@ export default function WeighPage() {
   const [lines, setLines] = useState([])
   const [note, setNote] = useState('')
   const [uid, setUid] = useState(newUid)
+  const [ex, setEx] = useState({})
+  const toggleEx = (k) => setEx((o) => ({ ...o, [`${code}:${k}`]: !o[`${code}:${k}`] }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [saved, setSaved] = useState(null)
@@ -172,28 +174,44 @@ export default function WeighPage() {
             <div className="space-y-2">
               {lines.map((l, i) => (
                 <div key={i} className={`border rounded-lg p-2.5 ${l.extra ? 'border-amber-300 bg-amber-50' : 'border-gray-200'}`}>
-                  <div className="flex items-start gap-2 mb-1.5">
+                  <div className="flex items-start gap-2 mb-2">
                     <div className="min-w-0 flex-1">
                       {l.extra ? <input value={l.name} onChange={(e) => setL(i, 'name', e.target.value)} placeholder="ชื่อวัตถุดิบนอกสูตร" className={input} />
-                        : <div className="text-sm font-semibold text-gray-800">{i + 1}. {l.name} <span className="font-normal text-gray-500">· กำหนด {kg(l.target)} กก./ชุด</span></div>}
+                        : <div className="text-sm font-semibold text-gray-800">{i + 1}. {l.name}</div>}
                       {l.note && <div className="text-[11px] text-red-700">{l.note}</div>}
                     </div>
                     {l.extra && <button type="button" onClick={() => setLines((x) => x.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>}
                   </div>
-                  <div className="grid sm:grid-cols-3 gap-1.5 mb-1.5">
-                    <input list="recv-lots" value={l.lot && l.doc_no ? `${l.lot} · ${MAT_LABEL[l.code] || l.code} · ${l.doc_no}` : l.lot} onChange={(e) => pickLot(i, e.target.value)} placeholder="LOT วัตถุดิบ (ถ้ามี — พิมพ์เพื่อค้นจากใบตรวจรับ)" className={`${input} sm:col-span-2`} />
-                    <select value={l.weigherId || ''} onChange={(e) => setL(i, 'weigherId', e.target.value)} className={`${input} ${lineWeigher(l) ? '' : 'border-amber-400'}`}>
+                  <div className="grid grid-cols-2 gap-2 items-stretch mb-2">
+                    <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm">
+                      <div className="text-[11px] text-gray-500">น้ำหนักตามสูตร</div>
+                      <div className="font-semibold text-gray-800">{l.target == null ? '-' : `${kg(l.target)} กก./ชุด`}</div>
+                    </div>
+                    <div className="grid gap-1.5 auto-rows-fr">
+                      {Array.from({ length: sets }, (_, s) => {
+                        const st = offTarget(l, l.weights[s])
+                        return <input key={s} type="number" inputMode="decimal" step="0.001" min="0" value={l.weights[s] ?? ''} placeholder={sets > 1 ? `ชั่งจริง ชุด ${s + 1} · ${batches[s] || ''}` : 'น้ำหนักชั่งจริง (กก.)'} onChange={(e) => setW(i, s, e.target.value)}
+                          className={`${input} h-full text-base ${st === 'bad' ? 'border-red-400 bg-red-50' : st === 'warn' ? 'border-amber-300 bg-amber-50' : st === 'ok' ? 'border-green-300 bg-green-50' : ''}`} />
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button type="button" onClick={() => toggleEx(`${i}:w`)} className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${lineWeigher(l) ? 'bg-teal-50 border-teal-300 text-teal-800' : 'bg-amber-50 border-amber-400 text-amber-800'}`}>
+                      {lineWeigher(l) ? `ผู้ชั่ง: ${empName(l.weigherId || weigherId)}` : '+ ผู้ชั่ง'}
+                    </button>
+                    <button type="button" onClick={() => toggleEx(`${i}:l`)} className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${l.lot ? 'bg-teal-50 border-teal-300 text-teal-800' : 'bg-white border-gray-300 text-gray-600'}`}>
+                      {l.lot ? `LOT: ${l.lot}` : '+ LOT'}
+                    </button>
+                  </div>
+                  {ex[`${code}:${i}:w`] && (
+                    <select value={l.weigherId || ''} onChange={(e) => setL(i, 'weigherId', e.target.value)} className={`${input} mt-1.5 ${lineWeigher(l) ? '' : 'border-amber-400'}`}>
                       <option value="">{weigherId ? `ผู้ชั่ง: ${empName(weigherId)}` : '-- ผู้ชั่ง --'}</option>
                       {employees.map((e) => <option key={e.emp_id} value={e.emp_id}>ผู้ชั่ง: {e.name}</option>)}
                     </select>
-                  </div>
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-                    {Array.from({ length: sets }, (_, s) => {
-                      const st = offTarget(l, l.weights[s])
-                      return <input key={s} type="number" inputMode="decimal" step="0.001" min="0" value={l.weights[s] ?? ''} placeholder={sets > 1 ? `ชุด ${s + 1} · ${batches[s] || ''}` : `ชุดที่ ${s + 1}`} onChange={(e) => setW(i, s, e.target.value)}
-                        className={`${input} ${st === 'bad' ? 'border-red-400 bg-red-50' : st === 'warn' ? 'border-amber-300 bg-amber-50' : st === 'ok' ? 'border-green-300 bg-green-50' : ''}`} />
-                    })}
-                  </div>
+                  )}
+                  {ex[`${code}:${i}:l`] && (
+                    <input list="recv-lots" value={l.lot && l.doc_no ? `${l.lot} · ${MAT_LABEL[l.code] || l.code} · ${l.doc_no}` : l.lot} onChange={(e) => pickLot(i, e.target.value)} placeholder="LOT วัตถุดิบ (ถ้ามี — พิมพ์เพื่อค้นจากใบตรวจรับ)" className={`${input} mt-1.5`} />
+                  )}
                 </div>
               ))}
             </div>
