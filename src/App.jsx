@@ -36,6 +36,7 @@ import ColdReportPage from './pages/ColdReportPage'
 import WeighPage from './pages/WeighPage'
 import WeighPrintPage from './pages/WeighPrintPage'
 import WeighDayPage from './pages/WeighDayPage'
+import FormulaSummaryPage from './pages/FormulaSummaryPage'
 import FormulasPage from './pages/FormulasPage'
 import ProdControlPage from './pages/ProdControlPage'
 import ProdControlReportPage from './pages/ProdControlReportPage'
@@ -79,6 +80,7 @@ export default function App() {
           <Route path="/qa/cold/report" element={<Private><ColdReportPage /></Private>} />
           <Route path="/qa/weigh" element={<Private><WeighPage /></Private>} />
           <Route path="/qa/weigh/day" element={<Private><WeighDayPage /></Private>} />
+          <Route path="/qa/formulas/summary" element={<Private><FormulaSummaryPage /></Private>} />
           <Route path="/qa/weigh/:id/print" element={<Private><WeighPrintPage /></Private>} />
           <Route path="/qa/fgcheck" element={<Private><FGCheckPage /></Private>} />
           <Route path="/qa/fgcheck/awph" element={<Private><FGAwPhReportPage /></Private>} />

@@ -66,7 +66,7 @@ export default function FormulasPage() {
   return (
     <Layout>
       <Link to="/qa/weigh" className="text-sm text-blue-700 flex items-center gap-1 mb-3"><ArrowLeft className="w-4 h-4" />บันทึกการชั่งวัตถุดิบ</Link>
-      <h1 className="text-lg font-bold text-gray-800">สูตรการผลิต (น้ำหนักต่อ 1 ชุด)</h1>
+      <div className="flex items-center justify-between gap-2"><h1 className="text-lg font-bold text-gray-800">สูตรการผลิต (น้ำหนักต่อ 1 ชุด)</h1>{user?.role === 'QA_MANAGER' && <Link to="/qa/formulas/summary" className="shrink-0 bg-blue-700 hover:bg-blue-600 text-white text-sm font-semibold px-3 py-1.5 rounded-lg">สรุป A4 ทุกสูตร</Link>}</div>
       <div className="text-xs text-gray-500 mb-3">ตั้งต้นจากน้ำหนักที่ชั่งจริงในใบชั่งวัตถุดิบ (PD_03 เดิม) รอบล่าสุด (สรุป 04/10/2569) · QA ยืนยันกับสูตรที่ขึ้นทะเบียน กำหนด Tolerance แล้วอนุมัติ · หน่วยกิโลกรัม ของเหลว 1 มล. = 1 กรัม</div>
       {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3 mb-4">{error}</div>}
       <div className="bg-white rounded-xl shadow divide-y divide-gray-100">
