@@ -26,6 +26,8 @@ import ControlPointsPage from './pages/ControlPointsPage'
 import FGReleasePage from './pages/FGReleasePage'
 import TracePage from './pages/TracePage'
 import HygienePage from './pages/HygienePage'
+import CleaningPage from './pages/CleaningPage'
+import CleaningReportPage from './pages/CleaningReportPage'
 import HygieneReportPage from './pages/HygieneReportPage'
 import HygieneSetupPage from './pages/HygieneSetupPage'
 import OilPage from './pages/OilPage'
@@ -72,6 +74,8 @@ export default function App() {
           <Route path="/qa/release" element={<Private role="QA_MANAGER"><FGReleasePage /></Private>} />
           <Route path="/qa/trace" element={<Private><TracePage /></Private>} />
           <Route path="/qa/hygiene" element={<Private><HygienePage /></Private>} />
+          <Route path="/qa/clean" element={<Private><CleaningPage /></Private>} />
+          <Route path="/qa/clean/report" element={<Private><CleaningReportPage /></Private>} />
           <Route path="/qa/hygiene/report" element={<Private><HygieneReportPage /></Private>} />
           <Route path="/qa/hygiene/setup" element={<Private><HygieneSetupPage /></Private>} />
           <Route path="/qa/oil" element={<Private><OilPage /></Private>} />

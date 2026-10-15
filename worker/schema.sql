@@ -1117,3 +1117,48 @@ CREATE TABLE IF NOT EXISTS fg_ph_temp (
   fc_id TEXT PRIMARY KEY,
   temp  REAL NOT NULL
 );
+
+
+-- ===== FM-QC-009 (QC_09): cleaning record of the premises and production building, one record per day =====
+-- Areas are a list QA can extend (the paper form has blank rows). A record keeps the area names in force that day.
+CREATE TABLE IF NOT EXISTS clean_areas (
+  area_key   TEXT PRIMARY KEY,
+  sort       INTEGER NOT NULL,
+  label      TEXT NOT NULL,
+  active     INTEGER NOT NULL DEFAULT 1,
+  updated_by TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+INSERT OR IGNORE INTO clean_areas (area_key,sort,label,updated_by,updated_at) VALUES
+('CA01',10,'ภายในบริเวณอาคารผลิต','system','2026-10-16T00:00:00Z'),
+('CA02',20,'บริเวณห้องแต่งตัว','system','2026-10-16T00:00:00Z'),
+('CA03',30,'ห้องบรรจุ','system','2026-10-16T00:00:00Z'),
+('CA04',40,'ห้องน้ำ','system','2026-10-16T00:00:00Z'),
+('CA05',50,'ห้องล้างวัตถุดิบ-อุปกรณ์','system','2026-10-16T00:00:00Z'),
+('CA06',60,'บริเวณเก็บ/เตรียมวัตถุดิบ','system','2026-10-16T00:00:00Z'),
+('CA07',70,'ห้องคลัง','system','2026-10-16T00:00:00Z'),
+('CA08',80,'ภายนอกบริเวณอาคารผลิต','system','2026-10-16T00:00:00Z'),
+('CA09',90,'ห้องแพ็ค','system','2026-10-16T00:00:00Z');
+-- results: {area_key: 'P'|'F'} (P = passed, F = not clean: cleaned straight away, see action).
+CREATE TABLE IF NOT EXISTS clean_records (
+  rec_id     TEXT PRIMARY KEY,
+  uid        TEXT NOT NULL UNIQUE,
+  check_date TEXT NOT NULL,
+  check_time TEXT,
+  areas      TEXT NOT NULL,
+  results    TEXT NOT NULL,
+  result     TEXT NOT NULL CHECK(result IN ('PASS','FAIL')),
+  failed     TEXT,
+  action     TEXT,
+  note       TEXT,
+  inspector  TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_clean_date ON clean_records(check_date);
+CREATE TABLE IF NOT EXISTS clean_voids (
+  rec_id    TEXT PRIMARY KEY,
+  reason    TEXT NOT NULL,
+  voided_by TEXT NOT NULL,
+  voided_at TEXT NOT NULL
+);

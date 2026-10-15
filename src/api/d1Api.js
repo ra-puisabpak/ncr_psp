@@ -196,6 +196,16 @@ export const fgCheckApi = {
   photos: (id) => request(`/api/fgcheck/${id}/photos`),
 }
 
+// FM-QC-009 cleaning record of the premises and production building.
+export const cleanApi = {
+  areas: () => request('/api/clean/areas'),
+  addArea: (body) => post('/api/clean/areas', body),
+  updateArea: (key, body) => patch(`/api/clean/areas/${enc(key)}`, body),
+  records: (params = {}) => request(`/api/clean/records?${new URLSearchParams(params)}`),
+  save: (body) => post('/api/clean/records', body),
+  void: (id, reason) => post(`/api/clean/records/${enc(id)}/void`, { reason }),
+}
+
 export const analyzeApi = {
   run: (summary) => post('/api/analyze', { summary }),
 }

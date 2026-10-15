@@ -1747,6 +1747,7 @@ export default {
         const SLOTS = ['08:00', '11:00', '15:00', '17:00'];
         const dueSlots = SLOTS.filter((t) => day < today() || t <= nowHm);
         const coldMissing = units.flatMap((u) => dueSlots.filter((t) => !reads.some((r) => r.unit_id === u.unit_id && r.slot === t)).map((t) => `${u.unit_id} ${t}`));
+        const cleanDone = await first('SELECT 1 AS x FROM clean_records WHERE check_date=? AND rec_id NOT IN (SELECT rec_id FROM clean_voids)', day);
         const emps = await all('SELECT emp_id, name FROM hyg_employees WHERE active=1 ORDER BY name');
         const checked = new Set((await all('SELECT DISTINCT emp_id FROM hyg_records WHERE inspect_date=?', day)).map((r) => r.emp_id));
         return json({
@@ -1759,6 +1760,7 @@ export default {
           // the final check is of FG produced the day before
           fgcheck: { done: fgMade.made.length - fgMade.pending.length, expected: fgMade.made.length, missing: fgMade.pending.map(label), produced_on: fgMade.producedOn },
           hygiene: { done: emps.filter((e) => checked.has(e.emp_id)).length, expected: emps.length, missing: emps.filter((e) => !checked.has(e.emp_id)).map((e) => e.name) },
+          clean: { done: cleanDone.x ? 1 : 0, expected: 1, missing: cleanDone.x ? [] : ['ยังไม่ได้บันทึก'] },
         });
       }
       if (path === '/api/qc/summary' && method === 'GET') {
@@ -2039,6 +2041,92 @@ export default {
           await audit(DB, user.username, 'user', 'create', 'hyg_record', recId, { emp: emp.name, result, failed: failed.map((f) => f.key), action });
           return json({ rec_id: recId, result, failed, action }, 201);
         }
+      }
+
+      // ===== FM-QC-009: cleaning record of the premises and production building =====
+      if (path === '/api/clean/areas' && method === 'GET') {
+        return json((await DB.prepare('SELECT area_key, sort, label, active FROM clean_areas ORDER BY active DESC, sort, area_key').all()).results);
+      }
+      const ca = path.match(/^\/api\/clean\/areas(?:\/(CA\d{2,3}))?$/);
+      if (ca && (method === 'POST' || (method === 'PATCH' && ca[1]))) {
+        need(user, QA, 'เฉพาะ QA Manager / FSTL เท่านั้นที่แก้ไขรายการบริเวณได้');
+        const b = await body();
+        if (method === 'POST') {
+          const label = txt(b.label, 100);
+          if (!label) fail(400, 'กรุณาระบุชื่อบริเวณ');
+          if (await DB.prepare('SELECT 1 FROM clean_areas WHERE label=?').bind(label).first()) fail(409, 'มีบริเวณนี้แล้ว');
+          const last = await DB.prepare('SELECT area_key FROM clean_areas ORDER BY area_key DESC LIMIT 1').first();
+          const key = `CA${String((last ? parseInt(last.area_key.slice(2), 10) : 0) + 1).padStart(2, '0')}`;
+          const sort = ((await DB.prepare('SELECT MAX(sort) AS m FROM clean_areas').first())?.m ?? 0) + 10;
+          await DB.prepare('INSERT INTO clean_areas (area_key,sort,label,active,updated_by,updated_at) VALUES (?,?,?,1,?,?)').bind(key, sort, label, user.display_name, nowIso()).run();
+          await audit(DB, user.username, 'user', 'create', 'clean_area', key, { label });
+          return json({ area_key: key, label }, 201);
+        }
+        const row = await DB.prepare('SELECT * FROM clean_areas WHERE area_key=?').bind(ca[1]).first();
+        if (!row) fail(404, 'ไม่พบบริเวณนี้');
+        const next = { label: 'label' in b ? txt(b.label, 100) : row.label, active: 'active' in b ? (b.active ? 1 : 0) : row.active, sort: 'sort' in b ? parseInt(b.sort, 10) : row.sort };
+        if (!next.label) fail(400, 'กรุณาระบุชื่อบริเวณ');
+        if (!Number.isFinite(next.sort)) fail(400, 'ลำดับไม่ถูกต้อง');
+        await DB.prepare('UPDATE clean_areas SET label=?, active=?, sort=?, updated_by=?, updated_at=? WHERE area_key=?').bind(next.label, next.active, next.sort, user.display_name, nowIso(), row.area_key).run();
+        await audit(DB, user.username, 'user', 'update', 'clean_area', row.area_key, { from: { label: row.label, active: row.active }, to: { label: next.label, active: next.active } });
+        return json({ area_key: row.area_key, ...next });
+      }
+      if (path === '/api/clean/records' && method === 'GET') {
+        const sp = url.searchParams, where = ['rec_id NOT IN (SELECT rec_id FROM clean_voids)'], p = [];
+        if (isDate(sp.get('from'))) { where.push('check_date>=?'); p.push(sp.get('from')); }
+        if (isDate(sp.get('to'))) { where.push('check_date<=?'); p.push(sp.get('to')); }
+        const { results } = await DB.prepare(`SELECT * FROM clean_records WHERE ${where.join(' AND ')} ORDER BY check_date DESC, rec_id DESC LIMIT 400`).bind(...p).all();
+        return json(results.map((r) => ({ ...r, areas: JSON.parse(r.areas), results: JSON.parse(r.results), failed: r.failed ? JSON.parse(r.failed) : [] })));
+      }
+      if (path === '/api/clean/records' && method === 'POST') {
+        need(user, WRITERS);
+        const b = await body();
+        const uid = recvUid(b.uid);
+        const done = await DB.prepare('SELECT rec_id, result FROM clean_records WHERE uid=?').bind(uid).first();
+        if (done) return json(done);
+        if (!isDate(b.check_date) || b.check_date > today()) fail(400, 'กรุณาระบุวันที่ตรวจ (ไม่เป็นวันในอนาคต)');
+        if (!blank(b.check_time) && !isTime(b.check_time)) fail(400, 'รูปแบบเวลาไม่ถูกต้อง');
+        if (await DB.prepare('SELECT 1 FROM clean_records WHERE check_date=? AND rec_id NOT IN (SELECT rec_id FROM clean_voids)').bind(b.check_date).first()) fail(409, `วันที่ ${b.check_date} มีบันทึกแล้ว (หนึ่งบันทึกต่อวัน) — ถ้าบันทึกผิด ให้ QA Manager ยกเลิกก่อน`);
+        const { results: areas } = await DB.prepare('SELECT area_key, label FROM clean_areas WHERE active=1 ORDER BY sort, area_key').all();
+        if (!areas.length) fail(409, 'ยังไม่มีรายการบริเวณ');
+        const results = {}, failed = [];
+        for (const a of areas) {
+          const v = b.results?.[a.area_key];
+          if (v !== 'P' && v !== 'F') fail(400, `กรุณาประเมิน "${a.label}"`);
+          results[a.area_key] = v;
+          if (v === 'F') failed.push({ key: a.area_key, label: a.label });
+        }
+        const result = failed.length ? 'FAIL' : 'PASS';
+        const action = txt(b.action, 500), note = txt(b.note, 500);
+        if (failed.length && !action) fail(400, 'มีบริเวณที่ไม่ผ่าน กรุณาระบุการทำความสะอาดที่ทำทันที');
+        for (let attempt = 0; ; attempt++) {
+          const recId = await dayId(DB, 'clean_records', 'rec_id', 'CL', b.check_date);
+          try {
+            await DB.prepare(`INSERT INTO clean_records (rec_id,uid,check_date,check_time,areas,results,result,failed,action,note,inspector,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+              .bind(recId, uid, b.check_date, nz(b.check_time), JSON.stringify(areas), JSON.stringify(results), result, failed.length ? JSON.stringify(failed) : null, action, note, user.display_name, user.username, nowIso()).run();
+          } catch (e) {
+            if (attempt < 3 && /UNIQUE|PRIMARY/i.test(e.message)) {
+              const again = await DB.prepare('SELECT rec_id, result FROM clean_records WHERE uid=?').bind(uid).first();
+              if (again) return json(again);
+              continue;
+            }
+            throw e;
+          }
+          await audit(DB, user.username, 'user', 'create', 'clean_record', recId, { check_date: b.check_date, result, failed: failed.map((f) => f.key) });
+          return json({ rec_id: recId, result, failed }, 201);
+        }
+      }
+      const cv = path.match(/^\/api\/clean\/records\/(CL-\d{6}-\d{3})\/void$/);
+      if (cv && method === 'POST') {
+        need(user, QAM, 'เฉพาะ QA Manager เท่านั้นที่ยกเลิกบันทึกได้');
+        const b = await body();
+        const row = await DB.prepare('SELECT rec_id, check_date FROM clean_records WHERE rec_id=?').bind(cv[1]).first();
+        if (!row) fail(404, 'ไม่พบบันทึก');
+        if (blank(b.reason)) fail(400, 'กรุณาระบุเหตุผลที่ยกเลิก');
+        if (await DB.prepare('SELECT 1 FROM clean_voids WHERE rec_id=?').bind(row.rec_id).first()) fail(409, 'บันทึกนี้ถูกยกเลิกแล้ว');
+        await DB.prepare('INSERT INTO clean_voids (rec_id,reason,voided_by,voided_at) VALUES (?,?,?,?)').bind(row.rec_id, txt(b.reason, 300), user.display_name, nowIso()).run();
+        await audit(DB, user.username, 'user', 'void', 'clean_record', row.rec_id, { reason: txt(b.reason, 300), check_date: row.check_date });
+        return json({ rec_id: row.rec_id, voided: true });
       }
 
       // ===== PSP QUALITY APP: formulas and raw-material weighing (FM-QC-004) =====

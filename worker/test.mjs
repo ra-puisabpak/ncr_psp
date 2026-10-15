@@ -280,6 +280,38 @@ r = await call('POST', '/api/analyze', { token: qc, body: { summary: { period: {
 check('analyze: a QC user is refused', r.status === 403, r);
 r = await call('POST', '/api/analyze', { token: qa, body: { summary: { period: { from: '2026-10-01', to: '2026-10-15' } } } });
 check('analyze: without the AI key the QA Manager is told how to enable it', r.status === 503 && /ANTHROPIC_API_KEY/.test(r.j.error || r.j.message || JSON.stringify(r.j)), r);
+// ----- FM-QC-009 cleaning record -----
+r = await call('GET', '/api/clean/areas', { token: qc });
+check('cleaning: the nine areas of the paper form are served', r.status === 200 && r.j.length === 9 && r.j[0].label === 'ภายในบริเวณอาคารผลิต', r);
+const cleanAreas = r.j;
+const cleanAll = (v, o = {}) => ({ uid: 'cl-' + Math.random().toString(36).slice(2, 10), check_date: '2026-10-05', results: Object.fromEntries(cleanAreas.map((a) => [a.area_key, v])), ...o });
+r = await call('POST', '/api/clean/records', { token: qc, body: { ...cleanAll('P'), results: { CA01: 'P' } } });
+check('cleaning: every area must be judged', r.status === 400, r);
+r = await call('POST', '/api/clean/records', { token: qc, body: cleanAll('P') });
+check('cleaning: all areas clean is a PASS, id by date', r.status === 201 && r.j.result === 'PASS' && r.j.rec_id === 'CL-261005-001', r);
+const cleanId = r.j.rec_id;
+r = await call('POST', '/api/clean/records', { token: qc, body: cleanAll('P') });
+check('cleaning: one record per day', r.status === 409, r);
+r = await call('POST', '/api/clean/records', { token: qc, body: cleanAll('P', { check_date: '2026-10-06', results: { ...cleanAll('P').results, CA04: 'F' } }) });
+check('cleaning: an unclean area needs the immediate cleaning recorded', r.status === 400, r);
+r = await call('POST', '/api/clean/records', { token: qc, body: cleanAll('P', { check_date: '2026-10-06', results: { ...cleanAll('P').results, CA04: 'F' }, action: 'ทำความสะอาดห้องน้ำทันที' }) });
+check('cleaning: a failed area makes the day FAIL and names the area', r.status === 201 && r.j.result === 'FAIL' && r.j.failed[0].label === 'ห้องน้ำ', r);
+r = await call('POST', '/api/clean/records', { token: qc, body: cleanAll('P', { check_date: '2999-01-01' }) });
+check('cleaning: not in the future', r.status === 400, r);
+r = await call('GET', '/api/clean/records?from=2026-10-01&to=2026-10-31', { token: qc });
+check('cleaning: records are listed with the area names of that day', r.status === 200 && r.j.length === 2 && r.j[0].areas.length === 9 && r.j.find((x) => x.rec_id === cleanId).results.CA01 === 'P', r);
+r = await call('POST', `/api/clean/records/${cleanId}/void`, { token: qc, body: { reason: 'x' } });
+check('cleaning: only the QA Manager voids', r.status === 403, r);
+r = await call('POST', `/api/clean/records/${cleanId}/void`, { token: qa, body: { reason: 'บันทึกผิดวัน' } });
+check('cleaning: the QA Manager voids with a reason', r.status === 200, r);
+r = await call('POST', '/api/clean/records', { token: qc, body: cleanAll('P') });
+check('cleaning: after a void the day can be recorded again', r.status === 201 && r.j.rec_id === 'CL-261005-002', r);
+r = await call('POST', '/api/clean/areas', { token: qc, body: { label: 'ห้องใหม่' } });
+check('cleaning: QC cannot add an area', r.status === 403, r);
+r = await call('POST', '/api/clean/areas', { token: qa, body: { label: 'ห้องเก็บบรรจุภัณฑ์' } });
+check('cleaning: QA adds an area', r.status === 201 && r.j.area_key === 'CA10', r);
+r = await call('POST', '/api/clean/records', { token: qc, body: cleanAll('P', { check_date: '2026-10-07' }) });
+check('cleaning: an area added later must be judged too', r.status === 400 && /ห้องเก็บบรรจุภัณฑ์/.test(r.j.error || ''), r);
 // ----- receiving specification (RD-RMS / RD-PMS) -----
 r = await call('GET', '/api/recv/specs', { token: qc });
 check('specs: groups, items and the material map are served', r.status === 200 && r.j.groups.length === 11 && r.j.mats['RM-007'] === 'RD-RMS-002' && r.j.mats['PKG-001'] === 'RD-PMS-001'

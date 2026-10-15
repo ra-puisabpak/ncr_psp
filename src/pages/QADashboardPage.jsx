@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, LineChart, Boxes, Route, HandHeart, Droplets, Thermometer, Scale, Flame, BookOpen, PackageSearch,
+  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, LineChart, Sparkles, Boxes, Route, HandHeart, Droplets, Thermometer, Scale, Flame, BookOpen, PackageSearch,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { qaApi } from '../api/d1Api'
@@ -40,6 +40,7 @@ function Prog({ k, prog }) {
   const d = prog[k]
   let cls, text, miss = ''
   if (k === 'receiving') { cls = d.done ? 'info' : 'idle'; text = d.done ? `${d.done} ใบ · ${d.items} รายการ` : 'ยังไม่มีบันทึก' }
+  else if (k === 'clean') { cls = d.done ? 'ok' : 'none'; text = d.done ? 'บันทึกวันนี้แล้ว' : 'ยังไม่ได้บันทึก' }
   else if (k === 'weigh') { cls = d.done ? 'info' : 'idle'; text = d.done ? `${d.done} Batch` : 'ยังไม่มีบันทึก' }
   else if (k === 'oil') {
     const have = new Set(d.stages)
@@ -76,6 +77,7 @@ const FORM_CARDS = [
   { form: 'OIL', title: 'คุณภาพน้ำมันทอด', prog: 'oil', icon: Droplets, tone: 'bg-amber-50 text-amber-600', to: '/qa/oil', report: (d) => `/qa/oil/report?month=${d.slice(0, 7)}` },
   { form: 'COLD', title: 'อุณหภูมิตู้เย็น / ตู้แช่แข็ง', prog: 'cold', icon: Thermometer, tone: 'bg-sky-50 text-sky-600', to: '/qa/cold', report: (d) => `/qa/cold/report?month=${d.slice(0, 7)}` },
   { form: 'FG_CHECK', title: 'ตรวจสอบผลิตภัณฑ์สุดท้าย', prog: 'fgcheck', icon: PackageSearch, tone: 'bg-emerald-50 text-emerald-600', to: '/qa/fgcheck', report: (d) => `/qa/fgcheck/report?date=${d}` },
+  { form: 'CLEAN', title: 'ทำความสะอาดบริเวณ/อาคารผลิต', prog: 'clean', icon: Sparkles, tone: 'bg-cyan-50 text-cyan-700', to: '/qa/clean', report: (d) => `/qa/clean/report?month=${d.slice(0, 7)}` },
   { form: 'HYGIENE', title: 'สุขลักษณะส่วนบุคคล', prog: 'hygiene', icon: HandHeart, tone: 'bg-blue-50 text-blue-700', to: '/qa/hygiene', report: (d) => `/qa/hygiene/report?date=${d}` },
 ]
 
