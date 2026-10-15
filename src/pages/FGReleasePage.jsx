@@ -244,14 +244,28 @@ export default function FGReleasePage() {
   const loadRecent = () => qaApi.releases({ from: addDays(bkkToday(), -30) }).then(setRecent).catch(() => {})
   useEffect(() => { loadRecent() }, [])
 
-  const check = async (e, keepSaved = false) => {
-    e?.preventDefault()
-    if (!product || !batch.trim()) return
+  const runCheck = async (p, b, keepSaved = false) => {
+    if (!p || !b.trim()) return
     setLoading(true); setError(null)
     if (!keepSaved) setSaved(null)
-    try { setGate(await qaApi.releaseCheck(product, batch.trim())) } catch (err) { setError(err.message); setGate(null) }
+    try { setGate(await qaApi.releaseCheck(p, b.trim())) } catch (err) { setError(err.message); setGate(null) }
     finally { setLoading(false) }
   }
+  const check = (e, keepSaved = false) => { e?.preventDefault(); return runCheck(product, batch, keepSaved) }
+  // Choosing a product fills in its newest batch (from the weighing records of the last 30 days) and checks it straight away.
+  const [batches, setBatches] = useState(null)
+  const pickProduct = async (code) => {
+    setProduct(code); setGate(null); setBatch(''); setBatches(null); setSaved(null); setError(null)
+    if (!code) return
+    try {
+      const recs = await weighApi.list({ product_code: code, from: addDays(bkkToday(), -30) })
+      const list = []
+      for (const r of recs) if (r.batch_no && !list.some((x) => x.batch_no === r.batch_no)) list.push({ batch_no: r.batch_no, prod_date: r.prod_date })
+      setBatches(list)
+      if (list.length) { setBatch(list[0].batch_no); runCheck(code, list[0].batch_no) }
+    } catch { setBatches([]) }
+  }
+  const pickBatch = (b) => { setBatch(b); setGate(null); runCheck(product, b) }
   useEffect(() => { if (product && batch) check() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const history = useMemo(() => gate?.history || [], [gate])
@@ -264,7 +278,7 @@ export default function FGReleasePage() {
 
       <form onSubmit={check} className="bg-white rounded-xl shadow p-4 mb-4 grid sm:grid-cols-[1fr_200px_auto] gap-3 items-end">
         <label className="text-xs text-gray-600">ผลิตภัณฑ์
-          <select value={product} onChange={(e) => { setProduct(e.target.value); setGate(null) }} className={input}>
+          <select value={product} onChange={(e) => pickProduct(e.target.value)} className={input}>
             <option value="">-- เลือกผลิตภัณฑ์ --</option>
             {PRODUCTS.map((p) => <option key={p.code} value={p.code}>{p.code} · {p.label}</option>)}
           </select>
@@ -277,6 +291,13 @@ export default function FGReleasePage() {
         </button>
       </form>
 
+      {batches && batches.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-4 -mt-2 text-xs">
+          <span className="text-gray-500">Batch ล่าสุดของผลิตภัณฑ์นี้:</span>
+          {batches.slice(0, 8).map((b) => <button key={b.batch_no} type="button" onClick={() => pickBatch(b.batch_no)} className={`px-2.5 py-1 rounded-full border ${batch === b.batch_no ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-700 border-gray-300'}`}>{b.batch_no}<span className="opacity-70"> · {b.prod_date.slice(8)}/{b.prod_date.slice(5, 7)}</span></button>)}
+        </div>
+      )}
+      {batches && batches.length === 0 && product && <div className="text-xs text-gray-500 mb-4 -mt-2">ไม่พบ Batch ของผลิตภัณฑ์นี้ใน 30 วันล่าสุด — พิมพ์เลข Batch เอง</div>}
       {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3 mb-4">{error}</div>}
       {saved && (
         <div className={`rounded-xl p-3 mb-4 text-sm font-semibold ${DECISION[saved.decision].cls}`}>
