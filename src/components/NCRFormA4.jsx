@@ -70,7 +70,7 @@ function PhotoHalf({ title, items, color }) {
 // Page 2: photo attachment. Top half = the problem found, bottom half = evidence of the correction.
 function PhotoAttachmentPage({ d, photos }) {
   return (
-    <div className="a4-page page-break" style={{ fontFamily: "'Sarabun', sans-serif" }}>
+    <div className="a4-page page-break" style={{ fontFamily: "'IBM Plex Sans Thai Looped', sans-serif" }}>
       <table className="ncr-table" style={{ marginBottom: '3mm' }}>
         <tbody>
           <tr>
@@ -102,7 +102,7 @@ export default function NCRFormA4({ data, capa, photos = [] }) {
 
   return (
     <>
-    <div className="a4-page" style={{ fontFamily: "'Sarabun', sans-serif" }}>
+    <div className="a4-page" style={{ fontFamily: "'IBM Plex Sans Thai Looped', sans-serif" }}>
 
       {/* ===== HEADER ===== */}
       <table className="ncr-table" style={{ marginBottom: '2mm' }}>
