@@ -6,6 +6,11 @@
   font-family: 'IBM Plex Sans Thai Looped', sans-serif;
 }
 
+/* Lighter, slightly smaller text on screen. Printed A4 forms keep the regular weight so thin strokes survive the printer. */
+html { font-size: 15px; }
+body { font-weight: 300; }
+.print-area, .a4-page { font-weight: 400; }
+
 /* ===== A4 Print Styles ===== */
 @media print {
   @page {
