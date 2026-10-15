@@ -185,13 +185,18 @@ export default function WeighPage() {
                   <div className="grid grid-cols-2 gap-2 items-stretch mb-2">
                     <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm">
                       <div className="text-[11px] text-gray-500">น้ำหนักตามสูตร</div>
-                      <div className="font-semibold text-gray-800">{l.target == null ? '-' : `${kg(l.target)} กก./ชุด`}</div>
+                      <div className="font-semibold text-gray-800">{l.target == null ? '-' : `${kg(l.target)} กก.`}</div>
                     </div>
                     <div className="grid gap-1.5 auto-rows-fr">
                       {Array.from({ length: sets }, (_, s) => {
                         const st = offTarget(l, l.weights[s])
-                        return <input key={s} type="number" inputMode="decimal" step="0.001" min="0" value={l.weights[s] ?? ''} placeholder={sets > 1 ? `ชั่งจริง ชุด ${s + 1} · ${batches[s] || ''}` : 'น้ำหนักชั่งจริง (กก.)'} onChange={(e) => setW(i, s, e.target.value)}
-                          className={`${input} h-full text-base ${st === 'bad' ? 'border-red-400 bg-red-50' : st === 'warn' ? 'border-amber-300 bg-amber-50' : st === 'ok' ? 'border-green-300 bg-green-50' : ''}`} />
+                        return (
+                          <div key={s} className="relative">
+                            <input type="number" inputMode="decimal" step="0.001" min="0" value={l.weights[s] ?? ''} placeholder={sets > 1 ? `ชั่งจริง ชุด ${s + 1} · ${batches[s] || ''}` : 'น้ำหนักชั่งจริง'} onChange={(e) => setW(i, s, e.target.value)}
+                              className={`${input} h-full text-base pr-10 ${st === 'bad' ? 'border-red-400 bg-red-50' : st === 'warn' ? 'border-amber-300 bg-amber-50' : st === 'ok' ? 'border-green-300 bg-green-50' : ''}`} />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500 pointer-events-none">กก.</span>
+                          </div>
+                        )
                       })}
                     </div>
                   </div>
