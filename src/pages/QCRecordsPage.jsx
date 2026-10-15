@@ -10,7 +10,7 @@ const show = (v) => (v === true ? 'ใช่' : v === false ? 'ไม่ใช�
 
 export default function QCRecordsPage() {
   const [params] = useSearchParams()
-  const [filter, setFilter] = useState({ from: addDays(bkkToday(), -6), to: bkkToday(), cp_id: '', result: params.get('result') || '', q: '' })
+  const [filter, setFilter] = useState({ from: addDays(bkkToday(), -6), to: bkkToday(), cp_id: params.get('cp_id') || '', result: params.get('result') || '', q: '' })
   const [rows, setRows] = useState([])
   const [points, setPoints] = useState([])
   const [loading, setLoading] = useState(true)

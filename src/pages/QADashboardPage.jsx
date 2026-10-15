@@ -215,7 +215,7 @@ export default function QADashboardPage() {
             <ListChecks className="w-5 h-5 text-teal-700 shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="font-semibold text-sm text-gray-800">บันทึกจุดควบคุมโดยตรง (CCP / OPRP / PRP)</div>
-              <div className="text-[11px] text-gray-500">{active.length} จุด · CCP-01 / CCP-02 / OPRP-05 ระบบบันทึกให้จากแบบฟอร์มควบคุมการผลิตอยู่แล้ว</div>
+              <div className="text-[11px] text-gray-500">{active.length} จุด · CCP-01 / CCP-02 / OPRP-05 ระบบบันทึกให้จากแบบฟอร์มควบคุมการผลิต และ OPRP-06 จาก FM-QC-008 อยู่แล้ว</div>
             </div>
             {cpToday.fail > 0 && <Badge cls="bg-red-100 text-red-700">ไม่ผ่าน {cpToday.fail}</Badge>}
             {cpToday.total > 0 && <Badge cls="bg-slate-100 text-slate-600">วันนี้ {cpToday.total}</Badge>}

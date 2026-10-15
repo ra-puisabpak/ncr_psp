@@ -281,6 +281,26 @@ function evaluate(params, values, na = []) {
   return { values: out, failed };
 }
 
+// OPRP-06 (aw of the finished product) is not keyed in a second time: its record is derived from the aw entered in FM-QC-008.
+// Safe to run again: each FM-QC-008 check has one fixed record uid. The aw meter's calibration is not asked on FM-QC-008, so it is N/A here.
+const AW_CP = 'OPRP-06';
+async function syncAwRecords(DB, user, product, batch) {
+  const { results } = await DB.prepare(`SELECT fc_id, check_date, product_code, product_name, batch_no, aw FROM fg_checks
+    WHERE product_code=? AND batch_no=? AND aw IS NOT NULL AND fc_id NOT IN (SELECT fc_id FROM fg_check_voids) ORDER BY fc_id`).bind(product, batch).all();
+  const cp = cpRow(await DB.prepare('SELECT * FROM control_points WHERE cp_id=?').bind(AW_CP).first());
+  if (!cp || cp.status === 'RETIRED') return [];
+  const out = [];
+  for (const r of results) {
+    if (cp.products.length && !cp.products.includes(r.product_code)) continue;
+    try {
+      const res = await saveQcRecord(DB, user, { uid: `fgaw-${r.fc_id}-${AW_CP}`, cp_id: AW_CP, record_date: r.check_date, product_code: r.product_code, product_name: r.product_name,
+        batch_no: r.batch_no, values: { aw: r.aw }, note: `จากแบบฟอร์ม FM-QC-008 ${r.fc_id}` }, ['meter_ok']);
+      out.push({ fc_id: r.fc_id, ...res.body });
+    } catch (e) { out.push({ fc_id: r.fc_id, error: e.message || String(e) }); }
+  }
+  return out;
+}
+
 // Saves one monitoring record against the limits in force; a failed check opens an NCR in the same write.
 // Used by the monitoring form and by the forms that derive records from what they capture (FM-QC-002).
 // `na`: checks that do not apply to this batch (recorded as NA, never judged).
@@ -1563,7 +1583,8 @@ export default {
             throw e;
           }
           await audit(DB, user.username, 'user', 'create', 'fg_check', fcId, { product_code: product, batch_no: batch, pack: pk.pack_key, net, recheck, result });
-          return json({ fc_id: fcId, result, net, recheck, failed }, 201);
+          const awRecs = await syncAwRecords(DB, user, product, batch);
+          return json({ fc_id: fcId, result, net, recheck, failed, aw_records: awRecs.filter((x) => x.fc_id === fcId) }, 201);
         }
       }
 
@@ -1780,6 +1801,7 @@ export default {
         const product = String(url.searchParams.get('product_code') || '');
         if (!product) fail(400, 'กรุณาเลือกผลิตภัณฑ์');
         const batch = cleanBatch(url.searchParams.get('batch_no'));
+        await syncAwRecords(DB, user, product, batch); // batches checked before OPRP-06 followed FM-QC-008 get their record now
         const gate = await batchGate(DB, product, batch);
         const { results } = await DB.prepare('SELECT * FROM fg_releases WHERE product_code=? AND batch_no=? ORDER BY created_at DESC').bind(product, batch).all();
         return json({ ...gate, history: results.map(relRow) });

@@ -35,6 +35,7 @@ export default function QCRecordPage() {
   const verdicts = cp ? cp.params.map((p) => judge(p, values[p.key])) : []
   const anyFail = verdicts.includes('fail')
   const writable = canWrite(user) && cp && cp.status !== 'RETIRED'
+  const fromFm008 = cp?.cp_id === 'OPRP-06' // its aw comes from FM-QC-008, not a second entry
 
   const setH = (k) => (e) => setHead((h) => ({ ...h, [k]: e.target.value }))
   const setV = (k, v) => setValues((s) => ({ ...s, [k]: v }))
@@ -82,6 +83,17 @@ export default function QCRecordPage() {
         )}
       </div>
 
+      {fromFm008 && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl p-4 text-sm">
+          <div className="font-semibold mb-1">จุดควบคุมนี้ระบบบันทึกให้เอง ไม่ต้องกรอกซ้ำ</div>
+          ค่า aw ใช้ค่าที่บันทึกใน FM-QC-008 (ตรวจผลิตภัณฑ์สำเร็จรูป) ทุกครั้งที่บันทึก ระบบสร้างบันทึกของ {cp.cp_id} ให้ทันที และเปิด NCR เมื่อค่าเกินเกณฑ์
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link to="/qa/fgcheck" className="bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">ไปบันทึก FM-QC-008</Link>
+            <Link to={`/qa/records?cp_id=${cp.cp_id}`} className="bg-white border border-blue-300 text-blue-800 text-xs font-semibold px-3 py-1.5 rounded-lg">ดูบันทึกที่ผ่านมา</Link>
+          </div>
+        </div>
+      )}
+
       {saved && (
         <div className={`rounded-xl p-4 mb-4 border ${saved.result === 'PASS' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
           <div className={`flex items-center gap-2 font-bold ${saved.result === 'PASS' ? 'text-green-700' : 'text-red-700'}`}>
@@ -100,7 +112,7 @@ export default function QCRecordPage() {
         </div>
       )}
 
-      {!saved && (
+      {!saved && !fromFm008 && (
         <form onSubmit={submit} className="bg-white rounded-xl shadow p-4 space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <label className="text-xs text-gray-600">วันที่ตรวจ *
