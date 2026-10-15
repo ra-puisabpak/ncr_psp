@@ -1413,6 +1413,34 @@ export default {
         return json({ date: day, produced_on: producedOn, made: made.length, pending });
       }
       // The aw / pH summary report is for the QA Manager only: its own endpoint, which returns only what the summary needs.
+      // AI reading of the analysis page's summary. Needs the ANTHROPIC_API_KEY secret; aggregates only, never records or photos.
+      if (path === '/api/analyze' && method === 'POST') {
+        need(user, QAM, 'เฉพาะ QA Manager เท่านั้น');
+        if (blank(env.ANTHROPIC_API_KEY)) fail(503, 'ยังไม่ได้ตั้งค่า AI (ต้องเพิ่ม secret ANTHROPIC_API_KEY ใน Cloudflare Worker)');
+        const b = await body();
+        const text = JSON.stringify(b.summary || null);
+        if (!b.summary || typeof b.summary !== 'object' || text.length > 30000) fail(400, 'ข้อมูลสรุปไม่ถูกต้องหรือใหญ่เกินไป');
+        let res;
+        try {
+          res = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+            body: JSON.stringify({
+              model: 'claude-sonnet-5-5', max_tokens: 1200,
+              system: 'คุณเป็นที่ปรึกษาด้านความปลอดภัยอาหารและ QA ของโรงงานน้ำพริก ตอบเป็นภาษาไทย กระชับ ใช้เฉพาะตัวเลขที่ให้มา ห้ามเดาข้อมูลหรือสร้างเกณฑ์ที่ไม่ได้ให้ไว้ (aw/pH ไม่มีเกณฑ์ที่ให้มา) ' +
+                'ส่วน batch_relations คือสหสัมพันธ์ (r) ระหว่างข้อมูลการผลิต (FM-QC-002/004) กับ aw/pH ภายในผลิตภัณฑ์เดียวกัน ให้ระบุว่าเป็นความสัมพันธ์ ไม่ใช่สาเหตุ และเตือนเมื่อจำนวน Batch (n) น้อย (< 8) ' +
+                'โครงคำตอบ: 1) ภาพรวม 2-3 บรรทัด 2) สิ่งที่ควรติดตามเรียงตามความสำคัญ พร้อมตัวเลขอ้างอิง 3) ข้อเสนอแนะการแก้ไข/ป้องกัน ถ้าข้อมูลน้อยเกินไปให้บอกตรงๆ',
+              messages: [{ role: 'user', content: `สรุปข้อมูลคุณภาพ (JSON):\n${text}` }],
+            }),
+          });
+        } catch { fail(502, 'เรียกบริการ AI ไม่สำเร็จ กรุณาลองใหม่'); }
+        if (!res.ok) fail(502, `บริการ AI ตอบกลับผิดพลาด (${res.status})`);
+        const j = await res.json();
+        const out = (j.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n').trim();
+        if (!out) fail(502, 'AI ไม่ส่งคำตอบกลับมา');
+        await audit(DB, user.username, 'user', 'ANALYZE', 'analysis', null, { period: b.summary.period || null });
+        return json({ text: out });
+      }
       if (path === '/api/fgcheck/awph' && method === 'GET') {
         need(user, QAM, 'รายงานสรุป aw / pH เปิดได้เฉพาะ QA Manager');
         const sp = url.searchParams, where = ['(aw IS NOT NULL OR ph IS NOT NULL)'], p = [];

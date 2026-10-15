@@ -276,6 +276,10 @@ r = await call('GET', '/api/fgcheck/awph?from=2026-01-01&to=2026-12-31', { token
 check('aw/pH summary: a QC user is refused', r.status === 403, r);
 r = await call('GET', '/api/fgcheck/awph?from=2026-01-01&to=2026-12-31', { token: qa });
 check('aw/pH summary: the QA Manager gets only the measured rows', r.status === 200 && Array.isArray(r.j) && r.j.every((x) => x.aw != null || x.ph != null) && !('sensory' in (r.j[0] || {})), r);
+r = await call('POST', '/api/analyze', { token: qc, body: { summary: { period: {} } } });
+check('analyze: a QC user is refused', r.status === 403, r);
+r = await call('POST', '/api/analyze', { token: qa, body: { summary: { period: { from: '2026-10-01', to: '2026-10-15' } } } });
+check('analyze: without the AI key the QA Manager is told how to enable it', r.status === 503 && /ANTHROPIC_API_KEY/.test(r.j.error || r.j.message || JSON.stringify(r.j)), r);
 // ----- receiving specification (RD-RMS / RD-PMS) -----
 r = await call('GET', '/api/recv/specs', { token: qc });
 check('specs: groups, items and the material map are served', r.status === 200 && r.j.groups.length === 11 && r.j.mats['RM-007'] === 'RD-RMS-002' && r.j.mats['PKG-001'] === 'RD-PMS-001'

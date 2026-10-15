@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, Boxes, Route, HandHeart, Droplets, Thermometer, Scale, Flame, BookOpen, PackageSearch,
+  ShieldCheck, ClipboardCheck, AlertTriangle, FileText, RefreshCw, PackageCheck, ListChecks, History, ChevronRight, LineChart, Boxes, Route, HandHeart, Droplets, Thermometer, Scale, Flame, BookOpen, PackageSearch,
 } from 'lucide-react'
 import Layout from '../components/Layout'
 import { qaApi } from '../api/d1Api'
@@ -60,6 +60,7 @@ function Prog({ k, prog }) {
 
 // Shortcuts to the QA tools and registers: icon and name only.
 const TOOL_CARDS = [
+  { to: '/qa/analysis', title: 'วิเคราะห์ข้อมูล', icon: LineChart, tone: 'bg-violet-600 text-white', managerOnly: true },
   { to: '/qa/release', title: 'FG Release', icon: Boxes, tone: 'bg-teal-600 text-white', managerOnly: true },
   { to: '/qa/trace', title: 'สอบย้อนกลับ', icon: Route, tone: 'bg-teal-50 text-teal-700' },
   { to: '/qa/materials', title: 'ทะเบียนวัตถุดิบกลาง', icon: BookOpen, tone: 'bg-teal-50 text-teal-700' },

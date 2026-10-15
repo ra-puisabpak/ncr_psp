@@ -196,6 +196,10 @@ export const fgCheckApi = {
   photos: (id) => request(`/api/fgcheck/${id}/photos`),
 }
 
+export const analyzeApi = {
+  run: (summary) => post('/api/analyze', { summary }),
+}
+
 export const coldApi = {
   units: () => request('/api/cold/units'),
   createUnit: (body) => post('/api/cold/units', body),
