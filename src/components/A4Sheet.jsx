@@ -15,7 +15,7 @@ export default function A4Sheet({ landscape = false, margin = 8, className = '',
   return (
     <div className="a4-stage">
       <div ref={ref} className={`print-area a4-sheet text-black ${className}`}
-        style={{ width: `${landscape ? 297 : 210}mm`, minHeight: `${landscape ? 210 : 297}mm`, padding: `${margin}mm`, zoom, fontFamily: "'IBM Plex Sans Thai Looped', sans-serif" }}>
+        style={{ width: `${landscape ? 297 : 210}mm`, minHeight: `${landscape ? 210 : 297}mm`, padding: `${margin}mm`, zoom, fontFamily: "'Noto Serif Thai', serif" }}>
         {children}
       </div>
     </div>

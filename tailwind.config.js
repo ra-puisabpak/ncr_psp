@@ -7,7 +7,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sarabun: ['IBM Plex Sans Thai Looped', 'sans-serif'],
+        sarabun: ['Noto Serif Thai', 'sans-serif'],
       },
     },
   },

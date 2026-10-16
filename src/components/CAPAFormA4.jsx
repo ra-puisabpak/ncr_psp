@@ -27,7 +27,7 @@ export default function CAPAFormA4({ data }) {
   const sevStyle = SEVERITY_COLOR[d.severity_label] || { bg: '#feebc8', color: '#c05621' }
 
   return (
-    <div className="a4-page" style={{ fontFamily: "'IBM Plex Sans Thai Looped', sans-serif" }}>
+    <div className="a4-page" style={{ fontFamily: "'Noto Serif Thai', serif" }}>
 
       {/* ===== HEADER ===== */}
       <table className="ncr-table" style={{ marginBottom: '2mm' }}>

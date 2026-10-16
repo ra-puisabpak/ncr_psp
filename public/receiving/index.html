@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="PSP Quality">
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link href="https://puisabpak-ncr.pages.dev/fonts/plex-thai-looped.css" rel="stylesheet">
+<link href="https://puisabpak-ncr.pages.dev/fonts/noto-serif-thai.css" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 
@@ -274,7 +274,7 @@ async function showPrint(html,opt){
   // ทางสำรอง: ฝากเอกสารไว้ที่เซิร์ฟเวอร์ 30 นาที แล้วเปิดด้วยเบราว์เซอร์ของเครื่อง เผื่อเครื่องที่สั่งพิมพ์จากแอปไม่ได้
   if(session&&!isDemo()){
     const full='<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escH(doc.title||'FM-QC-001')+'</title>'+
-      '<link href="https://puisabpak-ncr.pages.dev/fonts/plex-thai-looped.css" rel="stylesheet"><style>'+page+'html,body{margin:0;padding:0;background:#fff}@media screen{body{padding:3%}}'+scoped+(designW!==703?'.pbody{--u:calc(100cqw/'+designW+')!important}':'')+'</style></head><body>'+inner+
+      '<link href="https://puisabpak-ncr.pages.dev/fonts/noto-serif-thai.css" rel="stylesheet"><style>'+page+'html,body{margin:0;padding:0;background:#fff}@media screen{body{padding:3%}}'+scoped+(designW!==703?'.pbody{--u:calc(100cqw/'+designW+')!important}':'')+'</style></head><body>'+inner+
       '<script>window.onload=function(){setTimeout(function(){window.print()},700)}<\/script></body></html>';
     try{const r=await api('POST','/api/print-doc',{html:full});const o=ov.querySelector('#_pvo');if(o&&ov.isConnected){o.href=r.url;o.style.display='inline';}}catch(e){}
   }
@@ -308,7 +308,7 @@ function showCloudStatus(msg,type=''){
   --nav-h:64px;--hdr-h:56px;
   --safe-bot:env(safe-area-inset-bottom,0px);
 }
-html,body{height:100%;overflow:hidden;background:var(--gray1);font-family:'IBM Plex Sans Thai Looped',sans-serif;font-size:15px;color:var(--text);display:flex;flex-direction:column}
+html,body{height:100%;overflow:hidden;background:var(--gray1);font-family:'Noto Serif Thai',sans-serif;font-size:15px;color:var(--text);display:flex;flex-direction:column}
 .app-header{height:var(--hdr-h);background:var(--navy);display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0;z-index:50}
 .app-header-back{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.1);color:#fff;font-size:20px;cursor:pointer;border:none;flex-shrink:0;display:flex;align-items:center;justify-content:center}
 .app-header-title{flex:1;color:#fff;font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -356,7 +356,7 @@ html,body{height:100%;overflow:hidden;background:var(--gray1);font-family:'IBM P
 .fg{margin-bottom:14px}.fg:last-child{margin-bottom:0}
 label{display:block;font-size:13px;font-weight:600;color:var(--gray4);margin-bottom:5px}
 label .req{color:var(--red)}
-input,select,textarea{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;font-size:15px;font-family:'IBM Plex Sans Thai Looped',sans-serif;color:var(--text);background:#fff;-webkit-appearance:none;appearance:none}
+input,select,textarea{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;font-size:15px;font-family:'Noto Serif Thai',sans-serif;color:var(--text);background:#fff;-webkit-appearance:none;appearance:none}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--teal2);box-shadow:0 0 0 3px rgba(29,158,117,.12)}
 select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath fill='%239aa0ab' d='M6 8L0 0h12z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
 input[readonly]{background:var(--gray1);color:var(--gray3)}
@@ -383,9 +383,9 @@ textarea{resize:none;min-height:80px}
 .mdel{width:32px;height:32px;border-radius:50%;background:var(--red-lt);color:var(--red);border:none;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .sbox{background:var(--teal-lt);border:1px solid #9fe1cb;border-radius:10px;padding:12px 14px;margin-top:10px;display:flex;align-items:center;gap:10px}
 .sn{font-size:28px;font-weight:700;color:var(--teal)}.sl{font-size:11px;color:var(--teal);font-weight:600}.sd{font-size:12px;color:#0a6b52}
-.add-mat{width:100%;padding:14px;border:2px dashed var(--teal);border-radius:14px;background:var(--teal-lt);color:var(--teal);font-size:15px;font-weight:600;font-family:'IBM Plex Sans Thai Looped',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.add-mat{width:100%;padding:14px;border:2px dashed var(--teal);border-radius:14px;background:var(--teal-lt);color:var(--teal);font-size:15px;font-weight:600;font-family:'Noto Serif Thai',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
 .abar{position:fixed;bottom:0;left:0;right:0;background:var(--white);border-top:1px solid var(--border);padding:10px 16px;padding-bottom:calc(10px + var(--safe-bot));display:flex;gap:10px;z-index:40}
-.bm{flex:1;padding:14px;border-radius:12px;border:none;font-size:15px;font-weight:700;font-family:'IBM Plex Sans Thai Looped',sans-serif;cursor:pointer;transition:.12s}.bm:active{transform:scale(.97)}
+.bm{flex:1;padding:14px;border-radius:12px;border:none;font-size:15px;font-weight:700;font-family:'Noto Serif Thai',sans-serif;cursor:pointer;transition:.12s}.bm:active{transform:scale(.97)}
 .bt{background:var(--teal);color:#fff}.bg{background:var(--gray2);color:var(--gray4)}
 .sw{border:2px dashed var(--border);border-radius:12px;overflow:hidden;background:#fafbfc;position:relative;touch-action:none}
 .sw.signed{border-color:var(--teal2);border-style:solid}
@@ -1402,10 +1402,10 @@ function generatePDF(rec){
   const html=`<!DOCTYPE html>
 <html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>FM-QC-001 — ${E(rec.docNo)}</title>
-<link href="https://puisabpak-ncr.pages.dev/fonts/plex-thai-looped.css" rel="stylesheet">
+<link href="https://puisabpak-ncr.pages.dev/fonts/noto-serif-thai.css" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'IBM Plex Sans Thai Looped',sans-serif;font-size:10.5px;line-height:1.35;color:#1a2130;background:#fff}
+body{font-family:'Noto Serif Thai',sans-serif;font-size:10.5px;line-height:1.35;color:#1a2130;background:#fff}
 @page{size:A4 portrait;margin:10mm 12mm}
 @media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.no-print{display:none!important}thead{display:table-header-group}tr,.keep{page-break-inside:avoid;break-inside:avoid}.brk{page-break-before:always;break-before:page}}
 @media screen{.brk{margin-top:28px;padding-top:28px;border-top:2px dashed #c5ccd6}}
@@ -2103,10 +2103,10 @@ async function printReport(){
   const axSec=axN?'<div class="ax"><div class="axt">เอกสารแนบท้าย: รูปถ่ายประกอบการตรวจรับ ('+axN+' รูป)</div>'+axDocs+'</div>':'';
   const officerSigs=[...new Set(rs.map(r=>r.inspector))].map(n=>RUSIG.find(x=>x.name===n)).filter(Boolean).map(x=>'<img class="rsg" style="max-width:'+(rs.length&&new Set(rs.map(r=>r.inspector)).size>1?'90':'140')+'px" src="'+x.data+'">').join('');
   const html=`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>FM-QC-001 รายงาน${day?'รายวัน':'ราย Supplier'}</title>
-<link href="https://puisabpak-ncr.pages.dev/fonts/plex-thai-looped.css" rel="stylesheet">
+<link href="https://puisabpak-ncr.pages.dev/fonts/noto-serif-thai.css" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'IBM Plex Sans Thai Looped',sans-serif;font-size:11px;line-height:1.35;color:#1a2130;background:#fff}
+body{font-family:'Noto Serif Thai',sans-serif;font-size:11px;line-height:1.35;color:#1a2130;background:#fff}
 @page{size:A4 portrait;margin:10mm 12mm}
 @media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.no-print{display:none!important}thead{display:table-header-group}.it,.keep,.nc tr{page-break-inside:avoid;break-inside:avoid}}
 .hd{display:grid;grid-template-columns:1.25fr 1.5fr 1fr;border:1.2px solid #0f2744;margin:0 0 8px}
